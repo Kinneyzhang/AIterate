@@ -123,8 +123,8 @@
 
 /* round cards */
 [data-theme="mono"] .round-card {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: none;
 }
 /* round-label color handled by app.css per type (summary/question/review) */
 [data-theme="mono"] .round-user  { color: var(--fg-0); }
