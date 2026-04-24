@@ -341,8 +341,11 @@ export function openSettings() {
               </div>
               <input type="range" id="settingsFeynmanPassScore" min="1" max="100" value="60"
                 style="width:100%;accent-color:var(--accent,#1a6ef5);height:6px;cursor:pointer;" />
-              <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;color:var(--fg-2,#888);">
-                <span>1 宽松</span><span>50</span><span>80</span><span>100 严格</span>
+              <div style="position:relative;margin-top:6px;height:16px;font-size:11px;color:var(--fg-2,#888);">
+                <span style="position:absolute;left:0;">1</span>
+                <span style="position:absolute;left:calc(49/99*100%);transform:translateX(-50%);">50</span>
+                <span style="position:absolute;left:calc(79/99*100%);transform:translateX(-50%);">80</span>
+                <span style="position:absolute;right:0;">100</span>
               </div>
             </div>
           </div>

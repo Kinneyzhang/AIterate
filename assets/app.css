@@ -270,11 +270,12 @@ body {
 /* ── round history ───────────────────────────────────────────────────────────── */
 .round-list { display: flex; flex-direction: column; gap: 10px; }
 .round-card {
-  border-radius: 10px;
+  border-radius: 0;
   padding: 12px 14px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: transparent;
+  border: none;
   border-left: 3px solid transparent;
+  margin-bottom: 2px;
 }
 .round-summary  { border-left-color: #2a9a5a; }
 .round-question { border-left-color: #4f8ef7; }
