@@ -8,3 +8,4 @@ __pycache__/
 .env
 learn.db
 assets/fonts/
+config/db.json

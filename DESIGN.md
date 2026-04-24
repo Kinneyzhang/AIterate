@@ -232,7 +232,38 @@ CREATE TABLE profile (
 
 ---
 
-### 4.4 knowledge_tree.json（知识树）
+### 4.4 DB 配置（config/db.json）
+
+文件型配置，不入库（已 gitignore）。模板见 `config/db.json.example`。
+
+```json
+{
+  "type":        "postgresql",
+  "host":        "127.0.0.1",
+  "port":        5432,
+  "dbname":      "aiterate",
+  "user":        "geekinney",
+  "password":    "",
+  "sqlite_path": "~/.aiterate/data.db"
+}
+```
+
+**支持的数据库类型：**
+
+| type | 驱动 | 说明 |
+|------|------|------|
+| `sqlite`     | 内置 sqlite3        | 零配置，适合本地单机（默认） |
+| `postgresql` | psycopg2           | 推荐生产使用 |
+| `mysql`      | pymysql（需安装）   | `pip install pymysql` |
+| `oracle`     | cx_oracle（需安装） | `pip install cx_oracle`，需配置 `service_name` |
+
+数据库层用 **SQLAlchemy Core**（非 ORM），统一抽象多种数据库，切换时只需修改 `config/db.json`，无需改代码。
+
+Settings UI 的「数据库」tab 可直接修改并实时重连，无需重启服务。
+
+---
+
+### 4.5 knowledge_tree.json（知识树）
 
 文件型配置，不入库。结构：
 

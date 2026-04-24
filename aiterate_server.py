@@ -143,6 +143,39 @@ class KnowledgeSelectionUpdate(BaseModel):
     selected_nodes: list[str]
 
 
+# ── DB Config ──────────────────────────────────────────────
+
+class DbConfigUpdate(BaseModel):
+    type:         Optional[str] = None   # sqlite | postgresql | mysql | oracle
+    host:         Optional[str] = None
+    port:         Optional[int] = None
+    dbname:       Optional[str] = None
+    user:         Optional[str] = None
+    password:     Optional[str] = None
+    sqlite_path:  Optional[str] = None
+    service_name: Optional[str] = None  # oracle only
+
+@app.get("/api/db-config")
+async def get_db_config():
+    cfg = db.load_db_config()
+    safe = dict(cfg)
+    if safe.get("password"):
+        safe["password"] = "••••••"
+    return safe
+
+@app.put("/api/db-config")
+async def update_db_config(body: DbConfigUpdate):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "no fields to update")
+    db.save_db_config(updates)
+    try:
+        db.init_engine()
+    except Exception as e:
+        raise HTTPException(500, f"DB 连接失败：{e}")
+    return {"ok": True}
+
+
 @app.get("/api/knowledge-tree")
 async def get_knowledge_tree():
     return {"tree": db.get_knowledge_tree()}

@@ -228,6 +228,7 @@ export function openSettings() {
         <button class="settings-tab active" data-panel="basic">AI 基础</button>
         <button class="settings-tab" data-panel="roles">分功能模型</button>
         <button class="settings-tab" data-panel="tavily">联网搜索</button>
+        <button class="settings-tab" data-panel="database">数据库</button>
       </div>
       <div class="modal-body settings-modal-body">
         <!-- Tab1: 基础 -->
@@ -268,6 +269,65 @@ export function openSettings() {
             <a class="settings-link" href="https://tavily.com/" target="_blank" rel="noopener">前往 tavily.com 免费申请 ↗</a>
             （每月 1000 次免费）
           </p>
+        </div>
+
+        <!-- Tab4: 数据库 -->
+        <div class="settings-panel" id="settings-panel-database">
+          <div class="settings-row">
+            <div class="settings-label">数据库类型</div>
+            <div id="settingsDbTypeWrap"></div>
+          </div>
+          <div id="settingsDbPgFields">
+            <div class="settings-row">
+              <div class="settings-label">Host</div>
+              <input type="text" class="settings-input" id="settingsDbHost" placeholder="127.0.0.1">
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">Port</div>
+              <input type="number" class="settings-input" id="settingsDbPort" placeholder="5432">
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">数据库名</div>
+              <input type="text" class="settings-input" id="settingsDbName" placeholder="aiterate">
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">用户名</div>
+              <input type="text" class="settings-input" id="settingsDbUser" placeholder="postgres">
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">密码</div>
+              <input type="password" class="settings-input" id="settingsDbPassword" placeholder="（留空则不修改）">
+            </div>
+          </div>
+          <div id="settingsDbSqliteFields" style="display:none">
+            <div class="settings-row">
+              <div class="settings-label">SQLite 文件路径</div>
+              <input type="text" class="settings-input" id="settingsDbSqlitePath" placeholder="~/.aiterate/data.db">
+            </div>
+          </div>
+          <div id="settingsDbOracleFields" style="display:none">
+            <div class="settings-row">
+              <div class="settings-label">Host</div>
+              <input type="text" class="settings-input" id="settingsDbOracleHost" placeholder="127.0.0.1">
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">Port</div>
+              <input type="number" class="settings-input" id="settingsDbOraclePort" placeholder="1521">
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">Service Name</div>
+              <input type="text" class="settings-input" id="settingsDbServiceName" placeholder="ORCL">
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">用户名</div>
+              <input type="text" class="settings-input" id="settingsDbOracleUser" placeholder="system">
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">密码</div>
+              <input type="password" class="settings-input" id="settingsDbOraclePassword" placeholder="（留空则不修改）">
+            </div>
+          </div>
+          <p class="settings-hint">⚠️ 修改后将立即重新连接数据库，请确认新库已初始化。</p>
         </div>
       </div>
       <div class="modal-footer">
@@ -367,7 +427,61 @@ export function openSettings() {
     if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
   });
 
-  // ── Save ──
+  // ── DB Type 自定义 select ──
+  const DB_TYPE_OPTIONS = [
+    { value: 'sqlite',     label: 'SQLite（本地文件，默认）' },
+    { value: 'postgresql', label: 'PostgreSQL' },
+    { value: 'mysql',      label: 'MySQL' },
+    { value: 'oracle',     label: 'Oracle' },
+  ];
+
+  function syncDbFields(dbType) {
+    const pg  = document.getElementById('settingsDbPgFields');
+    const sq  = document.getElementById('settingsDbSqliteFields');
+    const ora = document.getElementById('settingsDbOracleFields');
+    if (!pg) return;
+    pg.style.display  = (dbType === 'postgresql' || dbType === 'mysql') ? '' : 'none';
+    sq.style.display  = dbType === 'sqlite'  ? '' : 'none';
+    ora.style.display = dbType === 'oracle'  ? '' : 'none';
+    // 端口默认值
+    const portEl = document.getElementById('settingsDbPort');
+    if (portEl && !portEl.value) {
+      portEl.placeholder = dbType === 'mysql' ? '3306' : '5432';
+    }
+  }
+
+  const dbTypeSel = createCustomSelect(DB_TYPE_OPTIONS, 'postgresql', val => {
+    syncDbFields(val);
+  });
+  document.getElementById('settingsDbTypeWrap').appendChild(dbTypeSel.el);
+  syncDbFields('postgresql');
+
+  // ── Load DB config ──
+  (async () => {
+    try {
+      const resp = await fetch('/api/db-config');
+      const cfg  = await resp.json();
+      const t    = cfg.type || 'postgresql';
+      dbTypeSel.value = t;
+      syncDbFields(t);
+      const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+      if (t === 'oracle') {
+        set('settingsDbOracleHost', cfg.host);
+        set('settingsDbOraclePort', cfg.port);
+        set('settingsDbServiceName', cfg.service_name);
+        set('settingsDbOracleUser', cfg.user);
+      } else if (t !== 'sqlite') {
+        set('settingsDbHost', cfg.host);
+        set('settingsDbPort', cfg.port);
+        set('settingsDbName', cfg.dbname);
+        set('settingsDbUser', cfg.user);
+      } else {
+        set('settingsDbSqlitePath', cfg.sqlite_path);
+      }
+    } catch(e) { console.warn('Failed to load db-config:', e); }
+  })();
+
+  // ── Save ──（覆盖原有 Save 按钮逻辑，改为分开保存）
   document.getElementById('settingsSaveBtn').addEventListener('click', async () => {
     const saveBtn = document.getElementById('settingsSaveBtn');
     saveBtn.disabled = true;
@@ -397,6 +511,38 @@ export function openSettings() {
 
     try {
       await saveSettings(payload);
+
+      // 保存数据库配置
+      const dbType = dbTypeSel.value;
+      const g = id => document.getElementById(id)?.value.trim() || '';
+      let dbPayload = { type: dbType };
+      if (dbType === 'sqlite') {
+        dbPayload.sqlite_path = g('settingsDbSqlitePath') || '~/.aiterate/data.db';
+      } else if (dbType === 'oracle') {
+        dbPayload.host         = g('settingsDbOracleHost');
+        dbPayload.port         = parseInt(g('settingsDbOraclePort')) || 1521;
+        dbPayload.service_name = g('settingsDbServiceName');
+        dbPayload.user         = g('settingsDbOracleUser');
+        const pw = g('settingsDbOraclePassword');
+        if (pw) dbPayload.password = pw;
+      } else {
+        dbPayload.host   = g('settingsDbHost');
+        dbPayload.port   = parseInt(g('settingsDbPort')) || (dbType === 'mysql' ? 3306 : 5432);
+        dbPayload.dbname = g('settingsDbName');
+        dbPayload.user   = g('settingsDbUser');
+        const pw = g('settingsDbPassword');
+        if (pw) dbPayload.password = pw;
+      }
+      const dbResp = await fetch('/api/db-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dbPayload),
+      });
+      if (!dbResp.ok) {
+        const err = await dbResp.json().catch(() => ({}));
+        throw new Error(err.detail || 'DB 配置保存失败');
+      }
+
       close();
     } catch (err) {
       alert(`保存失败：${err.message}`);

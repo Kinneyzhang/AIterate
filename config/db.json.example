@@ -1,0 +1,26 @@
+{
+  "_comment": "复制为 db.json 并填写实际配置。此文件已 gitignore，不会提交到版本库。",
+  "type": "postgresql",
+  "host": "127.0.0.1",
+  "port": 5432,
+  "dbname": "aiterate",
+  "user": "postgres",
+  "password": "",
+  "sqlite_path": "~/.aiterate/data.db",
+  "_mysql_example": {
+    "type": "mysql",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "dbname": "aiterate",
+    "user": "root",
+    "password": ""
+  },
+  "_oracle_example": {
+    "type": "oracle",
+    "host": "127.0.0.1",
+    "port": 1521,
+    "service_name": "ORCL",
+    "user": "system",
+    "password": ""
+  }
+}
