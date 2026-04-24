@@ -1,40 +1,136 @@
-/* AIIterate: night theme */
-:root {
-  --bg: #0d1117;
-  --bg-2: #161b22;
-  --panel: rgba(18, 21, 28, 0.88);
-  --panel-2: rgba(15, 18, 24, 0.96);
-  --text: #eaf0ff;
-  --muted: #98a2b3;
-  --line: rgba(255,255,255,0.08);
-  --accent: #5b8cff;
-  --accent-2: #7c9dff;
-  --good: #2fb36d;
-  --warn: #d8a23e;
-  --bad: #e16473;
-  --radius: 14px;
-  --shadow: 0 10px 28px rgba(0,0,0,0.28);
+/* AIIterate: night theme — 深蓝灰调，有层次的暗色设计 */
+
+/* ── color tokens ─────────────────────────────────────────────────────────── */
+[data-theme="night"] {
+  /* 背景层次：body → sidebar → panel → card，逐层提亮 */
+  --bg-body:    #191c24;   /* 页面底色，深蓝灰，不纯黑 */
+  --bg-sidebar: #1f2330;   /* sidebar，比 body 略亮 */
+  --bg-panel:   #242838;   /* 主内容区 */
+  --bg-card:    #2c3040;   /* 卡片/区块 */
+  --bg-input:   #1a1e2a;   /* 输入框 */
+  --bg-hover:   rgba(255,255,255,0.05);
+  --bg-select:  rgba(91,140,255,0.12);
+
+  /* 文字 */
+  --fg-0:    #e4e8f0;   /* 主文字，暖白 */
+  --fg-1:    #a0aab8;   /* 次要文字 */
+  --fg-2:    #6b7585;   /* 更淡的提示文字 */
+
+  /* 分割线 */
+  --border:  rgba(255,255,255,0.08);
+  --border-2: rgba(255,255,255,0.04);
+
+  /* 强调色 */
+  --accent:   #6391ff;
+  --accent-2: #8aabff;
+  --good:     #3bc47a;
+  --warn:     #e0a83c;
+  --bad:      #e06473;
+
+  /* 兼容旧变量名 */
+  --bg:       #191c24;
+  --bg-2:     #2c3040;
+  --text:     #e4e8f0;
+  --muted:    #a0aab8;
+  --line:     rgba(255,255,255,0.08);
+  --panel:    rgba(36,40,56,0.95);
+  --panel-2:  rgba(28,32,44,0.98);
+
+  --radius: 10px;
+  --shadow: 0 8px 24px rgba(0,0,0,0.36);
 }
 
+/* ── body 背景 ─────────────────────────────────────────────────────────────── */
 [data-theme="night"] body {
-  background:
-    radial-gradient(circle at top left, rgba(91,140,255,0.16), transparent 26%),
-    radial-gradient(circle at top right, rgba(124,157,255,0.12), transparent 24%),
-    linear-gradient(180deg, #0d1117 0%, #161b22 100%);
+  background: var(--bg-body);
+  color: var(--fg-0);
 }
 
-[data-theme="night"] h1 {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
-  font-size: clamp(19px, 1.7vw, 22px);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 1.14;
+/* ── topbar ────────────────────────────────────────────────────────────────── */
+[data-theme="night"] .topbar {
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
 }
 
-[data-theme="night"] h2 {
-  font-size: 16px;
+/* ── sidebar ───────────────────────────────────────────────────────────────── */
+[data-theme="night"] .sidebar {
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+}
+[data-theme="night"] .sidebar-head {
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+}
+[data-theme="night"] .session-item {
+  color: var(--fg-1);
+  border-radius: 6px;
+  margin: 2px 6px;
+}
+[data-theme="night"] .session-item:hover {
+  background: var(--bg-hover);
+  color: var(--fg-0);
+}
+[data-theme="night"] .session-item.active {
+  background: var(--bg-select);
+  color: var(--fg-0);
 }
 
+/* ── 主内容 panel ──────────────────────────────────────────────────────────── */
+[data-theme="night"] .panel-content {
+  background: var(--bg-panel);
+}
+[data-theme="night"] .panel {
+  backdrop-filter: blur(12px);
+  background: var(--bg-panel);
+}
+
+/* ── 卡片/区块 ─────────────────────────────────────────────────────────────── */
+[data-theme="night"] .panel-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+[data-theme="night"] .round-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+[data-theme="night"] .round-card.round-review {
+  background: rgba(224, 168, 60, 0.08);
+  border: 1px solid rgba(224, 168, 60, 0.2);
+}
+
+/* ── round 内容 ────────────────────────────────────────────────────────────── */
+[data-theme="night"] .round-user { color: var(--fg-0); }
+[data-theme="night"] .round-ai {
+  color: var(--fg-0);
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px;
+}
+[data-theme="night"] .round-score { color: var(--accent-2); opacity: 1; }
+
+/* ── 输入框 / textarea ─────────────────────────────────────────────────────── */
+[data-theme="night"] input,
+[data-theme="night"] textarea,
+[data-theme="night"] select {
+  background: var(--bg-input);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--fg-0);
+  border-radius: 6px;
+}
+[data-theme="night"] input:focus,
+[data-theme="night"] textarea:focus,
+[data-theme="night"] select:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(99,145,255,0.18);
+}
+[data-theme="night"] select option {
+  background-color: #252a38;
+  color: var(--fg-0);
+}
+
+/* ── 按钮 ──────────────────────────────────────────────────────────────────── */
 [data-theme="night"] button:not(.btn):not(.ws-tab):not(.settings-tab),
 [data-theme="night"] .nav-tabs button,
 [data-theme="night"] .sub-tabs button,
@@ -44,27 +140,52 @@
   font-size: 12px;
   font-weight: 600;
   min-height: 34px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.18);
 }
-
 [data-theme="night"] button:not(.btn):not([class*="tab"]):not([class*="type-"]) {
-  background: linear-gradient(180deg, #5b8cff 0%, #4d77ef 100%);
+  background: linear-gradient(180deg, #6391ff 0%, #5479e8 100%);
+  color: #fff;
 }
-
 [data-theme="night"] button.secondary,
-[data-theme="night"] button.ghost,
-[data-theme="night"] .nav-tabs button,
-[data-theme="night"] .sub-tabs button,
-[data-theme="night"] .mode-switch button {
-  box-shadow: none;
+[data-theme="night"] button.ghost {
+  background: var(--bg-card);
+  color: var(--fg-1);
+  border: 1px solid var(--border);
 }
 
-[data-theme="night"] .panel {
-  backdrop-filter: blur(14px);
+/* ── 分割线 / muted ─────────────────────────────────────────────────────────── */
+[data-theme="night"] .muted { color: var(--fg-1); }
+
+/* ── settings modal ────────────────────────────────────────────────────────── */
+[data-theme="night"] .modal-box {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+}
+[data-theme="night"] .settings-tab {
+  color: var(--fg-1);
+}
+[data-theme="night"] .settings-tab.active {
+  background: var(--bg-select);
+  color: var(--fg-0);
 }
 
-/* select option 弹出层强制暗色（color-scheme 在部分浏览器原生弹层里不生效）*/
-[data-theme="night"] select option {
-  background-color: #1e2430;
-  color: #e8eaf0;
+/* ── ws-tab 标签 ────────────────────────────────────────────────────────────── */
+[data-theme="night"] .ws-tab {
+  color: var(--fg-1);
 }
+[data-theme="night"] .ws-tab.active {
+  background: var(--bg-select);
+  color: var(--fg-0);
+}
+
+/* ── sidebar-resizer ─────────────────────────────────────────────────────────  */
+[data-theme="night"] .sidebar-resizer:hover { background: var(--accent); opacity: 0.5; }
+
+/* ── 排版 ──────────────────────────────────────────────────────────────────── */
+[data-theme="night"] h1 {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  font-size: clamp(19px, 1.7vw, 22px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.14;
+}
+[data-theme="night"] h2 { font-size: 16px; }
