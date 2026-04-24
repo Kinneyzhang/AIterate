@@ -15,8 +15,8 @@ from pydantic import BaseModel
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-import learn_db as db
-import learn_ai as ai
+import aiterate_db as db
+import aiterate_ai as ai
 
 FRONTEND = Path(__file__).parent / "index.html"
 ASSETS_DIR = Path(__file__).parent / "assets"
@@ -74,23 +74,30 @@ def _session_phase(status: str | None) -> str:
 
 def _build_session_workspace_payload(session: dict, rounds: list[dict]) -> dict:
     phase = _session_phase(session.get("status"))
-    current_review_round = None
+    current_review_group = []   # 当前待答的一组 feynman rounds
     latest_review_result = None
 
-    for round_item in rounds:
-        if round_item.get("type") != "feynman":
-            continue
-        if round_item.get("status") == "pending" and not round_item.get("output"):
-            current_review_round = round_item
-        if round_item.get("output"):
-            latest_review_result = round_item
+    feynman_rounds = [r for r in rounds if r.get("type") == "feynman"]
+    pending = [r for r in feynman_rounds if r.get("status") == "pending"]
+    done    = [r for r in feynman_rounds if r.get("status") == "completed"]
+
+    if pending:
+        current_review_group = pending
+    if done:
+        # 按 group_id 聚合，取最后一组
+        by_group: dict[int, list] = {}
+        for r in done:
+            gid = r.get("group_id") or r["id"]
+            by_group.setdefault(gid, []).append(r)
+        latest_gid = max(by_group.keys())
+        latest_review_result = sorted(by_group[latest_gid], key=lambda x: x["seq"])
 
     return {
         "session": session,
         "rounds": rounds,
         "phase": phase,
-        "current_review_round": current_review_round,
-        "latest_review_result": latest_review_result,
+        "current_review_group":  current_review_group,
+        "latest_review_result":  latest_review_result,
     }
 
 
@@ -335,7 +342,7 @@ async def deepen(session_id: int, body: DeepenRequest):
 
 @app.post("/api/sessions/{session_id}/start-feynman")
 async def start_feynman(session_id: int):
-    """费曼阶段：AI生成检验题"""
+    """费曼阶段：AI生成检验题，每题一条 round"""
     session = db.get_session(session_id)
     if not session:
         raise HTTPException(404, "Session not found")
@@ -347,54 +354,76 @@ async def start_feynman(session_id: int):
         session["title"], session.get("material", ""), learning_history,
     )
     questions = result["questions"]
-    seq = db.next_seq(session_id)
-    rid = db.create_round(
-        session_id=session_id, seq=seq, type="feynman",
-        input=json.dumps(questions, ensure_ascii=False),
-        output=None, score=None, status="pending",
-    )
+    seq_start = db.next_seq(session_id)
+
+    # 每题建一条 round，group_id = 第一题的 round id
+    round_ids = []
+    first_id = None
+    for i, q in enumerate(questions):
+        rid = db.create_round(
+            session_id=session_id, seq=seq_start + i, type="feynman",
+            input=q, output=None, score=None, status="pending",
+        )
+        if first_id is None:
+            first_id = rid
+        round_ids.append(rid)
+
+    # 用第一题 id 作为 group_id，标记这批题属于同一轮费曼
+    for rid in round_ids:
+        db.update_round(rid, group_id=first_id)
+
     db.update_session(session_id, status="reviewing")
-    return {"round_id": rid, "questions": questions}
+    return {"group_id": first_id, "round_ids": round_ids, "questions": questions}
 
 
 class FeynmanAnswerRequest(BaseModel):
-    round_id: int
-    answers: list[str]
+    group_id: int
+    answers: list[str]   # 按 round 顺序对应
 
 
 @app.post("/api/sessions/{session_id}/complete-feynman")
 async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
-    """费曼阶段：提交作答，AI评估"""
+    """费曼阶段：提交作答，逐题更新 round，AI整体评估"""
     session = db.get_session(session_id)
     if not session:
         raise HTTPException(404, "Session not found")
 
     rounds = db.get_rounds(session_id)
-    feynman_round = next((r for r in rounds if r["id"] == body.round_id), None)
-    if not feynman_round:
-        raise HTTPException(404, "Feynman round not found")
-
-    questions = feynman_round.get("input") or []
-    eval_result = await ai.evaluate_review_answers(session["title"], questions, body.answers)
-    passed = eval_result["final_score"] >= 4
-
-    db.update_round(
-        body.round_id,
-        output=json.dumps(body.answers, ensure_ascii=False),
-        score=eval_result["final_score"],
-        status="completed",
+    feynman_rounds = sorted(
+        [r for r in rounds if r.get("group_id") == body.group_id],
+        key=lambda r: r["seq"]
     )
+    if not feynman_rounds:
+        raise HTTPException(404, "Feynman group not found")
+
+    questions = [r["input"] for r in feynman_rounds]
+    eval_result = await ai.evaluate_review_answers(session["title"], questions, body.answers)
+    passed = eval_result["final_score"] >= 60
+
+    # 逐题写回 output / score / score_comment
+    item_scores = eval_result.get("item_scores", [])
+    for i, r in enumerate(feynman_rounds):
+        ev = item_scores[i] if i < len(item_scores) else {}
+        db.update_round(
+            r["id"],
+            output=body.answers[i] if i < len(body.answers) else "",
+            score=ev.get("score"),
+            score_comment=ev.get("comment", ""),
+            status="completed",
+        )
+
     new_status = "completed" if passed else "iterating"
     db.update_session(session_id, score=eval_result["final_score"], status=new_status)
 
     return {
-        "final_score": eval_result["final_score"],
+        "item_scores":   item_scores,
+        "final_score":   eval_result["final_score"],
         "mastery_level": eval_result["mastery_level"],
         "strong_points": eval_result["strong_points"],
-        "weak_points": eval_result["weak_points"],
+        "weak_points":   eval_result["weak_points"],
         "final_summary": eval_result["final_summary"],
-        "passed": passed,
-        "new_status": new_status,
+        "passed":        passed,
+        "new_status":    new_status,
     }
 
 

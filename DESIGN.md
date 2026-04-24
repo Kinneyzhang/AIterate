@@ -1,6 +1,6 @@
 # AIIterate 系统设计文档
 
-> 版本：v3.0 | 最后更新：2026-04
+> 版本：v3.1 | 最后更新：2026-04
 
 ---
 
@@ -42,12 +42,12 @@ AIIterate（AI 迭代学习系统）是一个以**问题为驱动、AI 全程伴
 └────────────────────────┬────────────────────────────┘
                          │ HTTP / REST
 ┌────────────────────────▼────────────────────────────┐
-│            FastAPI  (learn_server.py)               │
+│            FastAPI  (aiterate_server.py)             │
 │  路由层 / 参数校验 / 后台任务调度                        │
 └───────┬─────────────────┬───────────────────────────┘
         │                 │
 ┌───────▼───────┐  ┌──────▼──────────────┐
-│ learn_db.py   │  │   learn_ai.py        │
+│aiterate_db.py │  │  aiterate_ai.py      │
 │  PostgreSQL   │  │  LLM + Tavily调用    │
 │  CRUD 封装    │  │  Prompt 构建 / 路由   │
 └───────┬───────┘  └──────┬──────────────┘
@@ -74,12 +74,12 @@ AIIterate（AI 迭代学习系统）是一个以**问题为驱动、AI 全程伴
 ## 3. 目录结构
 
 ```
-learn-system/
+aiterate/
 ├── index.html              # 单页应用入口
-├── learn_server.py         # FastAPI 路由层
-├── learn_db.py             # 数据库 CRUD 封装（PostgreSQL）
-├── learn_ai.py             # LLM 调用 / Prompt 构建
-├── learn_flow.py           # 业务流程编排（已合并入 server）
+├── aiterate_server.py      # FastAPI 路由层
+├── aiterate_db.py          # 数据库 CRUD 封装（PostgreSQL）
+├── aiterate_ai.py          # LLM 调用 / Prompt 构建
+├── aiterate_flow.py        # 业务流程编排（已合并入 server）
 ├── assets/
 │   ├── app.css             # 全局基础样式（含移动端适配）
 │   ├── fonts.css           # 字体声明（subset 分片）
@@ -99,7 +99,7 @@ learn-system/
 │   └── knowledge_tree.json # 知识树配置（领域 / 话题树形结构）
 └── tests/
     ├── test_knowledge_tree.py
-    ├── test_learn_flow.py
+    ├── test_aiterate_flow.py
     └── test_learning_sessions_api.py
 ```
 
@@ -152,36 +152,38 @@ draft ──(AI处理完)──► active ──(用户完成)──► complete
 
 ```sql
 CREATE TABLE rounds (
-    id         SERIAL PRIMARY KEY,
-    session_id INTEGER     NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    seq        SMALLINT    NOT NULL,    -- 该会话内的顺序编号（从1开始）
-    type       TEXT        NOT NULL,    -- take | press | feynman
-    input      TEXT,                   -- 用户侧输入
-    output     TEXT,                   -- AI 侧输出
-    score      SMALLINT,               -- 本轮得分（take/feynman 有；press 无）
-    status     TEXT        NOT NULL DEFAULT 'pending',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    id            SERIAL PRIMARY KEY,
+    session_id    INTEGER     NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    seq           SMALLINT    NOT NULL,    -- 该会话内的顺序编号（从1开始）
+    type          TEXT        NOT NULL,    -- take | press | feynman
+    input         TEXT,                   -- take/press: 用户文本; feynman: 单道题目文字
+    output        TEXT,                   -- take/press: AI回复;  feynman: 用户作答文字
+    score_comment TEXT,                   -- feynman: 单题 AI 评价文字
+    score         SMALLINT,               -- take/feynman 有分; press 无
+    group_id      INTEGER,                -- feynman 专用：同一轮出题的组标识（= 该组第一题 id）
+    status        TEXT        NOT NULL DEFAULT 'pending',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (session_id, seq)
 );
 ```
 
 **type 枚举：**
 
-| type | input | output | score |
-|------|-------|--------|-------|
-| `take` | 用户的"理解"文本 | AI 评价 + 得分 | ✓ |
-| `press` | 用户的"追问"文本 | AI 的追问回答 | ✗ |
-| `feynman` | AI 出题列表（JSON 数组） | 用户作答列表（JSON 数组） | ✓ |
+| type | input | output | score_comment | score | group_id |
+|------|-------|--------|---------------|-------|----------|
+| `take` | 用户的"理解"文本 | AI 评价 + 建议 | — | ✓ | — |
+| `press` | 用户的"追问"文本 | AI 的追问回答 | — | ✗ | — |
+| `feynman` | 单道题目文字 | 用户对该题的作答 | AI 对该题的评价 | ✓ (0-100) | ✓ |
 
-**feynman 轮次的 input/output 格式：**
+**feynman 一组多题示例（3 条独立 round）：**
 
-```json
-// input（AI 出题）
-["请解释 TCP 三次握手的作用", "为什么是三次而不是两次？"]
-
-// output（用户作答）
-["建立可靠连接，确认双方收发正常", "两次无法确认客户端的接收能力"]
 ```
+seq=3  type=feynman  group_id=101  input="请解释 TCP 三次握手"   output="..."  score=82
+seq=4  type=feynman  group_id=101  input="为什么不能两次握手？"   output="..."  score=75
+seq=5  type=feynman  group_id=101  input="SYN Flood 原理是什么"  output="..."  score=90
+```
+
+同一组题共享 `group_id`（= 第一条 round 的 id），前端按 group_id 聚合展示，计算组内平均分。
 
 ---
 
@@ -245,7 +247,7 @@ CREATE TABLE profile (
 
 ## 5. 后端模块
 
-### 5.1 learn_server.py
+### 5.1 aiterate_server.py
 
 FastAPI 应用主文件，负责：
 - 路由注册与参数校验（Pydantic Models）
@@ -268,18 +270,18 @@ async def create_session(body: ..., bg: BackgroundTasks):
 
 ---
 
-### 5.2 learn_db.py
+### 5.2 aiterate_db.py
 
 PostgreSQL CRUD 封装层，设计原则：
 - 每个函数独立开关连接（无连接池，适合单用户本地部署）
 - `RealDictCursor` 使行数据自动序列化为 dict
 - `next_seq()` 用 `MAX(seq)+1` 而非 `len(rounds)+1`，避免历史记录重复序号
-- `_jlist()` 自动解析 feynman 的 JSON 字符串 → Python list
+- feynman 每题独立一条 round，通过 `group_id` 聚合同一轮出题
 - `upsert_profile()` 支持 `settings__llm` 前缀语法做深层合并
 
 ---
 
-### 5.3 learn_ai.py
+### 5.3 aiterate_ai.py
 
 LLM 调用引擎，负责：
 
@@ -473,7 +475,8 @@ session.status=active
   rounds: [
     { seq:1, type:'take',    input:'我的理解...', output:'AI评价...',  score:82 },
     { seq:2, type:'press',   input:'为什么?...',  output:'AI解释...',  score:null },
-    { seq:3, type:'feynman', input:[题1,题2],     output:[答1,答2],    score:75 },
+    { seq:3, type:'feynman', group_id:3, input:'题1', output:'答1',   score:75 },
+    { seq:4, type:'feynman', group_id:3, input:'题2', output:'答2',   score:90 },
     ...
   ]
 ```
@@ -550,14 +553,14 @@ AITERATE_PG_PASSWORD=your_password
 ### 初始化数据库
 
 ```bash
-cd learn-system
-python learn_db.py   # 自动建表 + 迁移
+cd aiterate
+python aiterate_db.py   # 自动建表 + 迁移
 ```
 
 ### 启动服务
 
 ```bash
-uvicorn learn_server:app --host 0.0.0.0 --port 7070
+uvicorn aiterate_server:app --host 0.0.0.0 --port 7070
 ```
 
 ### systemd 服务

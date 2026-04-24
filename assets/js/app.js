@@ -85,15 +85,16 @@ async function loadSessions() {
 function renderWorkspaceWithState(payload) {
   if (!payload?.session) { renderEmpty(); return; }
   const { status } = payload.session;
-  state.currentReviewRoundId = payload.current_review_round?.id ?? null;
-  renderWorkspace(payload, state.currentReviewRoundId);
+  const group = payload.current_review_group || [];
+  state.currentFeynmanGroupId = group.length > 0 ? (group[0].group_id ?? group[0].id) : null;
+  renderWorkspace(payload, state.currentFeynmanGroupId);
   if (status === 'processing') startPolling(payload.session.id);
 }
 
 async function selectSession(sessionId, { pushHistory = true } = {}) {
   stopPolling();
   state.selectedSessionId = sessionId;
-  state.currentReviewRoundId = null;
+  state.currentFeynmanGroupId = null;
   renderSidebar(state.sessions, sessionId, selectSession);
   setNotice('');
   if (pushHistory) {
@@ -163,19 +164,19 @@ async function startFeynman() {
 }
 
 async function submitFeynman() {
-  if (!state.selectedSessionId || !state.currentReviewRoundId) return;
+  if (!state.selectedSessionId || !state.currentFeynmanGroupId) return;
   const answers = Array.from(document.querySelectorAll('.review-answer')).map(el => el.value.trim());
   if (answers.some(a => !a)) { alert('请填写所有费曼答案'); return; }
 
   setBtn('submitFeynmanBtn', true, '⏳ 评分中...');
   try {
-    const data = await completeReview(state.selectedSessionId, state.currentReviewRoundId, answers);
+    const data = await completeReview(state.selectedSessionId, state.currentFeynmanGroupId, answers);
     await refreshCurrentWorkspace();
     setNotice(data.passed ? '费曼检验通过，学习完成！🎉' : '费曼未通过，已退回深化阶段。');
   } catch (err) {
     setNotice(`提交失败：${err.message}`, 'error');
   } finally {
-    setBtn('submitFeynmanBtn', false, '📊 提交费曼');
+    setBtn('submitFeynmanBtn', false, '📊 提交答案');
   }
 }
 

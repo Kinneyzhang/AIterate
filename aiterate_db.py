@@ -89,6 +89,9 @@ def init_db():
         type       TEXT        NOT NULL,  -- take | press | feynman
         input      TEXT,                  -- take/press: 用户文本; feynman: AI题目(JSON)
         output     TEXT,                  -- take/press: AI回复; feynman: 用户作答(JSON)
+        eval_json  JSONB,                 -- 已废弃，保留兼容
+        score_comment TEXT,               -- feynman: 单题评价文字
+        group_id   INTEGER,               -- feynman: 同一轮出题的 group 标识（= 该组第一题 id）
         score      SMALLINT,              -- take/feynman 有分; press 无
         status     TEXT        NOT NULL DEFAULT 'pending',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -127,6 +130,12 @@ def init_db():
             c.execute(f"ALTER TABLE profile DROP COLUMN IF EXISTS {col}")
         except Exception:
             pass
+
+    # 新增列（幂等）
+    try:
+        c.execute("ALTER TABLE rounds ADD COLUMN IF NOT EXISTS score_comment JSONB")
+    except Exception:
+        pass
 
     # 插入默认 profile（幂等）
     c.execute("""
@@ -338,7 +347,7 @@ def create_round(session_id: int, seq: int, type: str,
                  status: str = "pending") -> int:
     """
     type=take/press : input=用户文本, output=AI回复
-    type=feynman    : input=AI题目JSON字符串, output=用户作答JSON字符串
+    type=feynman    : input=单道题目文字, output=用户作答文字, group_id=同组第一题id
     """
     conn = get_conn()
     row_id = _q(conn, """
@@ -353,29 +362,18 @@ def get_rounds(session_id: int) -> list[dict]:
     conn = get_conn()
     rs = _q(conn, "SELECT * FROM rounds WHERE session_id = %s ORDER BY seq", (session_id,)).fetchall()
     conn.close()
-    result = []
-    for r in rows(rs):
-        # feynman: input/output 是 JSON 字符串，解析为列表方便前端使用
-        if r.get("type") == "feynman":
-            r["input"]  = _jlist(r.get("input"))
-            r["output"] = _jlist(r.get("output"))
-        result.append(r)
-    return result
+    return rows(rs)
 
-def get_pending_feynman_round(session_id: int) -> dict | None:
+def get_pending_feynman_group(session_id: int) -> list[dict]:
+    """返回最近一组 pending 的 feynman rounds（按 group_id 聚合）"""
     conn = get_conn()
-    r = _q(conn, """
+    rs = _q(conn, """
     SELECT * FROM rounds
     WHERE session_id = %s AND type = 'feynman' AND status = 'pending'
-    ORDER BY seq DESC LIMIT 1
-    """, (session_id,)).fetchone()
+    ORDER BY seq
+    """, (session_id,)).fetchall()
     conn.close()
-    if not r:
-        return None
-    d = dict(r)
-    d["input"]  = _jlist(d.get("input"))
-    d["output"] = _jlist(d.get("output"))
-    return d
+    return rows(rs)
 
 def update_round(round_id: int, **kwargs):
     # feynman input/output 若传 list，序列化为 JSON 字符串

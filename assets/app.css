@@ -283,10 +283,13 @@ body {
 .round-ai     { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.7; }
 .round-score  { font-size: 11px; opacity: 0.62; margin-top: 6px; }
 .round-score.pending { color: var(--accent, #4f8ef7); opacity: 1; }
-.qa-list  { display: flex; flex-direction: column; gap: 6px; }
-.qa-pair  { font-size: 13px; line-height: 1.65; }
-.qa-q     { font-weight: 600; }
+.qa-pair  { font-size: 13px; line-height: 1.65; margin-bottom: 10px; }
+.qa-q     { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .qa-a     { opacity: 0.72; margin-top: 2px; }
+.item-score   { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 10px; white-space: nowrap; }
+.item-score.pass { background: #d1f5d3; color: #1a7f2e; }
+.item-score.fail { background: #fde8e8; color: #c0392b; }
+.item-comment { margin-top: 4px; padding: 4px 8px; border-left: 2px solid #e0e0e0; }
 .mt8  { margin-top: 8px; }
 .mt12 { margin-top: 12px; }
 

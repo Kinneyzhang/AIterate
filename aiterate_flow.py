@@ -1,6 +1,6 @@
 import json
 from typing import Any
-import learn_db as db
+import aiterate_db as db
 
 
 def _get_domain_names() -> dict:

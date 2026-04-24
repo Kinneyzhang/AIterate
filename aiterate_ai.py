@@ -45,7 +45,7 @@ def _resolve_llm_config(role: str = "default") -> dict:
       { "llm": { "provider":"", "base_url":"", "api_key":"", "model":"",
                  "roles": { "answer": {...}, ... } } }
     """
-    import learn_db as db
+    import aiterate_db as db
     settings = db.get_settings()
     llm = settings.get("llm") or {}
 
@@ -144,7 +144,7 @@ async def _call_llm(messages: list, temperature: float = 0.7, max_tokens: int = 
 
 async def tavily_search(query: str) -> str:
     """调用 Tavily API 搜索，返回摘要文本（用于注入 prompt）"""
-    import learn_db as db
+    import aiterate_db as db
     settings = db.get_settings()
     api_key = settings.get("tavily_api_key", "")
     if not api_key:
@@ -336,16 +336,24 @@ async def generate_review_questions(original_question: str, ai_answer: str, lear
 
 # ── 阶段3：评估费曼回答 ───────────────────────────────
 
-REVIEW_EVAL_SYSTEM = """你是一位考官，正在评估学习者的费曼检验回答质量，给出最终学习评价。
+REVIEW_EVAL_SYSTEM = """你是一位考官，正在评估学习者的费曼检验回答质量，给出逐题评价和整体评分。
 
 输出JSON：
 {
-  "final_score": <1-5整数>,
+  "item_scores": [
+    {
+      "score": <0-100整数>,
+      "comment": "<50字内：指出回答的亮点、不足，或可以继续完善的角度>"
+    }
+  ],
+  "final_score": <0-100整数，所有题目的综合得分>,
   "mastery_level": "<入门|理解|掌握|精通>",
   "strong_points": ["<理解到位的点1>", "<理解到位的点2>"],
   "weak_points": ["<还需加强的点1>"],
   "final_summary": "<100字内的整体学习评价>"
-}"""
+}
+
+item_scores 数组长度必须与题目数量完全一致。"""
 
 async def evaluate_review_answers(original_question: str, review_questions: list, review_answers: list) -> dict:
     qa_pairs = "\n".join([f"题目：{q}\n回答：{a}" for q, a in zip(review_questions, review_answers)])
@@ -365,7 +373,8 @@ async def evaluate_review_answers(original_question: str, review_questions: list
         block  = _extract_json_block(raw, "{", "}")
         result = json.loads(block)
         return {
-            "final_score":   int(result.get("final_score", 3)),
+            "item_scores":   result.get("item_scores", []),
+            "final_score":   int(result.get("final_score", 50)),
             "mastery_level": result.get("mastery_level", "理解"),
             "strong_points": result.get("strong_points", []),
             "weak_points":   result.get("weak_points", []),
@@ -373,7 +382,7 @@ async def evaluate_review_answers(original_question: str, review_questions: list
             "raw":           raw,
         }
     except Exception:
-        return {"final_score": 3, "mastery_level": "理解", "strong_points": [], "weak_points": [], "final_summary": "评估解析失败", "raw": raw}
+        return {"item_scores": [], "final_score": 50, "mastery_level": "理解", "strong_points": [], "weak_points": [], "final_summary": "评估解析失败", "raw": raw}
 
 
 # ── 生成本周引导任务 ──────────────────────────────────

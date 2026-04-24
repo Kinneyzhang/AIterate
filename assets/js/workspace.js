@@ -65,7 +65,7 @@ function buildLearnPanel() {
   const aiText = session.material || session.material;
   const typeLabel = session.type === 'viewpoint' ? '观点' : '问题';
   const scoreHtml = session.score
-    ? `<span>评分 ${session.score}/5</span>` : '';
+    ? `<span>评分 ${session.score}/100</span>` : '';
 
   const answerHtml = aiText
     ? `<div class="panel-section">
@@ -111,9 +111,9 @@ function buildDeepenPanel() {
   // 如果上一轮费曼没过，显示提示
   const reviewResult = _payload?.latest_review_result;
   const resultBanner = reviewResult && status !== 'completed' ? `
-    <div class="review-result-banner ${(reviewResult.score || 0) >= 4 ? 'pass' : 'fail'}">
-      <span>上一轮费曼 ${reviewResult.score || 0}/5</span>
-      <span class="muted small">${(reviewResult.score || 0) >= 4 ? '通过 ✓' : '未通过，继续深化'}</span>
+    <div class="review-result-banner ${(reviewResult.score || 0) >= 60 ? 'pass' : 'fail'}">
+      <span>上一轮费曼 ${reviewResult.score || 0} 分</span>
+      <span class="muted small">${(reviewResult.score || 0) >= 60 ? '通过 ✓' : '未通过，继续深化'}</span>
     </div>` : '';
 
   // 输入区
@@ -153,7 +153,7 @@ function buildDeepenRoundCard(round) {
         <div class="round-label">💡 理解</div>
         <div class="round-user">${escapeHtml(round.input || '')}</div>
         <div class="round-ai md-body">${renderMarkdown(round.output || '')}</div>
-        ${round.score ? `<div class="round-score">评分 ${round.score}/5</div>` : ''}
+        ${round.score ? `<div class="round-score">评分 ${round.score}/100</div>` : ''}
       </div>`;
   }
   if (round.type === 'press') {
@@ -170,41 +170,52 @@ function buildDeepenRoundCard(round) {
 function buildReviewPanel() {
   const session = _payload?.session;
   const status = session?.status;
-  const allRounds = _payload?.rounds || [];
-  const reviewRounds = allRounds.filter(r => r.type === 'feynman');
-  const currentRound = _payload?.current_review_round;
+  const currentGroup = _payload?.current_review_group || [];  // 待答题列表（每题独立 round）
 
-  // 当前待答题
-  const pendingHtml = currentRound && status === 'reviewing' ? `
+  // 当前待答题组
+  const pendingHtml = currentGroup.length > 0 && status === 'reviewing' ? `
     <div class="panel-section">
       <div class="ps-label">🧪 费曼检验</div>
       <div class="ps-hint muted small mb12">用自己的话回答，AI 会评估你的掌握程度。</div>
-      ${(currentRound.input || []).map((q, i) => `
+      ${currentGroup.map((r, i) => `
         <div class="review-q">
-          <div class="review-q-title">Q${i + 1}. ${escapeHtml(q)}</div>
+          <div class="review-q-title">Q${i + 1}. ${escapeHtml(r.input || '')}</div>
           <textarea class="review-answer" rows="4"
-            placeholder="用自己的话回答…">${escapeHtml((currentRound.output || [])[i] || '')}</textarea>
+            placeholder="用自己的话回答…">${escapeHtml(r.output || '')}</textarea>
         </div>`).join('')}
       <button class="btn btn-primary btn-block mt8" id="submitFeynmanBtn"
         onclick="window.app.submitFeynman()">📊 提交答案</button>
     </div>` : '';
 
-  // 已完成的费曼历史
-  const doneRounds = reviewRounds.filter(r => r.id !== _reviewRoundId && r.status !== 'pending');
-  const historyHtml = doneRounds.map(r => {
-    const qs = r.input || [];
-    const as = r.output || [];
+  // 已完成费曼历史（按 group_id 聚合）
+  const allRounds = _payload?.rounds || [];
+  const doneFeynman = allRounds.filter(r => r.type === 'feynman' && r.status === 'completed');
+  const byGroup = {};
+  for (const r of doneFeynman) {
+    const gid = r.group_id ?? r.id;
+    (byGroup[gid] = byGroup[gid] || []).push(r);
+  }
+  const historyHtml = Object.values(byGroup).map(grp => {
+    const sorted = grp.sort((a, b) => a.seq - b.seq);
+    const groupScore = sorted.reduce((s, r) => s + (r.score || 0), 0);
+    const avgScore = Math.round(groupScore / sorted.length);
     return `
       <div class="round-card round-review">
-        <div class="round-label">🧪 费曼记录 · ${r.score ? `${r.score}/5` : '评分中'}</div>
+        <div class="round-label">🧪 费曼记录 · ${avgScore}/100</div>
         <div class="qa-list">
-          ${qs.map((q, i) => `
+          ${sorted.map((r, i) => {
+            const scoreTag = r.score != null
+              ? `<span class="item-score ${r.score >= 60 ? 'pass' : 'fail'}">${r.score}分</span>` : '';
+            const comment = r.score_comment
+              ? `<div class="item-comment muted small">${escapeHtml(r.score_comment)}</div>` : '';
+            return `
             <div class="qa-pair">
-              <div class="qa-q">Q${i + 1} ${escapeHtml(q)}</div>
-              <div class="qa-a">${escapeHtml(as[i] || '（未作答）')}</div>
-            </div>`).join('')}
+              <div class="qa-q">Q${i + 1} ${escapeHtml(r.input || '')} ${scoreTag}</div>
+              <div class="qa-a">${escapeHtml(r.output || '（未作答）')}</div>
+              ${comment}
+            </div>`;
+          }).join('')}
         </div>
-        ${r.ai_output ? `<div class="round-ai md-body mt8">${renderMarkdown(r.ai_output)}</div>` : ''}
       </div>`;
   }).join('');
 
@@ -213,10 +224,9 @@ function buildReviewPanel() {
   const completedHtml = status === 'completed' && finalResult ? `
     <div class="panel-section completed-summary">
       <div class="final-score-row">
-        <span class="final-score-num">${finalResult.score || 0}/5</span>
+        <span class="final-score-num">${session.score || 0}/100</span>
         <span class="stage-badge stage-completed">已完成</span>
       </div>
-      <div class="md-body mt8">${renderMarkdown(finalResult.ai_output || '暂无总评')}</div>
     </div>` : '';
 
   const noReview = !pendingHtml && !historyHtml && !completedHtml

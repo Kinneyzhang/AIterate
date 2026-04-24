@@ -37,10 +37,10 @@ pip install fastapi uvicorn psycopg2-binary aiohttp python-multipart
 
 ```bash
 # 1. 初始化数据库
-python learn_db.py
+python aiterate_db.py
 
 # 2. 启动服务
-uvicorn learn_server:app --host 0.0.0.0 --port 7070
+uvicorn aiterate_server:app --host 0.0.0.0 --port 7070
 ```
 
 浏览器访问 `http://localhost:7070`，在设置中填入 LLM API Key 即可使用。
@@ -62,9 +62,9 @@ uvicorn learn_server:app --host 0.0.0.0 --port 7070
 ```
 Browser (SPA)
     │ HTTP/REST
-FastAPI (learn_server.py)
-    ├── learn_db.py   — PostgreSQL CRUD
-    └── learn_ai.py   — LLM 调用 / Prompt 构建 / Tavily 搜索
+FastAPI (aiterate_server.py)
+    ├── aiterate_db.py   — PostgreSQL CRUD
+    └── aiterate_ai.py   — LLM 调用 / Prompt 构建 / Tavily 搜索
               │
          PostgreSQL
     sessions / rounds / profile

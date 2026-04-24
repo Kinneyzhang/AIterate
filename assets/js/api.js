@@ -45,11 +45,11 @@ export async function startFeynmanRequest(sessionId) {
   return request(`/api/sessions/${sessionId}/start-feynman`, { method: 'POST' });
 }
 
-export async function completeReview(sessionId, roundId, answers) {
+export async function completeReview(sessionId, groupId, answers) {
   return request(`/api/sessions/${sessionId}/complete-feynman`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ round_id: roundId, answers }),
+    body: JSON.stringify({ group_id: groupId, answers }),
   });
 }
 

@@ -7,3 +7,4 @@ __pycache__/
 *.bak2
 .env
 learn.db
+assets/fonts/
