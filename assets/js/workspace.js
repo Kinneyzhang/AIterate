@@ -150,8 +150,7 @@ function buildDeepenRoundCard(round) {
   if (round.type === 'take') {
     return `
       <div class="round-card round-take">
-        <div class="round-label">💡 理解</div>
-        <div class="round-user">${escapeHtml(round.input || '')}</div>
+        <div class="round-user-wrap"><span class="round-label">💡 理解</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
         <div class="round-ai md-body">${renderMarkdown(round.output || '')}</div>
         ${round.score ? `<div class="round-score">评分 ${round.score}/100</div>` : ''}
       </div>`;
@@ -159,8 +158,7 @@ function buildDeepenRoundCard(round) {
   if (round.type === 'press') {
     return `
       <div class="round-card round-press">
-        <div class="round-label">❓ 追问</div>
-        <div class="round-user">${escapeHtml(round.input || '')}</div>
+        <div class="round-user-wrap"><span class="round-label">❓ 追问</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
         <div class="round-ai md-body">${renderMarkdown(round.output || '')}</div>
       </div>`;
   }

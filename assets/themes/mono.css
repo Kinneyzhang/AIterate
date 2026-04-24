@@ -125,6 +125,13 @@
 [data-theme="mono"] .round-card {
   background: transparent;
   border: none;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 4px;
+}
+[data-theme="mono"] .round-card:first-child {
+  border-top: none;
+  padding-top: 0;
 }
 /* round-label color handled by app.css per type (summary/question/review) */
 [data-theme="mono"] .round-user  { color: var(--fg-0); }
