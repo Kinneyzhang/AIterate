@@ -135,8 +135,9 @@ class LLMConfig(BaseModel):
     roles:     Optional[dict[str, LLMRoleConfig]] = None  # keyed by role name
 
 class SettingsUpdate(BaseModel):
-    llm:            Optional[LLMConfig] = None
-    tavily_api_key: Optional[str]       = None
+    llm:               Optional[LLMConfig] = None
+    tavily_api_key:    Optional[str]       = None
+    feynman_pass_score: Optional[int]      = None
 
 
 class KnowledgeSelectionUpdate(BaseModel):
@@ -226,6 +227,9 @@ async def update_settings(body: SettingsUpdate):
         kwargs["settings__llm"] = updates["llm"]
     if "tavily_api_key" in updates:
         kwargs["settings__tavily_api_key"] = updates["tavily_api_key"]
+    if "feynman_pass_score" in updates:
+        score = max(1, min(100, int(updates["feynman_pass_score"])))
+        kwargs["settings__feynman_pass_score"] = score
     db.upsert_profile(**kwargs)
     return await get_settings()
 
@@ -431,7 +435,8 @@ async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
 
     questions = [r["input"] for r in feynman_rounds]
     eval_result = await ai.evaluate_review_answers(session["title"], questions, body.answers)
-    passed = eval_result["final_score"] >= 60
+    pass_score = db.get_settings().get("feynman_pass_score", 60)
+    passed = eval_result["final_score"] >= pass_score
 
     # 逐题写回 output / score / score_comment
     item_scores = eval_result.get("item_scores", [])
@@ -456,6 +461,7 @@ async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
         "weak_points":   eval_result["weak_points"],
         "final_summary": eval_result["final_summary"],
         "passed":        passed,
+        "pass_score":    pass_score,
         "new_status":    new_status,
     }
 

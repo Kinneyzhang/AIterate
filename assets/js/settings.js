@@ -229,6 +229,7 @@ export function openSettings() {
         <button class="settings-tab" data-panel="roles">分功能模型</button>
         <button class="settings-tab" data-panel="tavily">联网搜索</button>
         <button class="settings-tab" data-panel="database">数据库</button>
+        <button class="settings-tab" data-panel="learn">学习</button>
       </div>
       <div class="modal-body settings-modal-body">
         <!-- Tab1: 基础 -->
@@ -329,6 +330,19 @@ export function openSettings() {
           </div>
           <p class="settings-hint">⚠️ 修改后将立即重新连接数据库，请确认新库已初始化。</p>
         </div>
+
+        <!-- Tab5: 学习 -->
+        <div class="settings-panel" id="settings-panel-learn">
+          <div class="settings-row">
+            <div class="settings-label">费曼检测通过分数</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="number" id="settingsFeynmanPassScore" min="1" max="100" value="60"
+                style="width:80px;" placeholder="60" />
+              <span style="color:var(--fg-1);font-size:13px;">分（满分 100，默认 60）</span>
+            </div>
+          </div>
+          <p class="settings-hint">费曼自测得分达到此分数才算通过，否则退回重新巩固。</p>
+        </div>
       </div>
       <div class="modal-footer">
         <div class="modal-footer-left"></div>
@@ -399,6 +413,8 @@ export function openSettings() {
       if (llm.api_key)  document.getElementById('settingsApiKey').value = llm.api_key;
       if (llm.model)    modelInput.value = llm.model;
       if (cfg.tavily_api_key) document.getElementById('settingsTavilyKey').value = cfg.tavily_api_key;
+      const passScore = cfg.feynman_pass_score ?? 60;
+      document.getElementById('settingsFeynmanPassScore').value = passScore;
 
       const rolesData = llm.roles || {};
       ROLES.forEach(r => {
@@ -507,6 +523,7 @@ export function openSettings() {
         roles:     rolesPayload,
       },
       tavily_api_key: document.getElementById('settingsTavilyKey').value.trim(),
+      feynman_pass_score: parseInt(document.getElementById('settingsFeynmanPassScore').value) || 60,
     };
 
     try {
