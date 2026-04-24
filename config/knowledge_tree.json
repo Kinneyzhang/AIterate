@@ -1,0 +1,3040 @@
+[
+  {
+    "id": "cs",
+    "title": "计算机",
+    "description": "编程、系统、算法、网络、数据库、AI工程",
+    "children": [
+      {
+        "id": "cs.lang",
+        "title": "编程语言",
+        "children": [
+          {
+            "id": "cs.lang.syntax",
+            "title": "语法与抽象",
+            "children": [
+              {
+                "id": "cs.lang.syntax.type",
+                "title": "类型系统",
+                "keywords": [
+                  "类型",
+                  "泛型",
+                  "类型推断",
+                  "静态类型"
+                ],
+                "prompt_fragments": [
+                  "解释类型系统如何防止错误",
+                  "比较动态和静态类型的权衡"
+                ]
+              },
+              {
+                "id": "cs.lang.syntax.meta",
+                "title": "元编程与宏",
+                "keywords": [
+                  "宏",
+                  "元编程",
+                  "代码生成",
+                  "反射"
+                ],
+                "prompt_fragments": [
+                  "解释元编程解决了什么问题",
+                  "举例说明宏的滥用风险"
+                ]
+              },
+              {
+                "id": "cs.lang.syntax.paradigm",
+                "title": "编程范式",
+                "keywords": [
+                  "范式",
+                  "函数式",
+                  "面向对象",
+                  "声明式",
+                  "命令式"
+                ],
+                "prompt_fragments": [
+                  "比较不同编程范式在复杂系统中的取舍",
+                  "解释一种范式如何改变建模方式"
+                ]
+              },
+              {
+                "id": "cs.lang.syntax.dsl",
+                "title": "DSL 与抽象边界",
+                "keywords": [
+                  "DSL",
+                  "抽象",
+                  "接口",
+                  "语义",
+                  "建模"
+                ],
+                "prompt_fragments": [
+                  "解释 DSL 何时值得引入",
+                  "分析抽象边界过深会带来什么问题"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.lang.runtime",
+            "title": "运行时与内存模型",
+            "children": [
+              {
+                "id": "cs.lang.runtime.gc",
+                "title": "垃圾回收",
+                "keywords": [
+                  "GC",
+                  "引用计数",
+                  "标记清除",
+                  "分代回收"
+                ],
+                "prompt_fragments": [
+                  "解释 GC 如何判断对象存活",
+                  "比较不同 GC 策略的延迟影响"
+                ]
+              },
+              {
+                "id": "cs.lang.runtime.concur",
+                "title": "并发原语",
+                "keywords": [
+                  "锁",
+                  "原子操作",
+                  "channel",
+                  "async/await"
+                ],
+                "prompt_fragments": [
+                  "解释一种并发原语解决了什么问题",
+                  "分析死锁是如何形成的"
+                ]
+              },
+              {
+                "id": "cs.lang.runtime.jit",
+                "title": "JIT 与解释执行",
+                "keywords": [
+                  "JIT",
+                  "解释执行",
+                  "字节码",
+                  "热点编译",
+                  "优化"
+                ],
+                "prompt_fragments": [
+                  "解释 JIT 如何在运行时换取性能",
+                  "比较解释执行与预编译的优势"
+                ]
+              },
+              {
+                "id": "cs.lang.runtime.ffi",
+                "title": "FFI 与语言互操作",
+                "keywords": [
+                  "FFI",
+                  "ABI",
+                  "C接口",
+                  "互操作",
+                  "内存布局"
+                ],
+                "prompt_fragments": [
+                  "解释 FFI 为什么容易踩内存和类型坑",
+                  "分析多语言系统的边界设计"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.lang.compiler",
+            "title": "编译器与解释器",
+            "children": [
+              {
+                "id": "cs.lang.compiler.parse",
+                "title": "解析与 AST",
+                "keywords": [
+                  "Lexer",
+                  "Parser",
+                  "AST",
+                  "语法树",
+                  "语义分析"
+                ],
+                "prompt_fragments": [
+                  "解释源码如何被解析成 AST",
+                  "分析 AST 在编译流程中的作用"
+                ]
+              },
+              {
+                "id": "cs.lang.compiler.optimize",
+                "title": "优化与代码生成",
+                "keywords": [
+                  "优化",
+                  "IR",
+                  "寄存器分配",
+                  "代码生成",
+                  "SSA"
+                ],
+                "prompt_fragments": [
+                  "解释编译器优化如何在速度与体积间取舍",
+                  "说明中间表示为什么重要"
+                ]
+              },
+              {
+                "id": "cs.lang.compiler.diagnose",
+                "title": "错误诊断与调试",
+                "keywords": [
+                  "报错",
+                  "诊断",
+                  "栈回溯",
+                  "源码定位",
+                  "调试"
+                ],
+                "prompt_fragments": [
+                  "解释好的编译报错应提供哪些信息",
+                  "分析调试信息如何帮助定位问题"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "cs.algo",
+        "title": "数据结构与算法",
+        "children": [
+          {
+            "id": "cs.algo.ds",
+            "title": "核心数据结构",
+            "children": [
+              {
+                "id": "cs.algo.ds.tree",
+                "title": "树与图",
+                "keywords": [
+                  "树",
+                  "图",
+                  "遍历",
+                  "BFS",
+                  "DFS"
+                ],
+                "prompt_fragments": [
+                  "解释树与图的本质区别",
+                  "举例说明 BFS 和 DFS 的选择时机"
+                ]
+              },
+              {
+                "id": "cs.algo.ds.hash",
+                "title": "哈希与集合",
+                "keywords": [
+                  "哈希表",
+                  "哈希函数",
+                  "冲突",
+                  "布隆过滤器"
+                ],
+                "prompt_fragments": [
+                  "解释哈希冲突的解决方案",
+                  "分析布隆过滤器的适用场景"
+                ]
+              },
+              {
+                "id": "cs.algo.ds.heap",
+                "title": "堆与优先队列",
+                "keywords": [
+                  "堆",
+                  "优先队列",
+                  "top-k",
+                  "调度",
+                  "二叉堆"
+                ],
+                "prompt_fragments": [
+                  "解释堆适合解决什么问题",
+                  "分析优先队列与有序数组的取舍"
+                ]
+              },
+              {
+                "id": "cs.algo.ds.string",
+                "title": "字符串与索引",
+                "keywords": [
+                  "字符串",
+                  "Trie",
+                  "后缀数组",
+                  "模式匹配",
+                  "索引"
+                ],
+                "prompt_fragments": [
+                  "解释字符串索引结构在检索中的作用",
+                  "比较 Trie 与哈希在前缀查询中的差异"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.algo.design",
+            "title": "算法设计范式",
+            "children": [
+              {
+                "id": "cs.algo.design.dp",
+                "title": "动态规划",
+                "keywords": [
+                  "DP",
+                  "最优子结构",
+                  "状态转移",
+                  "记忆化"
+                ],
+                "prompt_fragments": [
+                  "解释 DP 的核心思路",
+                  "分析一道 DP 题的状态定义"
+                ]
+              },
+              {
+                "id": "cs.algo.design.greedy",
+                "title": "贪心与分治",
+                "keywords": [
+                  "贪心",
+                  "分治",
+                  "归并",
+                  "局部最优"
+                ],
+                "prompt_fragments": [
+                  "举例说明贪心策略何时失效",
+                  "解释分治的递归结构"
+                ]
+              },
+              {
+                "id": "cs.algo.design.backtrack",
+                "title": "回溯与搜索",
+                "keywords": [
+                  "回溯",
+                  "剪枝",
+                  "搜索树",
+                  "状态空间",
+                  "约束"
+                ],
+                "prompt_fragments": [
+                  "解释回溯如何系统遍历解空间",
+                  "分析剪枝为什么能显著提速"
+                ]
+              },
+              {
+                "id": "cs.algo.design.randomized",
+                "title": "随机化与概率",
+                "keywords": [
+                  "随机化",
+                  "概率",
+                  "期望复杂度",
+                  "采样",
+                  "哈希"
+                ],
+                "prompt_fragments": [
+                  "解释随机化算法为何常比确定性实现更简洁",
+                  "分析概率保证与最坏情况的关系"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.algo.analysis",
+            "title": "复杂度与证明",
+            "children": [
+              {
+                "id": "cs.algo.analysis.asymptotic",
+                "title": "复杂度与上界",
+                "keywords": [
+                  "复杂度",
+                  "大O",
+                  "上界",
+                  "下界",
+                  "增长率"
+                ],
+                "prompt_fragments": [
+                  "解释时间复杂度分析在工程中的真实用途",
+                  "比较渐进复杂度和常数项的影响"
+                ]
+              },
+              {
+                "id": "cs.algo.analysis.amortized",
+                "title": "摊还分析",
+                "keywords": [
+                  "摊还",
+                  "均摊",
+                  "势能法",
+                  "动态数组",
+                  "成本"
+                ],
+                "prompt_fragments": [
+                  "解释摊还分析为何不等于平均情况分析",
+                  "举例说明扩容的均摊成本"
+                ]
+              },
+              {
+                "id": "cs.algo.analysis.proof",
+                "title": "正确性证明",
+                "keywords": [
+                  "正确性",
+                  "不变式",
+                  "归纳",
+                  "反证",
+                  "证明"
+                ],
+                "prompt_fragments": [
+                  "解释算法不变式如何帮助证明正确性",
+                  "分析证明思路和实现思路的关系"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "cs.system",
+        "title": "系统与并发",
+        "children": [
+          {
+            "id": "cs.system.os",
+            "title": "操作系统",
+            "children": [
+              {
+                "id": "cs.system.os.scheduler",
+                "title": "调度与并发",
+                "keywords": [
+                  "调度",
+                  "上下文切换",
+                  "并发",
+                  "线程",
+                  "时间片"
+                ],
+                "prompt_fragments": [
+                  "解释调度器如何决定下一个运行的线程",
+                  "分析上下文切换的开销来源"
+                ]
+              },
+              {
+                "id": "cs.system.os.memory",
+                "title": "内存管理",
+                "keywords": [
+                  "虚拟内存",
+                  "分页",
+                  "页表",
+                  "缺页",
+                  "缓存"
+                ],
+                "prompt_fragments": [
+                  "解释虚拟内存解决了什么问题",
+                  "举例说明分页和缺页的影响"
+                ]
+              },
+              {
+                "id": "cs.system.os.io",
+                "title": "文件与 I/O",
+                "keywords": [
+                  "文件系统",
+                  "I/O",
+                  "缓冲",
+                  "磁盘",
+                  "系统调用"
+                ],
+                "prompt_fragments": [
+                  "解释一次 I/O 请求的关键路径",
+                  "说明缓冲如何影响性能"
+                ]
+              },
+              {
+                "id": "cs.system.os.sync",
+                "title": "同步与锁",
+                "keywords": [
+                  "互斥锁",
+                  "读写锁",
+                  "条件变量",
+                  "死锁",
+                  "同步"
+                ],
+                "prompt_fragments": [
+                  "解释常见同步原语的适用场景",
+                  "分析锁竞争为何会拖慢系统"
+                ]
+              },
+              {
+                "id": "cs.system.os.syscall",
+                "title": "系统调用与边界",
+                "keywords": [
+                  "系统调用",
+                  "用户态",
+                  "内核态",
+                  "trap",
+                  "上下文"
+                ],
+                "prompt_fragments": [
+                  "解释系统调用为什么昂贵",
+                  "分析用户态与内核态的边界设计"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.system.network",
+            "title": "网络与协议",
+            "children": [
+              {
+                "id": "cs.system.network.tcp",
+                "title": "TCP/IP 与传输",
+                "keywords": [
+                  "TCP",
+                  "IP",
+                  "握手",
+                  "重传",
+                  "拥塞控制"
+                ],
+                "prompt_fragments": [
+                  "解释 TCP 为什么可靠",
+                  "分析拥塞控制的触发机制"
+                ]
+              },
+              {
+                "id": "cs.system.network.http",
+                "title": "HTTP 与应用协议",
+                "keywords": [
+                  "HTTP",
+                  "HTTPS",
+                  "缓存",
+                  "Cookie",
+                  "REST"
+                ],
+                "prompt_fragments": [
+                  "解释一次 HTTP 请求的关键过程",
+                  "分析 HTTPS 握手中的信任建立"
+                ]
+              },
+              {
+                "id": "cs.system.network.dns",
+                "title": "DNS 与命名",
+                "keywords": [
+                  "DNS",
+                  "域名",
+                  "递归查询",
+                  "缓存",
+                  "负载均衡"
+                ],
+                "prompt_fragments": [
+                  "解释 DNS 查询链路的关键步骤",
+                  "分析 DNS 缓存对一致性的影响"
+                ]
+              },
+              {
+                "id": "cs.system.network.rpc",
+                "title": "RPC 与服务治理",
+                "keywords": [
+                  "RPC",
+                  "序列化",
+                  "超时",
+                  "重试",
+                  "服务发现"
+                ],
+                "prompt_fragments": [
+                  "解释 RPC 与 HTTP API 的差异",
+                  "分析重试和超时配置不当会造成什么问题"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.system.db",
+            "title": "数据库与存储",
+            "children": [
+              {
+                "id": "cs.system.db.model",
+                "title": "数据建模与索引",
+                "keywords": [
+                  "模型",
+                  "范式",
+                  "索引",
+                  "B树",
+                  "关系"
+                ],
+                "prompt_fragments": [
+                  "解释一个数据模型的设计逻辑",
+                  "分析索引对查询的影响"
+                ]
+              },
+              {
+                "id": "cs.system.db.tx",
+                "title": "事务与一致性",
+                "keywords": [
+                  "事务",
+                  "隔离级别",
+                  "锁",
+                  "ACID",
+                  "MVCC"
+                ],
+                "prompt_fragments": [
+                  "解释事务解决了什么问题",
+                  "比较不同隔离级别的取舍"
+                ]
+              },
+              {
+                "id": "cs.system.db.dist",
+                "title": "分布式存储",
+                "keywords": [
+                  "CAP",
+                  "最终一致性",
+                  "分片",
+                  "副本",
+                  "Raft"
+                ],
+                "prompt_fragments": [
+                  "解释 CAP 定理的真实含义",
+                  "分析 Raft 如何保证共识"
+                ]
+              },
+              {
+                "id": "cs.system.db.query",
+                "title": "查询计划与优化",
+                "keywords": [
+                  "查询计划",
+                  "优化器",
+                  "Join",
+                  "代价模型",
+                  "扫描"
+                ],
+                "prompt_fragments": [
+                  "解释数据库优化器如何选择执行计划",
+                  "分析慢查询的典型成因"
+                ]
+              },
+              {
+                "id": "cs.system.db.cache",
+                "title": "缓存与一致性",
+                "keywords": [
+                  "缓存",
+                  "失效",
+                  "双写",
+                  "一致性",
+                  "热点"
+                ],
+                "prompt_fragments": [
+                  "解释缓存为何能提速也能制造脏读",
+                  "分析缓存一致性的常见策略"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.system.security",
+            "title": "安全与身份",
+            "children": [
+              {
+                "id": "cs.system.security.auth",
+                "title": "认证与会话",
+                "keywords": [
+                  "认证",
+                  "授权",
+                  "Session",
+                  "Token",
+                  "单点登录"
+                ],
+                "prompt_fragments": [
+                  "解释认证和授权的边界",
+                  "分析会话管理最容易出问题的点"
+                ]
+              },
+              {
+                "id": "cs.system.security.crypto",
+                "title": "密码学与 TLS",
+                "keywords": [
+                  "TLS",
+                  "证书",
+                  "对称加密",
+                  "公钥",
+                  "握手"
+                ],
+                "prompt_fragments": [
+                  "解释 TLS 如何建立安全信道",
+                  "分析证书链和信任根的作用"
+                ]
+              },
+              {
+                "id": "cs.system.security.appsec",
+                "title": "Web 安全与威胁模型",
+                "keywords": [
+                  "XSS",
+                  "CSRF",
+                  "SQL注入",
+                  "威胁模型",
+                  "输入验证"
+                ],
+                "prompt_fragments": [
+                  "解释威胁模型为何是安全设计起点",
+                  "分析常见 Web 漏洞是如何出现的"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "cs.ai",
+        "title": "AI 系统",
+        "children": [
+          {
+            "id": "cs.ai.llm",
+            "title": "大语言模型",
+            "children": [
+              {
+                "id": "cs.ai.llm.arch",
+                "title": "Transformer 架构",
+                "keywords": [
+                  "Transformer",
+                  "注意力",
+                  "位置编码",
+                  "FFN"
+                ],
+                "prompt_fragments": [
+                  "解释 Attention 机制的直觉",
+                  "分析 Transformer 扩展的瓶颈"
+                ]
+              },
+              {
+                "id": "cs.ai.llm.train",
+                "title": "训练与对齐",
+                "keywords": [
+                  "预训练",
+                  "微调",
+                  "RLHF",
+                  "对齐"
+                ],
+                "prompt_fragments": [
+                  "解释 RLHF 如何影响模型行为",
+                  "分析对齐失败的典型模式"
+                ]
+              },
+              {
+                "id": "cs.ai.llm.tokenization",
+                "title": "分词与上下文窗口",
+                "keywords": [
+                  "token",
+                  "分词",
+                  "上下文窗口",
+                  "截断",
+                  "位置编码"
+                ],
+                "prompt_fragments": [
+                  "解释分词策略如何影响模型能力与成本",
+                  "分析上下文窗口扩展的主要瓶颈"
+                ]
+              },
+              {
+                "id": "cs.ai.llm.inference",
+                "title": "推理与采样",
+                "keywords": [
+                  "推理",
+                  "采样",
+                  "temperature",
+                  "top-p",
+                  "KV cache"
+                ],
+                "prompt_fragments": [
+                  "解释采样参数如何影响输出风格",
+                  "分析 KV cache 为什么是推理性能关键"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.ai.app",
+            "title": "AI 应用工程",
+            "children": [
+              {
+                "id": "cs.ai.app.rag",
+                "title": "RAG 与检索",
+                "keywords": [
+                  "RAG",
+                  "向量检索",
+                  "嵌入",
+                  "召回"
+                ],
+                "prompt_fragments": [
+                  "解释 RAG 解决了 LLM 的什么局限",
+                  "分析检索质量对 RAG 的影响"
+                ]
+              },
+              {
+                "id": "cs.ai.app.agent",
+                "title": "Agent 与工具调用",
+                "keywords": [
+                  "Agent",
+                  "工具调用",
+                  "规划",
+                  "记忆"
+                ],
+                "prompt_fragments": [
+                  "解释 Agent 如何分解复杂任务",
+                  "分析工具调用链中的失败点"
+                ]
+              },
+              {
+                "id": "cs.ai.app.eval",
+                "title": "评测与数据集",
+                "keywords": [
+                  "评测",
+                  "基准",
+                  "人工标注",
+                  "回归测试",
+                  "数据集"
+                ],
+                "prompt_fragments": [
+                  "解释为什么 AI 应用必须持续评测",
+                  "分析离线评测与在线指标的差异"
+                ]
+              },
+              {
+                "id": "cs.ai.app.orchestration",
+                "title": "工作流编排",
+                "keywords": [
+                  "工作流",
+                  "编排",
+                  "状态机",
+                  "重试",
+                  "人工介入"
+                ],
+                "prompt_fragments": [
+                  "解释 AI 工作流为何需要显式状态",
+                  "分析多步骤编排的失败恢复策略"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.ai.multimodal",
+            "title": "多模态与语音",
+            "children": [
+              {
+                "id": "cs.ai.multimodal.vision",
+                "title": "视觉理解",
+                "keywords": [
+                  "视觉",
+                  "OCR",
+                  "检测",
+                  "图文理解",
+                  "grounding"
+                ],
+                "prompt_fragments": [
+                  "解释视觉模型如何把图像转成可推理表示",
+                  "分析 OCR 和图文问答的差异"
+                ]
+              },
+              {
+                "id": "cs.ai.multimodal.speech",
+                "title": "语音识别与合成",
+                "keywords": [
+                  "ASR",
+                  "TTS",
+                  "声学模型",
+                  "流式识别",
+                  "合成"
+                ],
+                "prompt_fragments": [
+                  "解释语音系统的核心链路",
+                  "分析流式语音为何更考验延迟控制"
+                ]
+              },
+              {
+                "id": "cs.ai.multimodal.grounding",
+                "title": "跨模态对齐",
+                "keywords": [
+                  "对齐",
+                  "多模态嵌入",
+                  "grounding",
+                  "表示空间",
+                  "检索"
+                ],
+                "prompt_fragments": [
+                  "解释跨模态对齐解决了什么问题",
+                  "分析统一表示空间的价值与代价"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "cs.eng",
+        "title": "工程与交付",
+        "children": [
+          {
+            "id": "cs.eng.design",
+            "title": "系统设计",
+            "children": [
+              {
+                "id": "cs.eng.design.arch",
+                "title": "架构模式",
+                "keywords": [
+                  "微服务",
+                  "分层",
+                  "事件驱动",
+                  "单体"
+                ],
+                "prompt_fragments": [
+                  "比较微服务与单体的取舍",
+                  "解释事件驱动如何解耦系统"
+                ]
+              },
+              {
+                "id": "cs.eng.design.scale",
+                "title": "扩展性与容错",
+                "keywords": [
+                  "水平扩展",
+                  "限流",
+                  "熔断",
+                  "幂等"
+                ],
+                "prompt_fragments": [
+                  "解释系统如何应对流量洪峰",
+                  "分析一次级联故障的传播路径"
+                ]
+              },
+              {
+                "id": "cs.eng.design.tradeoff",
+                "title": "权衡与容量规划",
+                "keywords": [
+                  "tradeoff",
+                  "容量规划",
+                  "延迟",
+                  "吞吐",
+                  "成本"
+                ],
+                "prompt_fragments": [
+                  "解释系统设计中的核心 tradeoff 如何排序",
+                  "分析容量规划为什么离不开负载假设"
+                ]
+              },
+              {
+                "id": "cs.eng.design.api",
+                "title": "API 设计与演化",
+                "keywords": [
+                  "API",
+                  "兼容性",
+                  "版本",
+                  "契约",
+                  "幂等"
+                ],
+                "prompt_fragments": [
+                  "解释 API 设计如何兼顾易用性与演化",
+                  "分析破坏性变更为何代价高"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.eng.devops",
+            "title": "DevOps 与发布",
+            "children": [
+              {
+                "id": "cs.eng.devops.cicd",
+                "title": "CI/CD 流水线",
+                "keywords": [
+                  "CI",
+                  "CD",
+                  "流水线",
+                  "测试",
+                  "部署"
+                ],
+                "prompt_fragments": [
+                  "解释 CI/CD 如何减少发布风险",
+                  "分析流水线中最易失败的环节"
+                ]
+              },
+              {
+                "id": "cs.eng.devops.observ",
+                "title": "可观测性",
+                "keywords": [
+                  "日志",
+                  "指标",
+                  "链路追踪",
+                  "告警"
+                ],
+                "prompt_fragments": [
+                  "解释三种可观测性支柱的差异",
+                  "分析如何用追踪定位慢请求"
+                ]
+              },
+              {
+                "id": "cs.eng.devops.infra",
+                "title": "基础设施即代码",
+                "keywords": [
+                  "IaC",
+                  "Terraform",
+                  "配置漂移",
+                  "声明式",
+                  "环境"
+                ],
+                "prompt_fragments": [
+                  "解释基础设施即代码为什么提升可控性",
+                  "分析配置漂移是如何发生的"
+                ]
+              },
+              {
+                "id": "cs.eng.devops.release",
+                "title": "发布策略与回滚",
+                "keywords": [
+                  "灰度",
+                  "蓝绿",
+                  "回滚",
+                  "feature flag",
+                  "发布"
+                ],
+                "prompt_fragments": [
+                  "解释灰度发布如何降低风险",
+                  "分析回滚策略设计的关键点"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "cs.eng.reliability",
+            "title": "可靠性工程",
+            "children": [
+              {
+                "id": "cs.eng.reliability.slo",
+                "title": "SLO 与错误预算",
+                "keywords": [
+                  "SLO",
+                  "SLI",
+                  "错误预算",
+                  "可用性",
+                  "目标"
+                ],
+                "prompt_fragments": [
+                  "解释 SLO 如何连接产品和工程优先级",
+                  "分析错误预算为何能约束上线节奏"
+                ]
+              },
+              {
+                "id": "cs.eng.reliability.incident",
+                "title": "事故响应与复盘",
+                "keywords": [
+                  "事故",
+                  "应急",
+                  "复盘",
+                  "时间线",
+                  "根因"
+                ],
+                "prompt_fragments": [
+                  "解释一次事故复盘应包含哪些关键信息",
+                  "分析为什么复盘要避免归罪个人"
+                ]
+              },
+              {
+                "id": "cs.eng.reliability.cost",
+                "title": "成本与容量管理",
+                "keywords": [
+                  "成本",
+                  "容量",
+                  "利用率",
+                  "弹性",
+                  "预算"
+                ],
+                "prompt_fragments": [
+                  "解释成本优化为何不能只看单价",
+                  "分析容量利用率与稳定性的平衡"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "write",
+    "title": "写作",
+    "description": "表达、结构、论证、风格、技术写作",
+    "children": [
+      {
+        "id": "write.structure",
+        "title": "结构组织",
+        "children": [
+          {
+            "id": "write.structure.outline",
+            "title": "提纲与层次",
+            "children": [
+              {
+                "id": "write.structure.outline.hierarchy",
+                "title": "信息分层",
+                "keywords": [
+                  "层次",
+                  "主次",
+                  "分类",
+                  "框架"
+                ],
+                "prompt_fragments": [
+                  "把一段混乱信息重新分层",
+                  "解释信息层级设计的原则"
+                ]
+              },
+              {
+                "id": "write.structure.outline.flow",
+                "title": "顺序与逻辑流",
+                "keywords": [
+                  "顺序",
+                  "逻辑",
+                  "时间线",
+                  "因果"
+                ],
+                "prompt_fragments": [
+                  "解释为什么这个排列顺序成立",
+                  "重新排列段落以增强说服力"
+                ]
+              },
+              {
+                "id": "write.structure.outline.opening",
+                "title": "开头与 framing",
+                "keywords": [
+                  "开头",
+                  "framing",
+                  "引子",
+                  "问题意识",
+                  "动机"
+                ],
+                "prompt_fragments": [
+                  "解释一个好开头如何快速建立阅读动机",
+                  "分析 framing 如何改变读者理解"
+                ]
+              },
+              {
+                "id": "write.structure.outline.audience",
+                "title": "读者模型",
+                "keywords": [
+                  "读者",
+                  "背景知识",
+                  "预期",
+                  "信息密度",
+                  "上下文"
+                ],
+                "prompt_fragments": [
+                  "解释读者模型如何决定文章结构",
+                  "分析不同读者对同一主题需要的铺垫差异"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "write.structure.transition",
+            "title": "过渡与衔接",
+            "children": [
+              {
+                "id": "write.structure.transition.sentence",
+                "title": "句间衔接",
+                "keywords": [
+                  "衔接",
+                  "连词",
+                  "主题链",
+                  "句式"
+                ],
+                "prompt_fragments": [
+                  "改写一段生硬衔接",
+                  "解释为什么这两句话之间有断层"
+                ]
+              },
+              {
+                "id": "write.structure.transition.paragraph",
+                "title": "段落推进",
+                "keywords": [
+                  "段落",
+                  "过渡段",
+                  "主题句",
+                  "收束"
+                ],
+                "prompt_fragments": [
+                  "为两个段落写一个过渡段",
+                  "分析段落结构中的推进逻辑"
+                ]
+              },
+              {
+                "id": "write.structure.transition.signpost",
+                "title": "路标句与提示",
+                "keywords": [
+                  "路标句",
+                  "提示",
+                  "节奏",
+                  "预告",
+                  "过渡"
+                ],
+                "prompt_fragments": [
+                  "解释路标句如何降低读者迷失感",
+                  "分析提示性句子与废话的边界"
+                ]
+              },
+              {
+                "id": "write.structure.transition.coherence",
+                "title": "一致性与指代",
+                "keywords": [
+                  "一致性",
+                  "指代",
+                  "衔接",
+                  "主题句",
+                  "线索"
+                ],
+                "prompt_fragments": [
+                  "解释指代不清为何会破坏阅读流",
+                  "分析文章一致性如何靠重复与变化共同维持"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "write.argument",
+        "title": "论证表达",
+        "children": [
+          {
+            "id": "write.argument.claim",
+            "title": "观点与论据",
+            "children": [
+              {
+                "id": "write.argument.claim.thesis",
+                "title": "核心论点",
+                "keywords": [
+                  "论点",
+                  "主张",
+                  "清晰度",
+                  "边界"
+                ],
+                "prompt_fragments": [
+                  "提炼并改写一个模糊论点",
+                  "分析这个论点是否可证伪"
+                ]
+              },
+              {
+                "id": "write.argument.claim.evidence",
+                "title": "证据与支撑",
+                "keywords": [
+                  "证据",
+                  "数据",
+                  "引用",
+                  "权威"
+                ],
+                "prompt_fragments": [
+                  "为一个论点找三种不同类型的支撑",
+                  "分析某个证据的局限性"
+                ]
+              },
+              {
+                "id": "write.argument.claim.framing",
+                "title": "问题 framing",
+                "keywords": [
+                  "framing",
+                  "问题定义",
+                  "角度",
+                  "假设",
+                  "语境"
+                ],
+                "prompt_fragments": [
+                  "解释问题 framing 如何决定论证走向",
+                  "分析换一种 framing 为什么会改变结论"
+                ]
+              },
+              {
+                "id": "write.argument.claim.causal",
+                "title": "因果与机制解释",
+                "keywords": [
+                  "因果",
+                  "机制",
+                  "链条",
+                  "变量",
+                  "解释"
+                ],
+                "prompt_fragments": [
+                  "解释机制性论证为什么比结论更有说服力",
+                  "分析相关性与因果性的写作区别"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "write.argument.counter",
+            "title": "反驳与限定",
+            "children": [
+              {
+                "id": "write.argument.counter.rebuttal",
+                "title": "反驳策略",
+                "keywords": [
+                  "反驳",
+                  "预判",
+                  "驳斥",
+                  "钢人论证"
+                ],
+                "prompt_fragments": [
+                  "为一个观点构建钢人版本再驳斥",
+                  "分析哪种反驳策略最有效"
+                ]
+              },
+              {
+                "id": "write.argument.counter.counterexample",
+                "title": "反例与限定条件",
+                "keywords": [
+                  "反例",
+                  "限定",
+                  "边界条件",
+                  "例外"
+                ],
+                "prompt_fragments": [
+                  "为一个论点找到一个真实反例",
+                  "用限定条件修正一个过强的主张"
+                ]
+              },
+              {
+                "id": "write.argument.counter.steelman",
+                "title": "最强反方",
+                "keywords": [
+                  "steelman",
+                  "反方",
+                  "公平呈现",
+                  "同理",
+                  "对立面"
+                ],
+                "prompt_fragments": [
+                  "解释为什么要先替反方说到最好",
+                  "分析稻草人论证如何削弱可信度"
+                ]
+              },
+              {
+                "id": "write.argument.counter.scope",
+                "title": "范围与前提",
+                "keywords": [
+                  "范围",
+                  "前提",
+                  "条件",
+                  "例外",
+                  "限定"
+                ],
+                "prompt_fragments": [
+                  "解释限定条件如何让论点更可信",
+                  "分析过度泛化的常见后果"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "write.tech",
+        "title": "技术写作",
+        "children": [
+          {
+            "id": "write.tech.exposition",
+            "title": "概念解释",
+            "children": [
+              {
+                "id": "write.tech.exposition.analogy",
+                "title": "类比与比喻",
+                "keywords": [
+                  "类比",
+                  "比喻",
+                  "通俗化",
+                  "映射"
+                ],
+                "prompt_fragments": [
+                  "为一个技术概念设计一个类比",
+                  "分析这个类比的破绽在哪里"
+                ]
+              },
+              {
+                "id": "write.tech.exposition.boundary",
+                "title": "边界与误区",
+                "keywords": [
+                  "边界",
+                  "误区",
+                  "限制",
+                  "常见错误"
+                ],
+                "prompt_fragments": [
+                  "列出某个概念最常见的三个误区",
+                  "解释这个概念的适用边界"
+                ]
+              },
+              {
+                "id": "write.tech.exposition.mental",
+                "title": "心智模型",
+                "keywords": [
+                  "心智模型",
+                  "直觉",
+                  "映射",
+                  "抽象",
+                  "类比"
+                ],
+                "prompt_fragments": [
+                  "解释心智模型如何帮助陌生概念落地",
+                  "分析类比何时会误导"
+                ]
+              },
+              {
+                "id": "write.tech.exposition.tradeoff",
+                "title": "权衡与取舍",
+                "keywords": [
+                  "权衡",
+                  "取舍",
+                  "边界",
+                  "方案比较",
+                  "成本"
+                ],
+                "prompt_fragments": [
+                  "解释技术写作为何应该写清 tradeoff",
+                  "分析只给结论不写取舍的风险"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "write.tech.tutorial",
+            "title": "教程与步骤",
+            "children": [
+              {
+                "id": "write.tech.tutorial.step",
+                "title": "步骤拆解",
+                "keywords": [
+                  "步骤",
+                  "操作",
+                  "前置条件",
+                  "验证"
+                ],
+                "prompt_fragments": [
+                  "把一个复杂流程拆成最小可操作步骤",
+                  "为每步加上验证标准"
+                ]
+              },
+              {
+                "id": "write.tech.tutorial.troubleshoot",
+                "title": "排障与 FAQ",
+                "keywords": [
+                  "排障",
+                  "FAQ",
+                  "常见问题",
+                  "调试"
+                ],
+                "prompt_fragments": [
+                  "为一个流程写出最常见的三个卡点",
+                  "设计一个排障决策树"
+                ]
+              },
+              {
+                "id": "write.tech.tutorial.example",
+                "title": "示例驱动",
+                "keywords": [
+                  "示例",
+                  "最小可复现",
+                  "样例",
+                  "演示",
+                  "步骤"
+                ],
+                "prompt_fragments": [
+                  "解释为什么教程要先给最小示例",
+                  "分析示例驱动和概念驱动教程的差异"
+                ]
+              },
+              {
+                "id": "write.tech.tutorial.verify",
+                "title": "验证与检查清单",
+                "keywords": [
+                  "验证",
+                  "检查清单",
+                  "验收",
+                  "自测",
+                  "结果"
+                ],
+                "prompt_fragments": [
+                  "解释教程为什么要告诉读者如何验证成功",
+                  "分析缺少验收步骤会带来什么问题"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "write.style",
+        "title": "风格与修辞",
+        "children": [
+          {
+            "id": "write.style.precision",
+            "title": "准确与简洁",
+            "children": [
+              {
+                "id": "write.style.precision.compress",
+                "title": "压缩冗余",
+                "keywords": [
+                  "冗余",
+                  "精简",
+                  "删减",
+                  "信息密度"
+                ],
+                "prompt_fragments": [
+                  "把一段话压缩到一半长度不损失信息",
+                  "找出哪些词可以删除"
+                ]
+              },
+              {
+                "id": "write.style.precision.ambiguity",
+                "title": "消除歧义",
+                "keywords": [
+                  "歧义",
+                  "模糊",
+                  "指代不明",
+                  "准确"
+                ],
+                "prompt_fragments": [
+                  "找出这段话中的歧义点并修正",
+                  "把一个模糊描述改写得更精确"
+                ]
+              },
+              {
+                "id": "write.style.precision.verbs",
+                "title": "动词与具体性",
+                "keywords": [
+                  "动词",
+                  "具体性",
+                  "动作",
+                  "主语",
+                  "表达"
+                ],
+                "prompt_fragments": [
+                  "解释为什么具体动词能提升信息密度",
+                  "分析抽象空话在技术写作中的危害"
+                ]
+              },
+              {
+                "id": "write.style.precision.jargon",
+                "title": "术语控制",
+                "keywords": [
+                  "术语",
+                  "行话",
+                  "定义",
+                  "一致性",
+                  "翻译"
+                ],
+                "prompt_fragments": [
+                  "解释术语何时该保留何时该翻译",
+                  "分析术语漂移如何制造理解成本"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "write.style.voice",
+            "title": "语气与节奏",
+            "children": [
+              {
+                "id": "write.style.voice.tone",
+                "title": "语气调控",
+                "keywords": [
+                  "语气",
+                  "正式",
+                  "亲和",
+                  "权威"
+                ],
+                "prompt_fragments": [
+                  "把一段学术语气改写为更口语化",
+                  "分析语气选择如何影响读者信任"
+                ]
+              },
+              {
+                "id": "write.style.voice.rhythm",
+                "title": "节奏与句式",
+                "keywords": [
+                  "节奏",
+                  "句式",
+                  "长短句",
+                  "排比"
+                ],
+                "prompt_fragments": [
+                  "用长短句交替改写一段单调文字",
+                  "解释排比句在什么时候有力"
+                ]
+              },
+              {
+                "id": "write.style.voice.persona",
+                "title": "叙述人格",
+                "keywords": [
+                  "人格",
+                  "作者声音",
+                  "可信度",
+                  "距离感",
+                  "身份"
+                ],
+                "prompt_fragments": [
+                  "解释作者声音如何影响读者信任",
+                  "分析专业感和亲近感如何平衡"
+                ]
+              },
+              {
+                "id": "write.style.voice.cadence",
+                "title": "节奏与停顿",
+                "keywords": [
+                  "节奏",
+                  "停顿",
+                  "句长",
+                  "重音",
+                  "呼吸感"
+                ],
+                "prompt_fragments": [
+                  "解释句长变化如何控制阅读节奏",
+                  "分析停顿和留白如何服务强调"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "write.research",
+        "title": "研究与素材",
+        "children": [
+          {
+            "id": "write.research.source",
+            "title": "资料搜集",
+            "children": [
+              {
+                "id": "write.research.source.primary",
+                "title": "一手资料优先",
+                "keywords": [
+                  "一手资料",
+                  "原始来源",
+                  "文档",
+                  "论文",
+                  "访谈"
+                ],
+                "prompt_fragments": [
+                  "解释为什么一手资料更适合构建准确理解",
+                  "分析二手总结最容易失真的环节"
+                ]
+              },
+              {
+                "id": "write.research.source.credibility",
+                "title": "可信度判断",
+                "keywords": [
+                  "可信度",
+                  "来源",
+                  "偏见",
+                  "利益相关",
+                  "验证"
+                ],
+                "prompt_fragments": [
+                  "解释如何快速判断一个来源是否可信",
+                  "分析来源偏见如何进入写作"
+                ]
+              },
+              {
+                "id": "write.research.source.compare",
+                "title": "多源对照",
+                "keywords": [
+                  "对照",
+                  "交叉验证",
+                  "差异",
+                  "一致性",
+                  "取样"
+                ],
+                "prompt_fragments": [
+                  "解释多源对照如何减少片面结论",
+                  "分析信息冲突时应如何处理"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "write.research.note",
+            "title": "笔记与卡片",
+            "children": [
+              {
+                "id": "write.research.note.distill",
+                "title": "摘要与蒸馏",
+                "keywords": [
+                  "摘要",
+                  "蒸馏",
+                  "提炼",
+                  "复述",
+                  "信息压缩"
+                ],
+                "prompt_fragments": [
+                  "解释摘录和蒸馏的差别",
+                  "分析如何把长材料压缩成可复用卡片"
+                ]
+              },
+              {
+                "id": "write.research.note.citation",
+                "title": "引用与溯源",
+                "keywords": [
+                  "引用",
+                  "出处",
+                  "溯源",
+                  "注释",
+                  "证据链"
+                ],
+                "prompt_fragments": [
+                  "解释为何引用不仅是格式问题",
+                  "分析证据链断裂会如何削弱论证"
+                ]
+              },
+              {
+                "id": "write.research.note.synthesis",
+                "title": "综合与重组",
+                "keywords": [
+                  "综合",
+                  "重组",
+                  "主题",
+                  "对比",
+                  "新结构"
+                ],
+                "prompt_fragments": [
+                  "解释综合不同材料为何是写作价值所在",
+                  "分析如何从碎片笔记长出结构化观点"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "psych",
+    "title": "心理学",
+    "description": "认知、情绪、行为、关系、自我理解",
+    "children": [
+      {
+        "id": "psych.cognition",
+        "title": "认知",
+        "children": [
+          {
+            "id": "psych.cognition.bias",
+            "title": "认知偏差",
+            "children": [
+              {
+                "id": "psych.cognition.bias.confirm",
+                "title": "确认偏误",
+                "keywords": [
+                  "确认偏误",
+                  "信息筛选",
+                  "信念固化"
+                ],
+                "prompt_fragments": [
+                  "解释确认偏误如何影响信息搜索",
+                  "举一个真实场景中的确认偏误"
+                ]
+              },
+              {
+                "id": "psych.cognition.bias.attribution",
+                "title": "归因偏差",
+                "keywords": [
+                  "归因",
+                  "基本归因错误",
+                  "外部归因",
+                  "内部归因"
+                ],
+                "prompt_fragments": [
+                  "解释基本归因错误的机制",
+                  "分析归因方式如何影响冲突解决"
+                ]
+              },
+              {
+                "id": "psych.cognition.bias.availability",
+                "title": "可得性偏差",
+                "keywords": [
+                  "可得性",
+                  "印象深刻",
+                  "样本偏差",
+                  "风险感知",
+                  "记忆"
+                ],
+                "prompt_fragments": [
+                  "解释可得性偏差如何扭曲判断概率",
+                  "分析新闻曝光为何会改变风险感受"
+                ]
+              },
+              {
+                "id": "psych.cognition.bias.hindsight",
+                "title": "后见之明偏差",
+                "keywords": [
+                  "后见之明",
+                  "事后合理化",
+                  "预测",
+                  "记忆重写",
+                  "归因"
+                ],
+                "prompt_fragments": [
+                  "解释后见之明偏差如何让人高估自己曾经的判断力",
+                  "分析复盘时如何避免事后合理化"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "psych.cognition.memory",
+            "title": "注意与记忆",
+            "children": [
+              {
+                "id": "psych.cognition.memory.working",
+                "title": "工作记忆",
+                "keywords": [
+                  "工作记忆",
+                  "容量",
+                  "负荷",
+                  "认知资源"
+                ],
+                "prompt_fragments": [
+                  "解释工作记忆容量如何影响学习",
+                  "举例说明如何减轻认知负荷"
+                ]
+              },
+              {
+                "id": "psych.cognition.memory.encoding",
+                "title": "编码与提取",
+                "keywords": [
+                  "编码",
+                  "提取",
+                  "间隔效应",
+                  "检索练习"
+                ],
+                "prompt_fragments": [
+                  "解释为什么检索练习比重读更有效",
+                  "分析遗忘曲线的实际含义"
+                ]
+              },
+              {
+                "id": "psych.cognition.memory.attention",
+                "title": "注意控制",
+                "keywords": [
+                  "注意",
+                  "选择性注意",
+                  "分心",
+                  "执行控制",
+                  "聚焦"
+                ],
+                "prompt_fragments": [
+                  "解释注意资源为何会成为学习瓶颈",
+                  "分析多任务切换为何降低质量"
+                ]
+              },
+              {
+                "id": "psych.cognition.memory.spaced",
+                "title": "间隔效应",
+                "keywords": [
+                  "间隔效应",
+                  "复习",
+                  "遗忘曲线",
+                  "提取练习",
+                  "巩固"
+                ],
+                "prompt_fragments": [
+                  "解释间隔复习为何优于密集复习",
+                  "分析提取练习对长期记忆的作用"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "psych.emotion",
+        "title": "情绪",
+        "children": [
+          {
+            "id": "psych.emotion.regulation",
+            "title": "情绪调节",
+            "children": [
+              {
+                "id": "psych.emotion.regulation.reappraisal",
+                "title": "认知重评",
+                "keywords": [
+                  "重评",
+                  "认知重构",
+                  "视角转换",
+                  "情绪管理"
+                ],
+                "prompt_fragments": [
+                  "解释认知重评如何改变情绪体验",
+                  "举例示范如何对一个场景做重评"
+                ]
+              },
+              {
+                "id": "psych.emotion.regulation.suppress",
+                "title": "抑制与表达",
+                "keywords": [
+                  "抑制",
+                  "压抑",
+                  "情绪表达",
+                  "代价"
+                ],
+                "prompt_fragments": [
+                  "分析情绪抑制的短期和长期代价",
+                  "解释何时表达情绪更合适"
+                ]
+              },
+              {
+                "id": "psych.emotion.regulation.acceptance",
+                "title": "接纳与容纳",
+                "keywords": [
+                  "接纳",
+                  "容纳",
+                  "情绪",
+                  "体验",
+                  "非评判"
+                ],
+                "prompt_fragments": [
+                  "解释接纳为何不等于放任情绪",
+                  "分析情绪容纳如何减少二次痛苦"
+                ]
+              },
+              {
+                "id": "psych.emotion.regulation.labeling",
+                "title": "情绪标记",
+                "keywords": [
+                  "情绪标记",
+                  "命名",
+                  "识别",
+                  "粒度",
+                  "表达"
+                ],
+                "prompt_fragments": [
+                  "解释给情绪命名为什么有调节作用",
+                  "分析情绪粒度高的人有哪些优势"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "psych.emotion.stress",
+            "title": "压力与恢复",
+            "children": [
+              {
+                "id": "psych.emotion.stress.response",
+                "title": "压力反应机制",
+                "keywords": [
+                  "压力",
+                  "应激",
+                  "皮质醇",
+                  "战斗或逃跑"
+                ],
+                "prompt_fragments": [
+                  "解释压力反应的生理机制",
+                  "分析慢性压力如何不同于急性压力"
+                ]
+              },
+              {
+                "id": "psych.emotion.stress.recovery",
+                "title": "恢复策略",
+                "keywords": [
+                  "恢复",
+                  "休息",
+                  "正念",
+                  "去激活"
+                ],
+                "prompt_fragments": [
+                  "解释主动恢复和被动恢复的区别",
+                  "分析睡眠如何影响情绪调节能力"
+                ]
+              },
+              {
+                "id": "psych.emotion.stress.burnout",
+                "title": "倦怠与耗竭",
+                "keywords": [
+                  "倦怠",
+                  "耗竭",
+                  "职业压力",
+                  "冷漠",
+                  "效能感"
+                ],
+                "prompt_fragments": [
+                  "解释压力和倦怠的关键区别",
+                  "分析持续高压为何会蚕食效能感"
+                ]
+              },
+              {
+                "id": "psych.emotion.stress.physiology",
+                "title": "生理唤醒与恢复",
+                "keywords": [
+                  "唤醒",
+                  "皮质醇",
+                  "心率",
+                  "睡眠",
+                  "恢复"
+                ],
+                "prompt_fragments": [
+                  "解释压力为何不仅是主观感受也是生理状态",
+                  "分析恢复策略为什么要作用于身体层面"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "psych.behavior",
+        "title": "行为",
+        "children": [
+          {
+            "id": "psych.behavior.habit",
+            "title": "习惯形成",
+            "children": [
+              {
+                "id": "psych.behavior.habit.loop",
+                "title": "习惯回路",
+                "keywords": [
+                  "触发",
+                  "惯例",
+                  "奖励",
+                  "习惯回路"
+                ],
+                "prompt_fragments": [
+                  "用习惯回路分析一个坏习惯",
+                  "解释如何替换习惯中的惯例部分"
+                ]
+              },
+              {
+                "id": "psych.behavior.habit.build",
+                "title": "习惯建立策略",
+                "keywords": [
+                  "实施意图",
+                  "环境设计",
+                  "最小可行",
+                  "坚持"
+                ],
+                "prompt_fragments": [
+                  "解释实施意图如何提升行动成功率",
+                  "用环境设计改善一个习惯"
+                ]
+              },
+              {
+                "id": "psych.behavior.habit.cue",
+                "title": "线索设计",
+                "keywords": [
+                  "线索",
+                  "触发器",
+                  "环境提示",
+                  "提醒",
+                  "习惯触发"
+                ],
+                "prompt_fragments": [
+                  "解释线索为何是习惯回路的起点",
+                  "分析如何通过环境触发想要的行为"
+                ]
+              },
+              {
+                "id": "psych.behavior.habit.environment",
+                "title": "环境塑形",
+                "keywords": [
+                  "环境",
+                  "摩擦",
+                  "默认选项",
+                  "便利性",
+                  "阻力"
+                ],
+                "prompt_fragments": [
+                  "解释环境为何比意志力更稳定",
+                  "分析降低摩擦如何改变行为概率"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "psych.behavior.motivation",
+            "title": "动机与行动",
+            "children": [
+              {
+                "id": "psych.behavior.motivation.intrinsic",
+                "title": "内在动机",
+                "keywords": [
+                  "内在动机",
+                  "自主",
+                  "胜任感",
+                  "心流"
+                ],
+                "prompt_fragments": [
+                  "解释自决理论的三个基本需求",
+                  "分析心流状态的触发条件"
+                ]
+              },
+              {
+                "id": "psych.behavior.motivation.procrastin",
+                "title": "拖延与阻力",
+                "keywords": [
+                  "拖延",
+                  "任务回避",
+                  "情绪调节",
+                  "开始阻力"
+                ],
+                "prompt_fragments": [
+                  "解释拖延本质上是情绪调节问题",
+                  "分析降低开始阻力的具体方法"
+                ]
+              },
+              {
+                "id": "psych.behavior.motivation.goal",
+                "title": "目标梯度",
+                "keywords": [
+                  "目标",
+                  "梯度效应",
+                  "反馈",
+                  "进展",
+                  "里程碑"
+                ],
+                "prompt_fragments": [
+                  "解释可见进展为何会强化行动",
+                  "分析目标拆解如何影响持续性"
+                ]
+              },
+              {
+                "id": "psych.behavior.motivation.selfeff",
+                "title": "自我效能感",
+                "keywords": [
+                  "自我效能",
+                  "信心",
+                  "掌控感",
+                  "行动",
+                  "经验"
+                ],
+                "prompt_fragments": [
+                  "解释自我效能感如何影响行动意愿",
+                  "分析怎样通过小胜利建立效能感"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "psych.self",
+        "title": "自我与人格",
+        "children": [
+          {
+            "id": "psych.self.identity",
+            "title": "自我认同",
+            "children": [
+              {
+                "id": "psych.self.identity.narrative",
+                "title": "叙事自我",
+                "keywords": [
+                  "叙事",
+                  "自我故事",
+                  "一致性",
+                  "身份认同"
+                ],
+                "prompt_fragments": [
+                  "解释叙事自我如何构建身份认同",
+                  "分析改变自我叙事对行为的影响"
+                ]
+              },
+              {
+                "id": "psych.self.identity.consistency",
+                "title": "自我一致性",
+                "keywords": [
+                  "认知失调",
+                  "自我一致",
+                  "辩护",
+                  "态度"
+                ],
+                "prompt_fragments": [
+                  "解释认知失调如何影响决策",
+                  "举例说明人如何维护自我一致性"
+                ]
+              },
+              {
+                "id": "psych.self.identity.roles",
+                "title": "角色认同",
+                "keywords": [
+                  "角色",
+                  "身份",
+                  "社会期待",
+                  "切换",
+                  "责任"
+                ],
+                "prompt_fragments": [
+                  "解释不同角色身份如何影响行为选择",
+                  "分析角色冲突为何会造成内耗"
+                ]
+              },
+              {
+                "id": "psych.self.identity.values",
+                "title": "价值排序",
+                "keywords": [
+                  "价值观",
+                  "优先级",
+                  "冲突",
+                  "选择",
+                  "一致性"
+                ],
+                "prompt_fragments": [
+                  "解释价值排序如何帮助做困难决策",
+                  "分析价值冲突如何表现为拖延或内耗"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "psych.self.growth",
+            "title": "成长与改变",
+            "children": [
+              {
+                "id": "psych.self.growth.mindset",
+                "title": "成长型思维",
+                "keywords": [
+                  "成长型思维",
+                  "固定型思维",
+                  "挑战",
+                  "努力"
+                ],
+                "prompt_fragments": [
+                  "解释成长型思维与固定型思维的差异",
+                  "分析思维模式如何影响学习策略"
+                ]
+              },
+              {
+                "id": "psych.self.growth.resilience",
+                "title": "心理弹性",
+                "keywords": [
+                  "弹性",
+                  "逆境",
+                  "创伤后成长",
+                  "适应"
+                ],
+                "prompt_fragments": [
+                  "解释心理弹性不等于抗压",
+                  "分析创伤后成长的机制"
+                ]
+              },
+              {
+                "id": "psych.self.growth.deliberate",
+                "title": "刻意练习",
+                "keywords": [
+                  "刻意练习",
+                  "反馈",
+                  "高难度",
+                  "训练",
+                  "能力"
+                ],
+                "prompt_fragments": [
+                  "解释刻意练习和重复劳动的区别",
+                  "分析反馈为何是成长速度关键"
+                ]
+              },
+              {
+                "id": "psych.self.growth.setback",
+                "title": "挫折后的重建",
+                "keywords": [
+                  "挫折",
+                  "重建",
+                  "复原",
+                  "意义",
+                  "自我对话"
+                ],
+                "prompt_fragments": [
+                  "解释挫折后重建为何需要重新解释经验",
+                  "分析失败叙事如何影响下一次尝试"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "psych.relationship",
+        "title": "关系",
+        "children": [
+          {
+            "id": "psych.relationship.attachment",
+            "title": "依恋与边界",
+            "children": [
+              {
+                "id": "psych.relationship.attachment.styles",
+                "title": "依恋风格",
+                "keywords": [
+                  "安全型",
+                  "焦虑型",
+                  "回避型",
+                  "依恋风格"
+                ],
+                "prompt_fragments": [
+                  "解释依恋风格如何影响亲密关系",
+                  "分析焦虑型和回避型的互动模式"
+                ]
+              },
+              {
+                "id": "psych.relationship.attachment.boundary",
+                "title": "边界设定",
+                "keywords": [
+                  "边界",
+                  "侵犯",
+                  "自主",
+                  "界限"
+                ],
+                "prompt_fragments": [
+                  "解释为什么设定边界是尊重的表现",
+                  "分析边界失衡的典型表现"
+                ]
+              },
+              {
+                "id": "psych.relationship.attachment.trust",
+                "title": "信任建立",
+                "keywords": [
+                  "信任",
+                  "一致性",
+                  "可预测性",
+                  "脆弱性",
+                  "承诺"
+                ],
+                "prompt_fragments": [
+                  "解释信任为何来自长期一致而非一次表态",
+                  "分析关系中信任崩塌的常见路径"
+                ]
+              },
+              {
+                "id": "psych.relationship.attachment.repair",
+                "title": "关系修复",
+                "keywords": [
+                  "修复",
+                  "道歉",
+                  "修补",
+                  "理解",
+                  "重建"
+                ],
+                "prompt_fragments": [
+                  "解释冲突后关系修复的关键动作",
+                  "分析为何修复比避免冲突更重要"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "psych.relationship.communication",
+            "title": "沟通与冲突",
+            "children": [
+              {
+                "id": "psych.relationship.communication.listen",
+                "title": "倾听与理解",
+                "keywords": [
+                  "主动倾听",
+                  "共情",
+                  "理解",
+                  "确认"
+                ],
+                "prompt_fragments": [
+                  "解释主动倾听与被动倾听的区别",
+                  "举例说明确认式回应的效果"
+                ]
+              },
+              {
+                "id": "psych.relationship.communication.conflict",
+                "title": "冲突解决",
+                "keywords": [
+                  "冲突",
+                  "非暴力沟通",
+                  "修复",
+                  "需求"
+                ],
+                "prompt_fragments": [
+                  "用非暴力沟通框架分析一次冲突",
+                  "解释冲突修复的关键步骤"
+                ]
+              },
+              {
+                "id": "psych.relationship.communication.assertive",
+                "title": "坚定表达",
+                "keywords": [
+                  "坚定表达",
+                  "边界",
+                  "需求",
+                  "尊重",
+                  "表达"
+                ],
+                "prompt_fragments": [
+                  "解释坚定表达为何不同于攻击性表达",
+                  "分析表达需求时如何兼顾关系与边界"
+                ]
+              },
+              {
+                "id": "psych.relationship.communication.negotiation",
+                "title": "协商与谈判",
+                "keywords": [
+                  "协商",
+                  "谈判",
+                  "利益",
+                  "立场",
+                  "共赢"
+                ],
+                "prompt_fragments": [
+                  "解释立场和利益的区别",
+                  "分析协商中如何把对抗转成问题求解"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "phil",
+    "title": "哲学",
+    "description": "逻辑、认识论、伦理学、存在论、心灵哲学",
+    "children": [
+      {
+        "id": "phil.logic",
+        "title": "逻辑",
+        "children": [
+          {
+            "id": "phil.logic.argument",
+            "title": "论证结构",
+            "children": [
+              {
+                "id": "phil.logic.argument.validity",
+                "title": "有效性与可靠性",
+                "keywords": [
+                  "有效",
+                  "可靠",
+                  "前提",
+                  "结论"
+                ],
+                "prompt_fragments": [
+                  "区分有效论证与可靠论证",
+                  "举一个有效但不可靠的例子"
+                ]
+              },
+              {
+                "id": "phil.logic.argument.form",
+                "title": "论证形式",
+                "keywords": [
+                  "演绎",
+                  "归纳",
+                  "溯因",
+                  "模态"
+                ],
+                "prompt_fragments": [
+                  "比较演绎推理和归纳推理的强度",
+                  "举例说明溯因推理的日常应用"
+                ]
+              },
+              {
+                "id": "phil.logic.argument.inductive",
+                "title": "归纳推理",
+                "keywords": [
+                  "归纳",
+                  "样本",
+                  "概率",
+                  "一般化",
+                  "证据"
+                ],
+                "prompt_fragments": [
+                  "解释归纳推理为何无法得到绝对确定性",
+                  "分析样本不足如何削弱归纳结论"
+                ]
+              },
+              {
+                "id": "phil.logic.argument.abductive",
+                "title": "溯因推理",
+                "keywords": [
+                  "溯因",
+                  "最佳解释",
+                  "假设",
+                  "解释力",
+                  "竞争理论"
+                ],
+                "prompt_fragments": [
+                  "解释溯因推理在科学与日常解释中的作用",
+                  "分析最佳解释标准通常包含什么"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "phil.logic.fallacy",
+            "title": "谬误识别",
+            "children": [
+              {
+                "id": "phil.logic.fallacy.formal",
+                "title": "形式谬误",
+                "keywords": [
+                  "形式谬误",
+                  "肯定后件",
+                  "否定前件",
+                  "结构错误"
+                ],
+                "prompt_fragments": [
+                  "解释肯定后件谬误的结构",
+                  "举例说明形式谬误的欺骗性"
+                ]
+              },
+              {
+                "id": "phil.logic.fallacy.informal",
+                "title": "非形式谬误",
+                "keywords": [
+                  "稻草人",
+                  "诉诸权威",
+                  "滑坡",
+                  "非形式谬误"
+                ],
+                "prompt_fragments": [
+                  "识别一段论证中的非形式谬误",
+                  "解释稻草人谬误为什么有迷惑性"
+                ]
+              },
+              {
+                "id": "phil.logic.fallacy.base_rate",
+                "title": "基率忽视",
+                "keywords": [
+                  "基率",
+                  "概率",
+                  "样本",
+                  "判断",
+                  "统计"
+                ],
+                "prompt_fragments": [
+                  "解释基率忽视为何会系统性误判概率",
+                  "分析直觉与统计信息冲突时该如何处理"
+                ]
+              },
+              {
+                "id": "phil.logic.fallacy.ambiguity",
+                "title": "歧义与偷换概念",
+                "keywords": [
+                  "歧义",
+                  "偷换概念",
+                  "语义",
+                  "定义",
+                  "论证"
+                ],
+                "prompt_fragments": [
+                  "解释偷换概念为何会破坏论证",
+                  "分析定义不稳定时应如何澄清"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "phil.epistemology",
+        "title": "认识论",
+        "children": [
+          {
+            "id": "phil.epistemology.knowledge",
+            "title": "知识与信念",
+            "children": [
+              {
+                "id": "phil.epistemology.knowledge.jtb",
+                "title": "JTB 与盖蒂尔问题",
+                "keywords": [
+                  "JTB",
+                  "盖蒂尔",
+                  "知识定义",
+                  "反例"
+                ],
+                "prompt_fragments": [
+                  "解释盖蒂尔问题对 JTB 的打击",
+                  "分析知识定义为什么难以成立"
+                ]
+              },
+              {
+                "id": "phil.epistemology.knowledge.reliabilism",
+                "title": "可靠主义",
+                "keywords": [
+                  "可靠主义",
+                  "因果",
+                  "认知过程",
+                  "外在主义"
+                ],
+                "prompt_fragments": [
+                  "解释可靠主义如何回应盖蒂尔",
+                  "分析外在主义的优缺点"
+                ]
+              },
+              {
+                "id": "phil.epistemology.knowledge.skepticism",
+                "title": "怀疑论挑战",
+                "keywords": [
+                  "怀疑论",
+                  "确定性",
+                  "外部世界",
+                  "知识",
+                  "怀疑"
+                ],
+                "prompt_fragments": [
+                  "解释怀疑论为什么逼问知识的条件",
+                  "分析我们为何仍然在实践中坚持知识主张"
+                ]
+              },
+              {
+                "id": "phil.epistemology.knowledge.virtue",
+                "title": "德性认识论",
+                "keywords": [
+                  "德性认识论",
+                  "认知德性",
+                  "可靠性",
+                  "责任",
+                  "主体"
+                ],
+                "prompt_fragments": [
+                  "解释德性认识论如何把注意力转向认知主体",
+                  "分析好判断是否也需要好品格"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "phil.epistemology.justification",
+            "title": "证成与怀疑",
+            "children": [
+              {
+                "id": "phil.epistemology.justification.foundationalism",
+                "title": "基础主义",
+                "keywords": [
+                  "基础主义",
+                  "基本信念",
+                  "无穷倒退",
+                  "确定性"
+                ],
+                "prompt_fragments": [
+                  "解释基础主义如何终止证成的倒退",
+                  "分析笛卡尔式基础主义的困境"
+                ]
+              },
+              {
+                "id": "phil.epistemology.justification.coherentism",
+                "title": "融贯论",
+                "keywords": [
+                  "融贯论",
+                  "信念网络",
+                  "整体性",
+                  "内在一致"
+                ],
+                "prompt_fragments": [
+                  "解释融贯论与基础主义的根本差异",
+                  "分析融贯论面临的孤立问题"
+                ]
+              },
+              {
+                "id": "phil.epistemology.justification.bayes",
+                "title": "贝叶斯更新",
+                "keywords": [
+                  "贝叶斯",
+                  "先验",
+                  "后验",
+                  "证据",
+                  "更新"
+                ],
+                "prompt_fragments": [
+                  "解释贝叶斯更新如何形式化证据改变信念",
+                  "分析先验假设为何会影响结论"
+                ]
+              },
+              {
+                "id": "phil.epistemology.justification.testimony",
+                "title": "证言与信任",
+                "keywords": [
+                  "证言",
+                  "信任",
+                  "专家",
+                  "社会知识",
+                  "来源"
+                ],
+                "prompt_fragments": [
+                  "解释我们为何大量依赖他人证言获得知识",
+                  "分析专家分歧时应如何调整信念"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "phil.ethics",
+        "title": "伦理学",
+        "children": [
+          {
+            "id": "phil.ethics.normative",
+            "title": "规范伦理",
+            "children": [
+              {
+                "id": "phil.ethics.normative.consequentialism",
+                "title": "后果主义",
+                "keywords": [
+                  "功利主义",
+                  "最大化",
+                  "后果",
+                  "效用"
+                ],
+                "prompt_fragments": [
+                  "解释功利主义的核心原则",
+                  "举一个功利主义直觉令人不适的案例"
+                ]
+              },
+              {
+                "id": "phil.ethics.normative.deontology",
+                "title": "义务论",
+                "keywords": [
+                  "义务",
+                  "绝对命令",
+                  "规则",
+                  "权利"
+                ],
+                "prompt_fragments": [
+                  "解释康德义务论的核心思想",
+                  "分析义务论和后果主义在具体案例中的分歧"
+                ]
+              },
+              {
+                "id": "phil.ethics.normative.virtue",
+                "title": "德性伦理",
+                "keywords": [
+                  "德性",
+                  "品格",
+                  "习惯",
+                  "实践智慧",
+                  "中道"
+                ],
+                "prompt_fragments": [
+                  "解释德性伦理为何强调成为怎样的人",
+                  "分析规则、后果与品格的差异"
+                ]
+              },
+              {
+                "id": "phil.ethics.normative.care",
+                "title": "关怀伦理",
+                "keywords": [
+                  "关怀",
+                  "关系",
+                  "依赖",
+                  "情境",
+                  "责任"
+                ],
+                "prompt_fragments": [
+                  "解释关怀伦理如何挑战抽象普遍主义",
+                  "分析关系脉络为何影响道德判断"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "phil.ethics.applied",
+            "title": "应用伦理",
+            "children": [
+              {
+                "id": "phil.ethics.applied.tech",
+                "title": "技术伦理",
+                "keywords": [
+                  "AI伦理",
+                  "责任",
+                  "偏见",
+                  "治理"
+                ],
+                "prompt_fragments": [
+                  "分析一个 AI 系统中的伦理问题",
+                  "说明不同立场会如何判断"
+                ]
+              },
+              {
+                "id": "phil.ethics.applied.bioethics",
+                "title": "生命伦理",
+                "keywords": [
+                  "生命伦理",
+                  "同意",
+                  "自主",
+                  "医疗决策"
+                ],
+                "prompt_fragments": [
+                  "解释知情同意原则的哲学基础",
+                  "分析生命伦理中的利益冲突"
+                ]
+              },
+              {
+                "id": "phil.ethics.applied.ai_privacy",
+                "title": "AI 治理与隐私",
+                "keywords": [
+                  "AI治理",
+                  "隐私",
+                  "数据",
+                  "同意",
+                  "监控"
+                ],
+                "prompt_fragments": [
+                  "解释 AI 治理为何不仅是技术问题",
+                  "分析便利性和隐私保护如何冲突"
+                ]
+              },
+              {
+                "id": "phil.ethics.applied.climate",
+                "title": "环境与代际责任",
+                "keywords": [
+                  "环境伦理",
+                  "代际正义",
+                  "气候",
+                  "责任",
+                  "公共品"
+                ],
+                "prompt_fragments": [
+                  "解释代际责任为何让环境伦理更复杂",
+                  "分析个人责任和制度责任如何分配"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "phil.mind",
+        "title": "心灵哲学",
+        "children": [
+          {
+            "id": "phil.mind.consciousness",
+            "title": "意识",
+            "children": [
+              {
+                "id": "phil.mind.consciousness.hard",
+                "title": "意识的难问题",
+                "keywords": [
+                  "意识难问题",
+                  "解释鸿沟",
+                  "查尔默斯",
+                  "主观体验"
+                ],
+                "prompt_fragments": [
+                  "解释意识难问题与简单问题的区别",
+                  "分析为什么物理解释难以解决意识问题"
+                ]
+              },
+              {
+                "id": "phil.mind.consciousness.qualia",
+                "title": "感质",
+                "keywords": [
+                  "感质",
+                  "什么感觉",
+                  "主观性",
+                  "玛丽的房间"
+                ],
+                "prompt_fragments": [
+                  "用玛丽的房间论证解释感质",
+                  "分析感质论证对物理主义的挑战"
+                ]
+              },
+              {
+                "id": "phil.mind.consciousness.selfmodel",
+                "title": "自我模型",
+                "keywords": [
+                  "自我模型",
+                  "主体感",
+                  "统一性",
+                  "经验",
+                  "表征"
+                ],
+                "prompt_fragments": [
+                  "解释自我模型为何与主观体验有关",
+                  "分析主体感可能如何被构建"
+                ]
+              },
+              {
+                "id": "phil.mind.consciousness.intentionality",
+                "title": "意向性",
+                "keywords": [
+                  "意向性",
+                  "关于性",
+                  "表征",
+                  "对象",
+                  "意义"
+                ],
+                "prompt_fragments": [
+                  "解释心灵状态为何具有关于某物的性质",
+                  "分析意向性和意识的关系"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "phil.mind.theories",
+            "title": "心灵理论",
+            "children": [
+              {
+                "id": "phil.mind.theories.functionalism",
+                "title": "功能主义",
+                "keywords": [
+                  "功能主义",
+                  "多重实现",
+                  "图灵机",
+                  "角色"
+                ],
+                "prompt_fragments": [
+                  "解释功能主义如何定义心理状态",
+                  "分析图灵测试与功能主义的关系"
+                ]
+              },
+              {
+                "id": "phil.mind.theories.physicalism",
+                "title": "物理主义",
+                "keywords": [
+                  "物理主义",
+                  "同一论",
+                  "随附性",
+                  "取消主义"
+                ],
+                "prompt_fragments": [
+                  "解释强物理主义和弱物理主义的差异",
+                  "分析随附性主张的哲学含义"
+                ]
+              },
+              {
+                "id": "phil.mind.theories.dualism",
+                "title": "二元论",
+                "keywords": [
+                  "二元论",
+                  "心物",
+                  "实体",
+                  "笛卡尔",
+                  "交互"
+                ],
+                "prompt_fragments": [
+                  "解释二元论试图保留什么直觉",
+                  "分析心物交互问题为何棘手"
+                ]
+              },
+              {
+                "id": "phil.mind.theories.enactivism",
+                "title": "生成论与具身心智",
+                "keywords": [
+                  "具身",
+                  "生成论",
+                  "环境",
+                  "行动",
+                  "认知"
+                ],
+                "prompt_fragments": [
+                  "解释具身心智为何反对把认知看成纯计算",
+                  "分析身体和环境如何进入心智解释"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "phil.existence",
+        "title": "存在与形而上学",
+        "children": [
+          {
+            "id": "phil.existence.freewill",
+            "title": "自由意志",
+            "children": [
+              {
+                "id": "phil.existence.freewill.compatibilism",
+                "title": "相容论",
+                "keywords": [
+                  "相容论",
+                  "软决定论",
+                  "自由",
+                  "条件分析"
+                ],
+                "prompt_fragments": [
+                  "解释相容论如何在决定论中保留自由",
+                  "分析相容论面临的直觉挑战"
+                ]
+              },
+              {
+                "id": "phil.existence.freewill.libertarian",
+                "title": "自由意志论",
+                "keywords": [
+                  "非决定论",
+                  "代理因果",
+                  "自发性",
+                  "自由选择"
+                ],
+                "prompt_fragments": [
+                  "解释自由意志论为何拒绝决定论",
+                  "分析自发性如何避免随机性"
+                ]
+              },
+              {
+                "id": "phil.existence.freewill.determinism",
+                "title": "决定论挑战",
+                "keywords": [
+                  "决定论",
+                  "因果",
+                  "必然性",
+                  "选择",
+                  "预测"
+                ],
+                "prompt_fragments": [
+                  "解释决定论为何挑战自由意志",
+                  "分析因果决定和主观选择感如何冲突"
+                ]
+              },
+              {
+                "id": "phil.existence.freewill.agency",
+                "title": "行动者视角",
+                "keywords": [
+                  "行动者",
+                  "责任",
+                  "控制",
+                  "意图",
+                  "自主"
+                ],
+                "prompt_fragments": [
+                  "解释行动者视角如何重构自由意志问题",
+                  "分析控制感在责任归属中的作用"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "phil.existence.identity",
+            "title": "个人同一性",
+            "children": [
+              {
+                "id": "phil.existence.identity.psychological",
+                "title": "心理连续论",
+                "keywords": [
+                  "心理连续",
+                  "记忆",
+                  "人格同一性",
+                  "传送机悖论"
+                ],
+                "prompt_fragments": [
+                  "解释心理连续论如何定义个人同一性",
+                  "用传送机悖论挑战心理连续论"
+                ]
+              },
+              {
+                "id": "phil.existence.identity.biological",
+                "title": "生物学标准",
+                "keywords": [
+                  "生物标准",
+                  "身体连续",
+                  "大脑",
+                  "有机体"
+                ],
+                "prompt_fragments": [
+                  "解释生物学标准与心理标准的差异",
+                  "分析哪种标准更符合我们的直觉"
+                ]
+              },
+              {
+                "id": "phil.existence.identity.memory",
+                "title": "记忆标准",
+                "keywords": [
+                  "记忆",
+                  "连续性",
+                  "身份",
+                  "人格",
+                  "同一性"
+                ],
+                "prompt_fragments": [
+                  "解释记忆为何常被视为个人同一性关键",
+                  "分析记忆错误会如何动摇身份判断"
+                ]
+              },
+              {
+                "id": "phil.existence.identity.teleport",
+                "title": "传送悖论",
+                "keywords": [
+                  "传送",
+                  "复制",
+                  "悖论",
+                  "连续性",
+                  "身份"
+                ],
+                "prompt_fragments": [
+                  "解释传送悖论如何检验个人同一性理论",
+                  "分析复制与延续是否等价"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
