@@ -44,7 +44,7 @@ function toggleTheme() {
     main.disabled = !mainIsNext;
     alt.disabled  =  mainIsNext;
   }
-  localStorage.setItem('learn-system-theme', next);
+  localStorage.setItem('aiterate-theme', next);
   if (window.syncHljsTheme) syncHljsTheme(next);
   const btn = document.getElementById('themeToggleBtn');
   if (btn) btn.textContent = next === 'mono' ? '☀️' : '🌙';

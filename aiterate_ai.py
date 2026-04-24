@@ -1,5 +1,5 @@
 """
-LearnSystem AI Engine
+AIIterate AI Engine
 Supports dynamic LLM configuration via settings, Tavily web search, and multi-provider routing.
 """
 import json

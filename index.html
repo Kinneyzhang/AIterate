@@ -13,7 +13,7 @@
   <script>
     (function () {
     try {
-      const t = localStorage.getItem('learn-system-theme') || 'night';
+      const t = localStorage.getItem('aiterate-theme') || 'night';
       document.documentElement.dataset.theme = t;
       // 预加载两套主题，切换时只改 disabled，避免重新加载 CSS 导致抖动
       const main = document.getElementById('themeStylesheet');
@@ -55,7 +55,7 @@
       document.getElementById('hljs-theme-dark').disabled  = (theme === 'mono');
     }
     try {
-      syncHljsTheme(localStorage.getItem('learn-system-theme') || 'night');
+      syncHljsTheme(localStorage.getItem('aiterate-theme') || 'night');
     } catch (_) {}
   </script>
 </head>

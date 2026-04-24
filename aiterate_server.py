@@ -1,5 +1,5 @@
 """
-LearnSystem FastAPI Backend
+AIIterate FastAPI Backend
 Port: 7070
 """
 import asyncio
@@ -21,7 +21,7 @@ import aiterate_ai as ai
 FRONTEND = Path(__file__).parent / "index.html"
 ASSETS_DIR = Path(__file__).parent / "assets"
 
-app = FastAPI(title="LearnSystem API", version="3.0.0")
+app = FastAPI(title="AIIterate API", version="3.0.0")
 app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
 
@@ -46,7 +46,7 @@ async def runtime_error_handler(request: Request, exc: RuntimeError):
 async def healthz():
     return {
         "ok": True,
-        "service": "learn-system",
+        "service": "aiterate",
         "frontend": FRONTEND.exists(),
         "db_path": f"postgresql:{db.PG_DBNAME}",
         "version": "3.0.0",
@@ -104,7 +104,7 @@ def _build_session_workspace_payload(session: dict, rounds: list[dict]) -> dict:
 @app.on_event("startup")
 async def startup():
     db.init_db()
-    print("[LearnSystem] DB ready")
+    print("[AIIterate] DB ready")
 
 
 @app.get("/")
