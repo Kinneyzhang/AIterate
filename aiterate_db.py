@@ -359,9 +359,9 @@ def upsert_profile(**kwargs) -> dict:
     else:
         _exec("""
         INSERT INTO profile (id, theme, settings, updated_at)
-        VALUES (:id, :theme, :settings::jsonb, NOW())
+        VALUES (:id, :theme, CAST(:settings AS jsonb), NOW())
         ON CONFLICT (id) DO UPDATE
-            SET theme=EXCLUDED.theme, settings=EXCLUDED.settings, updated_at=NOW()
+            SET theme=EXCLUDED.theme, settings=CAST(EXCLUDED.settings AS jsonb), updated_at=NOW()
         """, {"id": PROFILE_ID, "theme": theme, "settings": s_json})
 
     return get_profile()

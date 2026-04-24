@@ -213,6 +213,7 @@ async def get_settings():
             "roles":     roles,
         },
         "tavily_api_key": settings.get("tavily_api_key", ""),
+        "feynman_pass_score": settings.get("feynman_pass_score", 60),
     }
 
 
