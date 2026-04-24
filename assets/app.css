@@ -280,7 +280,10 @@ body {
 .round-summary  { border-left-color: #2a9a5a; }
 .round-question { border-left-color: #4f8ef7; }
 .round-review   { border-left-color: #ffd66f; }
-.round-label  { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.55; margin-bottom: 6px; }
+.round-label  { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.round-summary  .round-label { color: #2a9a5a; }
+.round-question .round-label { color: #4f8ef7; }
+.round-review   .round-label { color: #c8a84b; }
 .round-user   { font-size: 13px; line-height: 1.65; margin-bottom: 8px; white-space: pre-wrap; word-break: break-word; }
 .round-ai     { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.7; }
 .round-score  { font-size: 11px; opacity: 0.62; margin-top: 6px; }
