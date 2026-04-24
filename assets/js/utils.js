@@ -23,7 +23,7 @@ export const STAGE_META = {
   preparing:  { label: '准备中',  cls: 'stage-preparing'  },
   learning:   { label: '学习中',  cls: 'stage-learning'   },
   deepening:  { label: '深化中',  cls: 'stage-deepening'  },
-  revising:   { label: '修订中',  cls: 'stage-revising'   },
+  revising:   { label: '巩固中',  cls: 'stage-revising'   },
   feynman:    { label: '费曼中',  cls: 'stage-feynman'    },
   completed:  { label: '已完成',  cls: 'stage-completed'  },
   error:      { label: '失败',    cls: 'stage-failed'     },

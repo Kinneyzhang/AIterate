@@ -493,9 +493,9 @@ select {
 }
 .ws-tab:hover:not(:disabled) { color: var(--fg-0, #eee); background: rgba(255,255,255,0.04); }
 .ws-tab.active {
-  color: var(--accent, #4f8ef7);
-  border-bottom-color: var(--accent, #4f8ef7);
-  background: rgba(79,142,247,0.06);
+  color: var(--accent, #1a6ef5);
+  border-bottom-color: var(--accent, #1a6ef5);
+  background: rgba(26,110,245,0.08);
 }
 .ws-tab:disabled { opacity: 0.3; cursor: not-allowed; }
 

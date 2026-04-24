@@ -101,7 +101,7 @@
 [data-theme="mono"] .ws-tab.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
-  background: rgba(26,110,245,0.05);
+  background: rgba(26,110,245,0.08);
 }
 [data-theme="mono"] .ws-tab:disabled { opacity: 0.3; }
 
