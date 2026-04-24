@@ -21,9 +21,9 @@ function stageBadge(status) {
 
 export function setPhase(phase) {
   // 根据后端状态自动跳转到合适 tab
-  if (phase === 'reviewing' || phase === 'completed') {
+  if (phase === 'feynman' || phase === 'completed') {
     _activeTab = 'review';
-  } else if (phase === 'deepening') {
+  } else if (phase === 'deepening' || phase === 'revising') {
     _activeTab = 'deepen';
   } else {
     _activeTab = 'learn';
@@ -44,13 +44,13 @@ function renderTabs() {
   const status = session?.status || 'idle';
   // 各 tab 是否可用
   const canDeepen = !['processing', 'idle'].includes(status);
-  const canReview = ['reviewing', 'completed'].includes(status)
+  const canReview = ['feynman', 'completed'].includes(status)
     || !!(_payload?.rounds?.some(r => r.type === 'feynman'));
 
   ['learn', 'deepen', 'review'].forEach(tab => {
     const el = document.getElementById(`tab-${tab}`);
     if (!el) return;
-    el.classList.toggle('active', tab === _activeTab);
+    el.classList.toggle('learning', tab === _activeTab);
     if (tab === 'deepen') el.disabled = !canDeepen;
     if (tab === 'review') el.disabled = !canReview;
   });
@@ -102,7 +102,7 @@ function buildDeepenPanel() {
   const session = _payload?.session;
   const rounds = (_payload?.rounds || []).filter(r => r.type === 'take' || r.type === 'press');
   const status = session?.status;
-  const canAct = ['answered', 'iterating'].includes(status);
+  const canAct = ['learning', 'deepening', 'revising'].includes(status);
   const canStartReview = canAct;
 
   // 历史轮次
@@ -173,7 +173,7 @@ function buildReviewPanel() {
   const currentGroup = _payload?.current_review_group || [];  // 待答题列表（每题独立 round）
 
   // 当前待答题组
-  const pendingHtml = currentGroup.length > 0 && status === 'reviewing' ? `
+  const pendingHtml = currentGroup.length > 0 && status === 'feynman' ? `
     <div class="panel-section">
       <div class="ps-label">🧪 费曼检验</div>
       <div class="ps-hint muted small mb12">用自己的话回答，AI 会评估你的掌握程度。</div>
@@ -285,9 +285,10 @@ export function renderWorkspace(payload, reviewRoundId) {
     _activeTab = remembered;
   } else {
     setPhase(
-      status === 'reviewing' || status === 'completed' ? 'reviewing' :
-      status === 'answered'  || status === 'iterating' ? 'deepening' :
-      'processing'
+      status === 'feynman' || status === 'completed' ? 'feynman' :
+      status === 'deepening' ? 'deepening' :
+      status === 'revising'  ? 'revising'  :
+      'learning'
     );
   }
 

@@ -64,7 +64,7 @@ function startPolling(sessionId) {
       const payload = await getWorkspace(sessionId);
       renderWorkspaceWithState(payload);
       await loadSessions();
-      if (payload?.session?.status !== 'processing') stopPolling();
+      if (payload?.session?.status !== 'preparing') stopPolling();
     } catch (err) {
       console.error('poll failed', err);
     }
@@ -88,7 +88,7 @@ function renderWorkspaceWithState(payload) {
   const group = payload.current_review_group || [];
   state.currentFeynmanGroupId = group.length > 0 ? (group[0].group_id ?? group[0].id) : null;
   renderWorkspace(payload, state.currentFeynmanGroupId);
-  if (status === 'processing') startPolling(payload.session.id);
+  if (status === 'preparing') startPolling(payload.session.id);
 }
 
 async function selectSession(sessionId, { pushHistory = true } = {}) {

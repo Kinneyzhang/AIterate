@@ -315,7 +315,8 @@ body {
 }
 .stage-processing { background: rgba(79,142,247,0.12);  color: #7eb1ff; border-color: rgba(79,142,247,0.25); }
 .stage-deepening  { background: rgba(42,154,90,0.12);   color: #73d79b; border-color: rgba(42,154,90,0.25);  }
-.stage-reviewing  { background: rgba(255,196,77,0.12);  color: #ffd66f; border-color: rgba(255,196,77,0.25); }
+.stage-revising   { background: rgba(220,120,20,0.12);  color: #f0a050; border-color: rgba(220,120,20,0.25); }
+.stage-feynman  { background: rgba(255,196,77,0.12);  color: #ffd66f; border-color: rgba(255,196,77,0.25); }
 .stage-completed  { background: rgba(160,118,255,0.14); color: #ccb0ff; border-color: rgba(160,118,255,0.25);}
 .stage-failed     { background: rgba(255,102,102,0.12); color: #ff8f8f; border-color: rgba(255,102,102,0.25);}
 .stage-idle       { background: rgba(255,255,255,0.06); color: var(--fg-1, #ccc); border-color: rgba(255,255,255,0.12); }

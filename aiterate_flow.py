@@ -33,7 +33,7 @@ def _latest_feedback(sessions: list[dict]) -> dict | None:
     # 新模式：status=iterating，通过 rounds 表判断
     # 旧模式：status=evaluated，通过 ai_questions 判断
     status = latest.get("status", "")
-    pending_followup = status == "iterating"
+    pending_followup = status == "deepening"
 
     questions = [str(x).strip() for x in _json_list(latest.get("input")) if str(x).strip()]
     responses = [str(x).strip() for x in _json_list(latest.get("output")) if str(x).strip()]

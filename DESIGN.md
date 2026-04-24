@@ -27,7 +27,7 @@ AIIterate（AI 迭代学习系统）是一个以**问题为驱动、AI 全程伴
 核心设计理念：
 - **问题驱动**：每次学习以一个问题为起点
 - **AI 伴学**：全程 LLM 辅助，回答、评价、深化、费曼出题
-- **状态机驱动**：每个学习会话严格遵循 `draft → active → completed` 状态流转
+- **状态机驱动**：每个学习会话严格遵循 `preparing → learning → deepening → feynman → completed` 状态流转
 - **多维迭代**：支持深化追问（Deepen）和费曼自测（Feynman）两种强化路径
 - **自托管**：完全本地部署，数据存入 PostgreSQL，无需外部服务
 
@@ -115,7 +115,7 @@ CREATE TABLE sessions (
     title       TEXT        NOT NULL,       -- AI 生成的标题
     content     TEXT,                       -- 原始问题/材料
     type        TEXT        NOT NULL DEFAULT 'question',  -- 会话入口类型
-    status      TEXT        NOT NULL DEFAULT 'draft',     -- 状态机
+    status      TEXT        NOT NULL DEFAULT 'preparing',     -- 状态机
     material    TEXT,                       -- AI 生成的学习材料（正式回答）
     score       SMALLINT,                   -- 费曼完成后的综合得分（0-100）
     error_msg   TEXT,                       -- 异步任务失败时的错误信息
@@ -127,17 +127,24 @@ CREATE TABLE sessions (
 **status 状态机：**
 
 ```
-draft ──(AI处理完)──► active ──(用户完成)──► completed
-  │                                              │
-  └──(处理失败)──► error          ◄──(重新开始)──┘
+preparing ──(AI生成完)──► learning ──(提交理解)──► deepening
+    │                        │                         │
+    └──(处理失败)──► error   │               (费曼通过)─┘
+                             │                    │
+                     (发起费曼)──► feynman ──(费曼未通过)──► revising
+                                      │
+                               (费曼通过)──► completed
 ```
 
 | status | 含义 |
 |--------|------|
-| `draft` | 刚创建，AI 正在后台生成 material |
-| `active` | material 已就绪，用户可开始迭代 |
-| `completed` | 用户主动完成，带有综合 score |
-| `error` | AI 处理失败，error_msg 记录原因 |
+| `preparing` | 刚创建，AI 正在后台生成学习材料 |
+| `learning`  | 材料就绪，用户可开始学习/迭代 |
+| `deepening` | 用户提交了理解，正在深化追问阶段 |
+| `revising`  | 费曼未通过，退回重新巩固（区别于 deepening） |
+| `feynman`   | 费曼检验进行中（AI 已出题，用户答题中） |
+| `completed` | 费曼通过，学习完成，带综合 score |
+| `error`     | AI 处理失败，error_msg 记录原因 |
 
 **type 枚举：**
 
@@ -263,10 +270,10 @@ FastAPI 应用主文件，负责：
 async def create_session(body: ..., bg: BackgroundTasks):
     session_id = db.create_session(...)
     bg.add_task(_process_session, session_id)  # 立即返回，后台跑 AI
-    return {"id": session_id, "status": "draft"}
+    return {"id": session_id, "status": "preparing"}
 ```
 
-前端通过轮询 `GET /api/sessions/{id}` 检测 `status` 从 `draft` 变为 `active`。
+前端通过轮询 `GET /api/sessions/{id}` 检测 `status` 从 `preparing` 变为 `learning`。
 
 ---
 
@@ -347,7 +354,7 @@ async function request(method, path, body) {
 - 初始化（加载 profile、settings、knowledge tree）
 - 主题切换（`toggleTheme`）：切换两个 `<link>` 标签的 `disabled` 属性，同步写 API
 - 全局事件监听（键盘快捷键、ESC 关闭 Modal）
-- 会话轮询（`draft` 状态下每 2s 轮询一次，直到 `active`）
+- 会话轮询（`preparing` 状态下每 2s 轮询一次，直到 `learning`）
 
 ### 6.4 workspace.js
 
@@ -442,11 +449,11 @@ async function request(method, path, body) {
 1. 用户输入问题/材料
          │
          ▼
-2. 创建 session（status=draft）
+2. 创建 session（status=preparing）
    后台 AI 生成 material（正式学习回答）
          │
          ▼
-3. session.status = active
+3. session.status = learning
    前端展示 material，用户阅读学习
          │
          ▼
@@ -471,7 +478,7 @@ async function request(method, path, body) {
 ### 8.2 状态与轮次对应关系
 
 ```
-session.status=active
+session.status=learning
   rounds: [
     { seq:1, type:'take',    input:'我的理解...', output:'AI评价...',  score:82 },
     { seq:2, type:'press',   input:'为什么?...',  output:'AI解释...',  score:null },

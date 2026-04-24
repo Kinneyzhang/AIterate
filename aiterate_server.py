@@ -63,13 +63,13 @@ app.add_middleware(
 
 def _session_phase(status: str | None) -> str:
     return {
-        "processing": "processing",
-        "answered": "deepening",
-        "iterating": "deepening",
-        "reviewing": "reviewing",
+        "preparing": "preparing",
+        "learning":  "learning",
+        "deepening": "deepening",
+        "feynman":   "feynman",
         "completed": "completed",
-        "failed": "failed",
-    }.get(status or "", "idle")
+        "error":     "error",
+    }.get(status or "", "preparing")
 
 
 def _build_session_workspace_payload(session: dict, rounds: list[dict]) -> dict:
@@ -236,7 +236,7 @@ async def create_session_and_answer(body: SessionCreate, background_tasks: Backg
         content=body.content,
         type=body.type,
     )
-    db.update_session(sid, status="processing")
+    db.update_session(sid, status="preparing")
 
     async def generate_answer():
         try:
@@ -245,15 +245,15 @@ async def create_session_and_answer(body: SessionCreate, background_tasks: Backg
             answer_task = ai.generate_initial_answer(body.content, "", body.type, web_search=body.web_search)
             title, result = await asyncio.gather(title_task, answer_task)
             answer = result["answer"]
-            db.update_session(sid, title=title, material=answer, error_msg=None, status="answered")
+            db.update_session(sid, title=title, material=answer, error_msg=None, status="learning")
         except Exception as exc:
-            db.update_session(sid, status="failed", error_msg=str(exc))
+            db.update_session(sid, status="error", error_msg=str(exc))
 
     background_tasks.add_task(generate_answer)
 
     return {
         "session_id": sid,
-        "status": "processing",
+        "status": "preparing",
     }
 
 
@@ -307,7 +307,7 @@ async def deepen(session_id: int, body: DeepenRequest):
             input=body.content, output=eval_result["verdict"],
             score=eval_result["score"], status="evaluated",
         )
-        db.update_session(session_id, status="iterating")
+        db.update_session(session_id, status="deepening")
         return {
             "round_id": rid,
             "type": "take",
@@ -327,9 +327,9 @@ async def deepen(session_id: int, body: DeepenRequest):
         rid = db.create_round(
             session_id=session_id, seq=seq, type="press",
             input=body.content, output=answer_result["answer"],
-            score=None, status="answered",
+            score=None, status="deepening",
         )
-        db.update_session(session_id, status="iterating")
+        db.update_session(session_id, status="deepening")
         return {
             "round_id": rid,
             "type": "press",
@@ -372,7 +372,7 @@ async def start_feynman(session_id: int):
     for rid in round_ids:
         db.update_round(rid, group_id=first_id)
 
-    db.update_session(session_id, status="reviewing")
+    db.update_session(session_id, status="feynman")
     return {"group_id": first_id, "round_ids": round_ids, "questions": questions}
 
 
@@ -412,7 +412,7 @@ async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
             status="completed",
         )
 
-    new_status = "completed" if passed else "iterating"
+    new_status = "completed" if passed else "revising"
     db.update_session(session_id, score=eval_result["final_score"], status=new_status)
 
     return {
@@ -443,7 +443,7 @@ async def reopen_session(session_id: int):
     session = db.get_session(session_id)
     if not session:
         raise HTTPException(404, "Session not found")
-    db.update_session(session_id, status="iterating")
+    db.update_session(session_id, status="deepening")
     return {"ok": True}
 
 

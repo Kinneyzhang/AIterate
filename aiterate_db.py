@@ -70,7 +70,7 @@ def init_db():
         title       TEXT        NOT NULL,
         content     TEXT,
         type  TEXT        NOT NULL DEFAULT 'question',
-        status      TEXT        NOT NULL DEFAULT 'draft',
+        status      TEXT        NOT NULL DEFAULT 'preparing',
         material     TEXT,
         score       SMALLINT,
         error_msg   TEXT,
@@ -273,7 +273,7 @@ def create_session(title: str, content: str = "", type: str = "question") -> int
     conn = get_conn()
     row_id = _q(conn, """
     INSERT INTO sessions (title, content, type, status)
-    VALUES (%s, %s, %s, 'draft') RETURNING id
+    VALUES (%s, %s, %s, 'preparing') RETURNING id
     """, (title, content, type)).fetchone()["id"]
     conn.commit()
     conn.close()

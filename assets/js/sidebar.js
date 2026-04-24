@@ -14,7 +14,7 @@ export function renderSidebar(sessions, selectedId, onSelect) {
   }
 
   const activeCount = sessions.filter(s =>
-    ['processing', 'answered', 'iterating', 'reviewing'].includes(s.status)
+    ['processing', 'deepening', 'revising', 'feynman'].includes(s.status)
   ).length;
   const doneCount = sessions.filter(s => s.status === 'completed').length;
   stats.textContent = `${sessions.length} 个 · 进行中 ${activeCount} · 完成 ${doneCount} `;
