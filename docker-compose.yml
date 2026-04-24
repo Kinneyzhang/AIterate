@@ -1,0 +1,29 @@
+services:
+  aiterate:
+    build: .
+    container_name: aiterate
+    restart: unless-stopped
+    ports:
+      - "7070:7070"
+    volumes:
+      # SQLite 模式：持久化数据文件
+      - ./data:/data
+      # 配置文件（LLM key 等存 DB；db.json 需提前准备）
+      - ./config:/app/config
+    environment:
+      - TZ=Asia/Shanghai
+
+  # ---- 可选：PostgreSQL（如需用 PG 模式，取消注释）----
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: aiterate-pg
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: aiterate
+  #     POSTGRES_USER: aiterate
+  #     POSTGRES_PASSWORD: change_me
+  #   volumes:
+  #     - pg_data:/var/lib/postgresql/data
+
+# volumes:
+#   pg_data:
