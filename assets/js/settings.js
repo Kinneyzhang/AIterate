@@ -331,17 +331,22 @@ export function openSettings() {
           <p class="settings-hint">⚠️ 修改后将立即重新连接数据库，请确认新库已初始化。</p>
         </div>
 
-        <!-- Tab5: 学习 -->
         <div class="settings-panel" id="settings-panel-learn">
-          <div class="settings-row">
+          <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:12px;">
             <div class="settings-label">费曼检测通过分数</div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <input type="number" id="settingsFeynmanPassScore" min="1" max="100" value="60"
-                style="width:80px;" placeholder="60" />
-              <span style="color:var(--fg-1);font-size:13px;">分（满分 100，默认 60）</span>
+            <div style="width:100%;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:13px;color:var(--fg-1);">难度越高，学得越扎实</span>
+                <span id="feynmanPassDisplay" style="font-size:22px;font-weight:700;color:var(--accent,#1a6ef5);min-width:52px;text-align:right;">60<span style="font-size:13px;font-weight:400;color:var(--fg-1);"> 分</span></span>
+              </div>
+              <input type="range" id="settingsFeynmanPassScore" min="1" max="100" value="60"
+                style="width:100%;accent-color:var(--accent,#1a6ef5);height:6px;cursor:pointer;" />
+              <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;color:var(--fg-2,#888);">
+                <span>1 宽松</span><span>50</span><span>80</span><span>100 严格</span>
+              </div>
             </div>
           </div>
-          <p class="settings-hint">费曼自测得分达到此分数才算通过，否则退回重新巩固。</p>
+          <p class="settings-hint" style="margin-top:8px;">费曼自测得分达到此分数才算通过，否则退回巩固。</p>
         </div>
       </div>
       <div class="modal-footer">
@@ -414,7 +419,13 @@ export function openSettings() {
       if (llm.model)    modelInput.value = llm.model;
       if (cfg.tavily_api_key) document.getElementById('settingsTavilyKey').value = cfg.tavily_api_key;
       const passScore = cfg.feynman_pass_score ?? 60;
-      document.getElementById('settingsFeynmanPassScore').value = passScore;
+      const sliderEl = document.getElementById('settingsFeynmanPassScore');
+      const displayEl = document.getElementById('feynmanPassDisplay');
+      sliderEl.value = passScore;
+      displayEl.innerHTML = `${passScore}<span style="font-size:13px;font-weight:400;color:var(--fg-1);"> 分</span>`;
+      sliderEl.addEventListener('input', () => {
+        displayEl.innerHTML = `${sliderEl.value}<span style="font-size:13px;font-weight:400;color:var(--fg-1);"> 分</span>`;
+      });
 
       const rolesData = llm.roles || {};
       ROLES.forEach(r => {
