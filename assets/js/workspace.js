@@ -158,7 +158,7 @@ function buildDeepenRoundCard(round) {
   if (round.type === 'press') {
     return `
       <div class="round-card round-press">
-        <div class="round-user-wrap"><span class="round-label">❓ 追问</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
+        <div class="round-user-wrap"><span class="round-label">🔎 追问</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
         <div class="round-ai md-body">${renderMarkdown(round.output || '')}</div>
       </div>`;
   }
