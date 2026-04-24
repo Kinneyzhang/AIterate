@@ -77,8 +77,8 @@ export function openNewSessionModal(onSubmit) {
   el.querySelectorAll('.type-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       selectedType = btn.dataset.type;
-      el.querySelectorAll('.type-btn').forEach(b => b.classList.remove('learning'));
-      btn.classList.add('learning');
+      el.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
       document.getElementById('modalContent').placeholder =
         selectedType === 'question'
           ? '写下你的问题，可以描述得详细一些…\nAI 会自动生成标题并给出回答。'
@@ -109,7 +109,7 @@ export function openNewSessionModal(onSubmit) {
       return;
     }
     webSearch = !webSearch;
-    webSearchBtn.classList.toggle('learning', webSearch);
+    webSearchBtn.classList.toggle('active', webSearch);
   });
 
   document.addEventListener('keydown', function esc(e) {

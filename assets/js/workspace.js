@@ -50,7 +50,7 @@ function renderTabs() {
   ['learn', 'deepen', 'review'].forEach(tab => {
     const el = document.getElementById(`tab-${tab}`);
     if (!el) return;
-    el.classList.toggle('learning', tab === _activeTab);
+    el.classList.toggle('active', tab === _activeTab);
     if (tab === 'deepen') el.disabled = !canDeepen;
     if (tab === 'review') el.disabled = !canReview;
   });
