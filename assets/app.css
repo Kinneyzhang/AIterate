@@ -1,8 +1,8 @@
 /* ── reset & base ──────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* 默认暗色 color-scheme，让 select option 列表使用暗色渲染 */
-:root { color-scheme: dark; }
+/* color-scheme 由各主题自行声明（[data-theme="night"] / [data-theme="mono"]）*/
+:root { color-scheme: dark; }  /* 默认暗色兜底 */
 
 body {
   font-family: var(--font-sans, system-ui, sans-serif);

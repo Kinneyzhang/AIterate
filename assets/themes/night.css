@@ -1,58 +1,64 @@
-/* AIIterate: night theme — 深蓝灰调，有层次的暗色设计 */
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   AIIterate · Night Theme
+   风格参考：Linear / Vercel / Raycast Dark
+   设计原则：带蓝灰调的深色，5级背景层次，统一 accent 体系
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-/* ── color tokens ─────────────────────────────────────────────────────────── */
+/* ── 1. Design Tokens ────────────────────────────────────────────────────── */
 [data-theme="night"] {
-  /* 背景层次：body → sidebar → panel → card，逐层提亮 */
-  --bg-body:    #191c24;   /* 页面底色，深蓝灰，不纯黑 */
-  --bg-sidebar: #1f2330;   /* sidebar，比 body 略亮 */
-  --bg-panel:   #242838;   /* 主内容区 */
-  --bg-card:    #2c3040;   /* 卡片/区块 */
-  --bg-input:   #1a1e2a;   /* 输入框 */
-  --bg-hover:   rgba(255,255,255,0.05);
-  --bg-select:  rgba(91,140,255,0.12);
+  color-scheme: dark;
+
+  /* 背景层：body → sidebar/topbar → content → card → input（层层加深/提亮） */
+  --bg-0:        #111318;   /* body 底色，深蓝灰，不纯黑 */
+  --bg-1:        #1a1d27;   /* 主内容区、卡片、modal */
+  --bg-2:        #222636;   /* hover 态、code block、次级背景 */
+  --bg-sidebar:  #13161e;   /* sidebar 比 body 略深，凸显分层 */
+  --bg-input:    #0e1018;   /* 输入框内凹感 */
 
   /* 文字 */
-  --fg-0:    #e4e8f0;   /* 主文字，暖白 */
-  --fg-1:    #a0aab8;   /* 次要文字 */
-  --fg-2:    #6b7585;   /* 更淡的提示文字 */
+  --fg-0:   #dde3ee;   /* 主文字，带蓝调的暖白 */
+  --fg-1:   #7f8fa6;   /* 次要文字、label */
+  --fg-2:   #4a5568;   /* placeholder、更淡提示 */
 
   /* 分割线 */
-  --border:  rgba(255,255,255,0.08);
+  --border:   rgba(255,255,255,0.07);
   --border-2: rgba(255,255,255,0.04);
 
-  /* 强调色 */
-  --accent:   #6391ff;
-  --accent-2: #8aabff;
-  --good:     #3bc47a;
-  --warn:     #e0a83c;
-  --bad:      #e06473;
+  /* 强调色系 */
+  --accent:       #5b8def;
+  --accent-hover: #4a7be0;
+  --accent-2:     #89aeff;
+  --good:         #3abf76;
+  --warn:         #e0a83c;
+  --bad:          #e06473;
 
-  /* 兼容旧变量名 */
-  --bg:       #191c24;
-  --bg-2:     #2c3040;
-  --text:     #e4e8f0;
-  --muted:    #a0aab8;
-  --line:     rgba(255,255,255,0.08);
-  --panel:    rgba(36,40,56,0.95);
-  --panel-2:  rgba(28,32,44,0.98);
+  /* 兼容旧变量（勿删，app.css 有引用） */
+  --bg:      var(--bg-0);
+  --text:    var(--fg-0);
+  --muted:   var(--fg-1);
+  --line:    var(--border);
+  --panel:   var(--bg-1);
+  --panel-2: var(--bg-1);
 
   --radius: 10px;
-  --shadow: 0 8px 24px rgba(0,0,0,0.36);
+  --shadow: 0 8px 32px rgba(0,0,0,0.45);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-/* ── body 背景 ─────────────────────────────────────────────────────────────── */
+/* ── 2. Body & Global ────────────────────────────────────────────────────── */
 [data-theme="night"] body {
-  background: var(--bg-body);
+  background: var(--bg-0);
   color: var(--fg-0);
 }
 
-/* ── topbar ────────────────────────────────────────────────────────────────── */
+/* ── 3. Topbar ───────────────────────────────────────────────────────────── */
 [data-theme="night"] .topbar {
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border);
 }
+[data-theme="night"] .topbar-title { color: var(--fg-0); }
 
-/* ── sidebar ───────────────────────────────────────────────────────────────── */
+/* ── 4. Sidebar ──────────────────────────────────────────────────────────── */
 [data-theme="night"] .sidebar {
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
@@ -61,131 +67,263 @@
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border);
 }
-[data-theme="night"] .session-item {
-  color: var(--fg-1);
-  border-radius: 6px;
-  margin: 2px 6px;
-}
+[data-theme="night"] .sidebar-title { color: var(--fg-1); }
+[data-theme="night"] .sidebar-stat  { color: var(--fg-2); }
+[data-theme="night"] .session-item  { color: var(--fg-1); }
 [data-theme="night"] .session-item:hover {
-  background: var(--bg-hover);
+  background: rgba(255,255,255,0.05);
   color: var(--fg-0);
 }
 [data-theme="night"] .session-item.active {
-  background: var(--bg-select);
+  background: rgba(91,141,239,0.14);
+  border-color: rgba(91,141,239,0.28);
   color: var(--fg-0);
 }
+[data-theme="night"] .session-item-title { color: inherit; }
+[data-theme="night"] .sidebar-resizer:hover { background: var(--accent); opacity: 0.6; }
+[data-theme="night"] .sidebar-empty { color: var(--fg-2); }
 
-/* ── 主内容 panel ──────────────────────────────────────────────────────────── */
-[data-theme="night"] .panel-content {
-  background: var(--bg-panel);
+/* ── 5. Workspace Tabs ───────────────────────────────────────────────────── */
+[data-theme="night"] .ws-tabs {
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
 }
-[data-theme="night"] .panel {
-  backdrop-filter: blur(12px);
-  background: var(--bg-panel);
-}
-
-/* ── 卡片/区块 ─────────────────────────────────────────────────────────────── */
-[data-theme="night"] .panel-section {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-[data-theme="night"] .round-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-[data-theme="night"] .round-card.round-review {
-  background: rgba(224, 168, 60, 0.08);
-  border: 1px solid rgba(224, 168, 60, 0.2);
-}
-
-/* ── round 内容 ────────────────────────────────────────────────────────────── */
-[data-theme="night"] .round-user { color: var(--fg-0); }
-[data-theme="night"] .round-ai {
+[data-theme="night"] .ws-tab { color: var(--fg-1); }
+[data-theme="night"] .ws-tab:hover:not(:disabled) {
   color: var(--fg-0);
   background: rgba(255,255,255,0.04);
+}
+[data-theme="night"] .ws-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: rgba(91,141,239,0.08);
+}
+
+/* ── 6. Panel Content Area ───────────────────────────────────────────────── */
+[data-theme="night"] .panel-content {
+  background: var(--bg-0);
+}
+[data-theme="night"] .panel { background: var(--bg-1); }
+[data-theme="night"] .ph-title { color: var(--fg-0); }
+[data-theme="night"] .ph-meta  { color: var(--fg-1); }
+
+/* ── 7. Content Blocks / Cards ───────────────────────────────────────────── */
+[data-theme="night"] .ws-header,
+[data-theme="night"] .content-block {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+[data-theme="night"] .section-label { color: var(--fg-1); }
+[data-theme="night"] .block-hint     { color: var(--fg-1); }
+[data-theme="night"] .ps-label       { color: var(--fg-1); }
+[data-theme="night"] .ps-body,
+[data-theme="night"] .md-body        { color: var(--fg-0); }
+[data-theme="night"] .ps-hint        { color: var(--fg-1); }
+
+/* ── 8. Panel Sections ───────────────────────────────────────────────────── */
+[data-theme="night"] .panel-section {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+/* ── 9. Round Cards (追问/理解/费曼) ─────────────────────────────────────── */
+[data-theme="night"] .round-card {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  border-left: none;  /* 覆盖 app.css 的左竖线，改用完整卡片 */
+}
+[data-theme="night"] .round-card.round-take    { border-top: 2px solid rgba(59,191,118,0.6); }
+[data-theme="night"] .round-card.round-press   { border-top: 2px solid rgba(91,141,239,0.6); }
+[data-theme="night"] .round-card.round-review  {
+  background: rgba(224,168,60,0.06);
+  border: 1px solid rgba(224,168,60,0.18);
+  border-top: 2px solid rgba(224,168,60,0.55);
+}
+[data-theme="night"] .round-user  { color: var(--fg-0); }
+[data-theme="night"] .round-ai {
+  color: var(--fg-0);
+  background: var(--bg-2);
+  border: none;
   border-radius: 6px;
 }
 [data-theme="night"] .round-score { color: var(--accent-2); opacity: 1; }
+[data-theme="night"] .qa-q        { color: var(--fg-0); }
+[data-theme="night"] .qa-a        { color: var(--fg-1); }
 
-/* ── 输入框 / textarea ─────────────────────────────────────────────────────── */
-[data-theme="night"] input,
+/* ── 10. Inputs ──────────────────────────────────────────────────────────── */
+[data-theme="night"] input[type=text],
+[data-theme="night"] input[type=password],
 [data-theme="night"] textarea,
 [data-theme="night"] select {
   background: var(--bg-input);
-  border: 1px solid rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.1);
   color: var(--fg-0);
-  border-radius: 6px;
 }
+[data-theme="night"] input::placeholder,
+[data-theme="night"] textarea::placeholder { color: var(--fg-2); }
 [data-theme="night"] input:focus,
 [data-theme="night"] textarea:focus,
 [data-theme="night"] select:focus {
   border-color: var(--accent);
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(99,145,255,0.18);
+  box-shadow: 0 0 0 2px rgba(91,141,239,0.18);
 }
 [data-theme="night"] select option {
-  background-color: #252a38;
+  background-color: #1e2232;
   color: var(--fg-0);
 }
 
-/* ── 按钮 ──────────────────────────────────────────────────────────────────── */
-[data-theme="night"] button:not(.btn):not(.ws-tab):not(.settings-tab),
-[data-theme="night"] .nav-tabs button,
-[data-theme="night"] .sub-tabs button,
-[data-theme="night"] .mode-switch button {
+/* csel 自定义下拉 */
+[data-theme="night"] .csel-trigger {
+  background: var(--bg-input);
+  border-color: rgba(255,255,255,0.1);
+  color: var(--fg-0);
+}
+[data-theme="night"] .csel-dropdown {
+  background: #1c1f2c;
+  border-color: rgba(255,255,255,0.12);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+}
+[data-theme="night"] .csel-option { color: var(--fg-0); }
+[data-theme="night"] .csel-option:hover { background: var(--bg-2); }
+[data-theme="night"] .csel-option.selected { color: var(--accent-2); font-weight: 600; }
+
+/* ── 11. Buttons ─────────────────────────────────────────────────────────── */
+/* 所有通用按钮（非 .btn 系）*/
+[data-theme="night"] button:not(.btn):not(.ws-tab):not(.settings-tab):not(.modal-close):not(.type-btn):not(.sidebar-toggle) {
   border-radius: 8px;
-  padding: 7px 11px;
   font-size: 12px;
   font-weight: 600;
   min-height: 34px;
-}
-[data-theme="night"] button:not(.btn):not([class*="tab"]):not([class*="type-"]) {
-  background: linear-gradient(180deg, #6391ff 0%, #5479e8 100%);
+  background: linear-gradient(180deg, #5b8def 0%, #4a7be0 100%);
   color: #fff;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
 }
-[data-theme="night"] button.secondary,
-[data-theme="night"] button.ghost {
-  background: var(--bg-card);
+[data-theme="night"] .btn-primary {
+  background: linear-gradient(180deg, #5b8def 0%, #4a7be0 100%);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+[data-theme="night"] .btn-primary:hover { background: linear-gradient(180deg, #4a7be0 0%, #3a6bd0 100%); }
+[data-theme="night"] .btn-success {
+  background: linear-gradient(180deg, #3abf76 0%, #2ea366 100%);
+  color: #fff;
+  border-color: transparent;
+}
+[data-theme="night"] .btn-success:hover { background: linear-gradient(180deg, #2ea366 0%, #248955 100%); }
+[data-theme="night"] .btn:not(.btn-primary):not(.btn-success) {
+  background: var(--bg-2);
   color: var(--fg-1);
-  border: 1px solid var(--border);
+  border-color: var(--border);
+}
+[data-theme="night"] .btn:not(.btn-primary):not(.btn-success):hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--fg-0);
+}
+[data-theme="night"] .type-btn {
+  background: var(--bg-2);
+  color: var(--fg-1);
+  border-color: var(--border);
+}
+[data-theme="night"] .type-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
 }
 
-/* ── 分割线 / muted ─────────────────────────────────────────────────────────── */
-[data-theme="night"] .muted { color: var(--fg-1); }
-
-/* ── settings modal ────────────────────────────────────────────────────────── */
-[data-theme="night"] .modal-box {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+/* ── 12. Settings Tab Bar ────────────────────────────────────────────────── */
+[data-theme="night"] .settings-tabs {
+  background: var(--bg-1);
+  border-bottom-color: var(--border);
 }
-[data-theme="night"] .settings-tab {
-  color: var(--fg-1);
-}
+[data-theme="night"] .settings-tab { color: var(--fg-1); }
 [data-theme="night"] .settings-tab.active {
-  background: var(--bg-select);
   color: var(--fg-0);
+  border-bottom-color: var(--accent);
+  background: rgba(91,141,239,0.08);
 }
 
-/* ── ws-tab 标签 ────────────────────────────────────────────────────────────── */
-[data-theme="night"] .ws-tab {
+/* ── 13. Modal ───────────────────────────────────────────────────────────── */
+[data-theme="night"] .modal-box {
+  background: var(--bg-1);
+  border-color: rgba(255,255,255,0.1);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+}
+[data-theme="night"] .modal-header { border-bottom-color: var(--border); }
+[data-theme="night"] .modal-title  { color: var(--fg-0); }
+[data-theme="night"] .modal-footer { border-top-color: var(--border); }
+
+/* ── 14. Stage Badges ────────────────────────────────────────────────────── */
+/* 暗色主题下 badge 已由 app.css 定义，此处仅微调对比度 */
+[data-theme="night"] .stage-idle {
+  background: rgba(255,255,255,0.06);
   color: var(--fg-1);
+  border-color: rgba(255,255,255,0.1);
 }
-[data-theme="night"] .ws-tab.active {
-  background: var(--bg-select);
+
+/* ── 15. Markdown Code Blocks ────────────────────────────────────────────── */
+[data-theme="night"] .md-body code {
+  background: rgba(255,255,255,0.08);
+  color: #c8d4e8;
+}
+[data-theme="night"] .md-body pre {
+  background: #0c0e18;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+[data-theme="night"] .md-body th  { background: rgba(255,255,255,0.06); }
+[data-theme="night"] .md-body th,
+[data-theme="night"] .md-body td  { border-color: rgba(255,255,255,0.1); }
+
+/* ── 16. Misc ────────────────────────────────────────────────────────────── */
+[data-theme="night"] .muted        { color: var(--fg-1); opacity: 1; }
+[data-theme="night"] .notice-bar   { background: rgba(91,141,239,0.1); color: var(--accent-2); }
+[data-theme="night"] .notice-bar.notice-error { background: rgba(224,100,115,0.1); color: var(--bad); }
+[data-theme="night"] .empty-state h3 { color: var(--fg-0); }
+[data-theme="night"] .empty-state p  { color: var(--fg-1); }
+[data-theme="night"] .info-box  { background: rgba(91,141,239,0.08); border-color: rgba(91,141,239,0.2); }
+[data-theme="night"] .error-box { background: rgba(224,100,115,0.08); border-color: rgba(224,100,115,0.2); }
+[data-theme="night"] .original-question {
+  background: rgba(91,141,239,0.06);
+  border-left-color: var(--accent);
   color: var(--fg-0);
 }
+[data-theme="night"] .review-result-banner.pass {
+  background: rgba(58,191,118,0.1); color: #5dd6a0; border-color: rgba(58,191,118,0.25);
+}
+[data-theme="night"] .review-result-banner.fail {
+  background: rgba(224,100,115,0.1); color: #f08898; border-color: rgba(224,100,115,0.25);
+}
+[data-theme="night"] .final-score-num { color: var(--accent-2); }
+[data-theme="night"] .item-score.pass { background: rgba(58,191,118,0.18); color: #5dd6a0; }
+[data-theme="night"] .item-score.fail { background: rgba(224,100,115,0.18); color: #f08898; }
+[data-theme="night"] .item-comment    { border-left-color: var(--border); color: var(--fg-1); }
+[data-theme="night"] .settings-accordion { border-color: var(--border); }
+[data-theme="night"] .settings-accordion summary { color: var(--fg-1); }
+[data-theme="night"] .settings-accordion[open] summary { color: var(--fg-0); }
 
-/* ── sidebar-resizer ─────────────────────────────────────────────────────────  */
-[data-theme="night"] .sidebar-resizer:hover { background: var(--accent); opacity: 0.5; }
+/* ── 17. Scrollbar ───────────────────────────────────────────────────────── */
+[data-theme="night"] ::-webkit-scrollbar { width: 6px; height: 6px; }
+[data-theme="night"] ::-webkit-scrollbar-track { background: transparent; }
+[data-theme="night"] ::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12);
+  border-radius: 3px;
+}
+[data-theme="night"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.2);
+}
 
-/* ── 排版 ──────────────────────────────────────────────────────────────────── */
+/* ── 18. Typography ──────────────────────────────────────────────────────── */
 [data-theme="night"] h1 {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
   font-size: clamp(19px, 1.7vw, 22px);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 1.14;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  color: var(--fg-0);
 }
-[data-theme="night"] h2 { font-size: 16px; }
+[data-theme="night"] h2 { font-size: 16px; font-weight: 600; color: var(--fg-0); }
