@@ -35,7 +35,7 @@
   font-size: 16px;
 }
 
-[data-theme="night"] button:not(.btn):not(.ws-tab),
+[data-theme="night"] button:not(.btn):not(.ws-tab):not(.settings-tab),
 [data-theme="night"] .nav-tabs button,
 [data-theme="night"] .sub-tabs button,
 [data-theme="night"] .mode-switch button {

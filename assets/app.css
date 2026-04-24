@@ -702,8 +702,8 @@ select {
 /* ── settings modal ──────────────────────────────────────────────────────────*/
 .modal-box-lg { max-width: 600px; width: 96vw; }
 .settings-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding: 0 16px; margin: 0; }
-.settings-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 12px; cursor: pointer; font-size: 13px; color: var(--fg-1); transition: color 0.15s; }
-.settings-tab.active { color: var(--fg-0); border-bottom-color: var(--accent, #1a6ef5); background: rgba(26,110,245,0.08); border-radius: 6px 6px 0 0; }
+.settings-tab { background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px; cursor: pointer; font-size: 13px; color: var(--fg-1); transition: color 0.15s; }
+.settings-tab.active { color: var(--fg-0); border-bottom-color: var(--accent, #1a6ef5); background: rgba(26,110,245,0.08); }
 .settings-panel { padding: 16px; display: none; }
 .settings-panel.active { display: block; }
 .settings-modal-body { max-height: 60vh; overflow-y: scroll; padding: 0; scrollbar-gutter: stable; }
