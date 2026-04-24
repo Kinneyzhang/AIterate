@@ -79,7 +79,7 @@ aiterate/
 ├── aiterate_server.py      # FastAPI 路由层
 ├── aiterate_db.py          # 数据库 CRUD 封装（PostgreSQL）
 ├── aiterate_ai.py          # LLM 调用 / Prompt 构建
-├── aiterate_flow.py        # 业务流程编排（已合并入 server）
+├── aiterate_flow.py        # 业务流程编排（辅助模块）
 ├── assets/
 │   ├── app.css             # 全局基础样式（含移动端适配）
 │   ├── fonts.css           # 字体声明（subset 分片）
@@ -150,8 +150,9 @@ preparing ──(AI生成完)──► learning ──(提交理解)──► de
 
 | type | 含义 |
 |------|------|
-| `question` | 以一个问题为起点 |
-| `article` | 以一篇文章/材料为起点 |
+| `question`  | 以一个问题为起点 |
+| `viewpoint` | 以一个观点/论点为起点 |
+| `article`   | 以一篇文章/材料为起点 |
 
 ---
 
@@ -472,13 +473,14 @@ async function request(method, path, body) {
                   AI评分
          │
          ▼
-6. 用户点"完成"→ session.status = completed
+6. 费曼通过 → session.status = completed（自动流转）
+   费曼未通过 → session.status = revising（可继续巩固后重新发起费曼）
 ```
 
 ### 8.2 状态与轮次对应关系
 
 ```
-session.status=learning
+session.status=deepening  # 提交 take 后进入深化阶段
   rounds: [
     { seq:1, type:'take',    input:'我的理解...', output:'AI评价...',  score:82 },
     { seq:2, type:'press',   input:'为什么?...',  output:'AI解释...',  score:null },
@@ -530,7 +532,7 @@ role-specific config（非空时） > 全局 llm config > 报错
 
 **关键设计决策**：
 
-- **night.css 所有规则带 scope 前缀**（`.night-theme .xxx`），避免主题切换时触发全局 reflow，消除抖动
+- **night.css 所有规则带 scope 前缀**（`[data-theme="night"] .xxx`），避免主题切换时触发全局 reflow，消除抖动
 - **csel 替代原生 select**：`backdrop-filter: blur(4px)` 的 Modal 与原生 select popup 存在 GPU 合成层冲突，用自定义下拉控件解决
 - 主题状态持久化在 `profile.theme` 字段，刷新后自动恢复
 
