@@ -126,9 +126,9 @@
   background: var(--bg-2);
   border: 1px solid var(--border);
 }
-[data-theme="mono"] .round-label { color: var(--fg-1); }
+/* round-label color handled by app.css per type (summary/question/review) */
 [data-theme="mono"] .round-user  { color: var(--fg-0); }
-[data-theme="mono"] .round-ai    { color: var(--fg-0); }
+[data-theme="mono"] .round-ai    { color: var(--fg-0); background: rgba(26, 110, 245, 0.05); border-left: 2px solid rgba(26, 110, 245, 0.18); border-radius: 0 6px 6px 0; }
 [data-theme="mono"] .round-score { color: var(--accent); }
 [data-theme="mono"] .qa-q        { color: var(--fg-0); }
 [data-theme="mono"] .qa-a        { color: var(--fg-1); }
