@@ -3,27 +3,9 @@ AIIterate AI Engine
 Supports dynamic LLM configuration via settings, Tavily web search, and multi-provider routing.
 """
 import json
-import os
-from datetime import date, timedelta
 from pathlib import Path
 
 import aiohttp
-
-HERMES_HOME = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
-
-DOMAIN_CONTEXT = {
-    "cs":    "计算机科学、编程、系统设计、算法、AI工程",
-    "write": "写作、表达、文章结构、语言风格、技术写作",
-    "psych": "心理学、认知科学、行为分析、情绪管理、人际关系",
-    "phil":  "哲学、逻辑推理、伦理学、形而上学、认识论",
-}
-
-DOMAIN_NAMES = {
-    "cs":    "计算机",
-    "write": "写作",
-    "psych": "心理学",
-    "phil":  "哲学",
-}
 
 
 def _extract_json_block(raw: str, open_char: str, close_char: str) -> str | None:
@@ -222,7 +204,7 @@ async def generate_initial_answer(title: str, content: str, type: str = "questio
 
 # ── 阶段2a：评估用户总结 ───────────────────────────────
 
-SUMMARY_EVAL_SYSTEM = """你是一位严格的学习导师，正在评估学习者对知识的内化程度。
+TAKE_EVAL_SYSTEM = """你是一位严格的学习导师，正在评估学习者对知识的内化程度。
 
 用户阅读了关于某个问题/观点的详细解答后，写了自己的总结。请评估：
 1. 用户是否抓住了核心要点？
@@ -231,7 +213,7 @@ SUMMARY_EVAL_SYSTEM = """你是一位严格的学习导师，正在评估学习�
 
 输出JSON：
 {
-  "score": <1-5整数>,
+  "score": <0-100整数，60以上=基本理解，80以上=深入理解>,
   "understood_well": <true/false>,
   "praise": "<1句真实的肯定，不要夸张>",
   "gaps": ["<遗漏或误解1>", "<遗漏或误解2>"],
@@ -258,7 +240,7 @@ AI的完整回答：
         block  = _extract_json_block(raw, "{", "}")
         result = json.loads(block)
         return {
-            "score":          int(result.get("score", 3)),
+            "score":          int(result.get("score", 50)),
             "understood_well": bool(result.get("understood_well", False)),
             "praise":         result.get("praise", ""),
             "gaps":           result.get("gaps", []),
@@ -266,7 +248,7 @@ AI的完整回答：
             "raw":            raw,
         }
     except Exception:
-        return {"score": 3, "understood_well": False, "praise": "", "gaps": [], "verdict": "评估解析失败", "raw": raw}
+        return {"score": 50, "understood_well": False, "praise": "", "gaps": [], "verdict": "评估解析失败", "raw": raw}
 
 
 # ── 阶段2b：回答用户追问 ───────────────────────────────
@@ -296,7 +278,7 @@ async def answer_followup_question(original_question: str, ai_answer: str, press
         {"role": "system", "content": FOLLOWUP_ANSWER_SYSTEM},
         {"role": "user",   "content": prompt},
     ]
-    raw = await _call_llm(messages, temperature=0.5, max_tokens=800, role="default")
+    raw = await _call_llm(messages, temperature=0.5, max_tokens=800, role="deepen")
     return {"answer": raw}
 
 
@@ -385,68 +367,3 @@ async def evaluate_review_answers(original_question: str, review_questions: list
         return {"item_scores": [], "final_score": 50, "mastery_level": "理解", "strong_points": [], "weak_points": [], "final_summary": "评估解析失败", "raw": raw}
 
 
-# ── 生成本周引导任务 ──────────────────────────────────
-
-TASK_GEN_SYSTEM = """你是一位精准的学习规划师。根据用户在各领域的学习历史和当前材料，
-生成本周最重要的4-6个学习任务。
-
-任务必须：
-- 具体可执行，不能模糊
-- 有明确的输出（写什么、做什么、验证什么）
-- 难度适中，不超过用户当前能力的20%
-- 各领域均衡分配
-
-严格输出JSON数组：
-[
-  {
-    "domain_id": "<cs|write|psych|phil>",
-    "task_type": "<read|feynman|write|project|connect|review>",
-    "title": "<简短标题>",
-    "description": "<2-3句具体说明>",
-    "prompt": "<给用户的具体引导语，告诉他输出什么>",
-    "priority": <1|2|3>
-  }
-]"""
-
-
-async def generate_weekly_tasks(domains_data: list, recent_sessions: list) -> list:
-    domain_summary = ""
-    for d in domains_data:
-        domain_summary += f"\n{d['name']}：当前材料={d.get('current_material', '未设置')}，"
-        domain_summary += f"进度={d.get('done_units', 0)}/{max(d.get('total_units', 0), 1)} 单元，"
-        domain_summary += f"周目标={d.get('weekly_goal_minutes', 60)} 分钟"
-
-    session_summary = ""
-    for s in recent_sessions[:10]:
-        session_summary += (
-            f"\n- {s.get('type', 'question')}: {s.get('title', '')} "
-            f"(评分:{s.get('score', '?')}, 状态:{s.get('status', '?')})" 
-        )
-
-    today    = date.today().isoformat()
-    week_end = (date.today() + timedelta(days=7)).isoformat()
-
-    user_msg = f"""今天是 {today}，本周结束日期 {week_end}。
-
-当前学习材料：{domain_summary}
-
-最近学习记录：{session_summary if session_summary else '暂无'}
-
-请生成本周 4-6 个引导任务，尽量覆盖四个领域。"""
-
-    messages = [
-        {"role": "system", "content": TASK_GEN_SYSTEM},
-        {"role": "user",   "content": user_msg},
-    ]
-
-    raw = await _call_llm(messages, temperature=0.6, max_tokens=1500, role="default")
-    try:
-        block = _extract_json_block(raw, "[", "]")
-        if not block:
-            raise ValueError("JSON array not found")
-        tasks = json.loads(block)
-        if not isinstance(tasks, list):
-            raise ValueError("Tasks payload is not a list")
-        return tasks
-    except Exception:
-        return []

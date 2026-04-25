@@ -11,7 +11,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
@@ -48,7 +48,7 @@ async def healthz():
         "ok": True,
         "service": "aiterate",
         "frontend": FRONTEND.exists(),
-        "db_path": f"postgresql:{db.PG_DBNAME}",
+        "db_type": db.load_db_config().get("type", "unknown"),
         "version": "3.0.0",
     }
 
@@ -66,6 +66,7 @@ def _session_phase(status: str | None) -> str:
         "preparing": "preparing",
         "learning":  "learning",
         "deepening": "deepening",
+        "revising":  "revising",
         "feynman":   "feynman",
         "completed": "completed",
         "error":     "error",
@@ -262,6 +263,13 @@ class SessionCreate(BaseModel):
     content: str                        # 用户完整输入，title 由 AI 生成
     type: str = "question"        # question / viewpoint
     web_search: bool = False            # 是否联网搜索
+
+    @field_validator("content")
+    @classmethod
+    def content_not_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError("内容不能为空")
+        return v.strip()
 
 
 @app.post("/api/sessions")

@@ -14,7 +14,7 @@ export function renderSidebar(sessions, selectedId, onSelect) {
   }
 
   const activeCount = sessions.filter(s =>
-    ['processing', 'deepening', 'revising', 'feynman'].includes(s.status)
+    ['preparing', 'learning', 'deepening', 'revising', 'feynman'].includes(s.status)
   ).length;
   const doneCount = sessions.filter(s => s.status === 'completed').length;
   stats.textContent = `${sessions.length} 个 · 进行中 ${activeCount} · 完成 ${doneCount} `;
@@ -22,9 +22,8 @@ export function renderSidebar(sessions, selectedId, onSelect) {
   list.innerHTML = sessions.map(s => {
     const { label, cls } = getStageMeta(s.status);
     const active = s.id === selectedId ? ' active' : '';
-    const preview = s.material || s.content || '';
     const scoreHtml = s.score
-      ? `<span class="score-dot">${s.score}/5</span>` : '';
+      ? `<span class="score-dot">${s.score}/100</span>` : '';
     return `
       <div class="session-item${active}" data-sid="${s.id}" tabindex="0">
         <div class="session-item-row">

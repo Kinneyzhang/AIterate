@@ -19,7 +19,7 @@ export function openNewSessionModal(onSubmit) {
       <div class="modal-body">
         <div id="modalConfigWarning" class="modal-config-warning" style="display:none"></div>
         <div class="type-toggle" id="modalTypeToggle">
-          <button class="type-btn active" data-type="question">❓ 问题</button>
+          <button class="type-btn active" data-type="question">🔎 问题</button>
           <button class="type-btn" data-type="viewpoint">💡 观点</button>
         </div>
         <textarea id="modalContent"
@@ -29,7 +29,7 @@ export function openNewSessionModal(onSubmit) {
       </div>
       <div class="modal-footer">
         <div class="modal-footer-left">
-          <button class="btn btn-sm web-search-btn" id="modalWebSearch" title="联网搜索">🔍 联网</button>
+          <button class="btn btn-sm web-search-btn" id="modalWebSearch" title="联网搜索">🌐 联网</button>
         </div>
         <div class="modal-footer-right">
           <button class="btn" id="modalCancelBtn">取消</button>

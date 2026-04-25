@@ -4,26 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AIterate</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="/assets/fonts.css">
   <link rel="stylesheet" href="/assets/app.css">
-  <link rel="stylesheet" id="themeStylesheet" href="/assets/themes/night.css">
-  <link rel="stylesheet" id="themeStylesheetAlt" href="/assets/themes/mono.css" disabled>
+  <link rel="stylesheet" href="/assets/themes/night.css">
+  <link rel="stylesheet" href="/assets/themes/mono.css">
   <script>
     (function () {
     try {
+      // 两套主题 CSS 同时加载，靠 [data-theme] 选择器隔离，切换无闪烁
       const t = localStorage.getItem('aiterate-theme') || 'night';
       document.documentElement.dataset.theme = t;
-      // 预加载两套主题，切换时只改 disabled，避免重新加载 CSS 导致抖动
-      const main = document.getElementById('themeStylesheet');
-      const alt  = document.getElementById('themeStylesheetAlt');
-      if (t === 'mono') {
-        main.href = '/assets/themes/mono.css'; main.disabled = false;
-        alt.href  = '/assets/themes/night.css'; alt.disabled = true;
-      }
     } catch (_) {}
-    // 初始化主题按钮图标（DOMContentLoaded 后执行）
     document.addEventListener('DOMContentLoaded', function () {
       const t = document.documentElement.dataset.theme || 'night';
       const btn = document.getElementById('themeToggleBtn');
@@ -63,6 +57,7 @@
 
   <!-- ── topbar ───────────────────────────────────────────────────────────── -->
   <header class="topbar">
+    <button class="btn sidebar-toggle" id="sidebarToggle" title="折叠/展开" onclick="window.app.toggleSidebar()">☰</button>
     <div class="topbar-title">📚 AIterate</div>
     <div class="topbar-actions">
       <button class="btn btn-sm" title="设置" onclick="window.app.openSettings()">⚙️</button>
@@ -70,6 +65,9 @@
       <button class="btn btn-sm" id="themeToggleBtn" onclick="window.app.toggleTheme()" title="切换主题">🌙</button>
     </div>
   </header>
+
+  <!-- ── sidebar overlay (mobile) ─────────────────────────────────────────── -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="window.app.toggleSidebar()"></div>
 
   <!-- ── layout ───────────────────────────────────────────────────────────── -->
   <div class="workspace-shell">
@@ -80,7 +78,6 @@
         <div class="sidebar-head-row">
           <div class="sidebar-title">会话 </div>
           <span id="sessionStats" class="sidebar-stat"></span>
-          <button class="btn btn-icon sidebar-toggle" id="sidebarToggle" title="折叠/展开" onclick="window.app.toggleSidebar()">☰</button>
         </div>
       </div>
       <div class="session-list" id="sessionList">

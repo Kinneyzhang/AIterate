@@ -62,7 +62,7 @@ function buildLearnPanel() {
   const session = _payload?.session;
   if (!session) return '';
 
-  const aiText = session.material || session.material;
+  const aiText = session.material;
   const typeLabel = session.type === 'viewpoint' ? '观点' : '问题';
   const scoreHtml = session.score
     ? `<span>评分 ${session.score}/100</span>` : '';
@@ -120,7 +120,7 @@ function buildDeepenPanel() {
   const inputArea = canAct ? `
     <div class="deepen-inputs">
       <div class="deepen-col">
-        <div class="col-label muted small">❓ 提追问</div>
+        <div class="col-label muted small">🔎 提追问</div>
         <textarea id="questionInput" rows="4"
           placeholder="追问某个细节、反例、边界条件…"></textarea>
         <button class="btn btn-primary btn-block mt8" id="submitQuestionBtn"
@@ -151,7 +151,10 @@ function buildDeepenRoundCard(round) {
     return `
       <div class="round-card round-take">
         <div class="round-user-wrap"><span class="round-label">💡 理解</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
-        <div class="round-ai md-body">${renderMarkdown(round.output || '')}</div>
+        <div class="round-ai md-body">
+          <div class="ps-label">AI 评价</div>
+          ${renderMarkdown(round.output || '')}
+        </div>
         ${round.score ? `<div class="round-score">评分 ${round.score}/100</div>` : ''}
       </div>`;
   }
@@ -159,7 +162,10 @@ function buildDeepenRoundCard(round) {
     return `
       <div class="round-card round-press">
         <div class="round-user-wrap"><span class="round-label">🔎 追问</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
-        <div class="round-ai md-body">${renderMarkdown(round.output || '')}</div>
+        <div class="round-ai md-body">
+          <div class="ps-label">AI 回答</div>
+          ${renderMarkdown(round.output || '')}
+        </div>
       </div>`;
   }
   return '';
@@ -193,7 +199,7 @@ function buildReviewPanel() {
     const gid = r.group_id ?? r.id;
     (byGroup[gid] = byGroup[gid] || []).push(r);
   }
-  const historyHtml = Object.values(byGroup).map(grp => {
+  const historyHtml = Object.values(byGroup).reverse().map(grp => {
     const sorted = grp.sort((a, b) => a.seq - b.seq);
     const groupScore = sorted.reduce((s, r) => s + (r.score || 0), 0);
     const avgScore = Math.round(groupScore / sorted.length);
@@ -205,7 +211,7 @@ function buildReviewPanel() {
             const scoreTag = r.score != null
               ? `<span class="item-score ${r.score >= 60 ? 'pass' : 'fail'}">${r.score}分</span>` : '';
             const comment = r.score_comment
-              ? `<div class="item-comment muted small">${escapeHtml(r.score_comment)}</div>` : '';
+              ? `<div class="ps-label" style="margin-top:6px;">AI 评价</div><div class="item-comment">${escapeHtml(r.score_comment)}</div>` : '';
             return `
             <div class="qa-pair">
               <div class="qa-q">Q${i + 1} ${escapeHtml(r.input || '')} ${scoreTag}</div>

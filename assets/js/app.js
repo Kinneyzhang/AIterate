@@ -34,16 +34,6 @@ function toggleTheme() {
   const cur = document.documentElement.dataset.theme || 'night';
   const next = cur === 'night' ? 'mono' : 'night';
   document.documentElement.dataset.theme = next;
-  // 切换预加载的两套 CSS（disabled 方式，无重新加载，无抖动）
-  const main = document.getElementById('themeStylesheet');
-  const alt  = document.getElementById('themeStylesheetAlt');
-  if (main && alt) {
-    // 找到指向 next 主题的那个 link，enable 它；另一个 disable
-    // 不改 href，避免触发 CSS 重新加载导致抖动
-    const mainIsNext = main.href.includes(`/${next}.css`);
-    main.disabled = !mainIsNext;
-    alt.disabled  =  mainIsNext;
-  }
   localStorage.setItem('aiterate-theme', next);
   if (window.syncHljsTheme) syncHljsTheme(next);
   const btn = document.getElementById('themeToggleBtn');
@@ -97,6 +87,13 @@ async function selectSession(sessionId, { pushHistory = true } = {}) {
   state.currentFeynmanGroupId = null;
   renderSidebar(state.sessions, sessionId, selectSession);
   setNotice('');
+  // 移动端：选择后自动收起抽屉
+  const sidebar = document.getElementById('sessionSidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  if (sidebar?.classList.contains('expanded')) {
+    sidebar.classList.remove('expanded');
+    overlay?.classList.remove('active');
+  }
   if (pushHistory) {
     history.pushState({ sessionId }, '', `#session/${sessionId}`);
   }
@@ -267,7 +264,10 @@ window.app = {
   openNewSession,
   openSettings,
   toggleSidebar: () => {
-    document.getElementById('sessionSidebar')?.classList.toggle('expanded');
+    const sidebar = document.getElementById('sessionSidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const expanded = sidebar?.classList.toggle('expanded');
+    if (overlay) overlay.classList.toggle('active', expanded);
   },
   switchTab: (tab) => {
     const { switchTab } = window.__workspaceModule || {};
