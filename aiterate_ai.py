@@ -172,11 +172,24 @@ async def generate_title(content: str) -> str:
 
 
 async def generate_initial_answer(title: str, content: str, type: str = "question",
-                                   web_search: bool = False) -> dict:
+                                   web_search: bool = False,
+                                   knowledge_node: dict | None = None) -> dict:
     # title 可能是完整问题（新模式）或简短标题（旧模式），content 可能为空
     question = title if not content else (title if len(title) > len(content) else content)
 
     system_prompt = ANSWER_SYSTEM
+
+    # 注入知识节点上下文
+    if knowledge_node:
+        kn_title = knowledge_node.get("title", "")
+        kn_keywords = knowledge_node.get("keywords", [])
+        kn_fragments = knowledge_node.get("prompt_fragments", [])
+        kn_context = f"\n\n【知识领域】{kn_title}"
+        if kn_keywords:
+            kn_context += f"\n核心概念：{'、'.join(kn_keywords)}"
+        if kn_fragments:
+            kn_context += f"\n关注角度：{'；'.join(kn_fragments[:2])}"
+        system_prompt = ANSWER_SYSTEM + kn_context + "\n\n请在回答中覆盖以上核心概念，并体现相关角度的思考。"
 
     if web_search:
         try:
@@ -296,12 +309,24 @@ REVIEW_GEN_SYSTEM = """你是一位费曼式导师，要通过提问来检验学
   "questions": ["<检验题1>", "<检验题2>", "<检验题3>"]
 }"""
 
-async def generate_review_questions(original_question: str, ai_answer: str, learning_history: str) -> dict:
+async def generate_review_questions(original_question: str, ai_answer: str, learning_history: str,
+                                   knowledge_node: dict | None = None) -> dict:
     prompt = f"""主题：{original_question}
 核心内容摘要：{ai_answer[:600]}
-学习过程摘要：{learning_history[:400]}
+学习过程摘要：{learning_history[:400]}"""
 
-请生成2-3个费曼式检验题。"""
+    # 注入知识节点上下文，要求覆盖关键概念
+    if knowledge_node:
+        kn_title = knowledge_node.get("title", "")
+        kn_keywords = knowledge_node.get("keywords", [])
+        kn_fragments = knowledge_node.get("prompt_fragments", [])
+        prompt += f"""
+知识领域：{kn_title}
+核心概念：{'、'.join(kn_keywords) if kn_keywords else '无'}
+关注角度：{'；'.join(kn_fragments[:2]) if kn_fragments else '无'}
+请生成2-3个费曼式检验题，确保覆盖以上核心概念。"""
+
+    prompt += "\n\n请生成2-3个费曼式检验题。"
 
     messages = [
         {"role": "system", "content": REVIEW_GEN_SYSTEM},

@@ -180,8 +180,8 @@ async function submitFeynman() {
 // ── new session ───────────────────────────────────────────────────────────────
 
 function openNewSession() {
-  openNewSessionModal(async (title, content, entryType, webSearch) => {
-    const data = await createSession(title, content, entryType, webSearch);
+  openNewSessionModal(async (title, content, entryType, webSearch, nodeId) => {
+    const data = await createSession(title, content, entryType, webSearch, nodeId);
     setNotice(`新 session #${data.session_id} 已入队，左侧可查看进度。`);
     const sessions = await loadSessions();
     // auto-select new session
@@ -282,6 +282,82 @@ window.app = {
   submitDeepAction,
   startFeynman,
   submitFeynman,
+  showKnowledgeTree: async () => {
+    import('./api.js').then(async ({ getKnowledgeTree, request }) => {
+      try {
+        const [treeData, progressData] = await Promise.all([
+          getKnowledgeTree(),
+          request('/api/knowledge-tree/progress'),
+        ]);
+        const tree = treeData.tree || [];
+        const progress = progressData.progress || [];
+        const progMap = {};
+        for (const p of progress) progMap[p.node_id] = p;
+
+        function renderNode(node, depth = 0) {
+          const p = progMap[node.id];
+          const indent = depth * 20;
+          const total = p?.total_sessions || 0;
+          const completed = p?.completed_sessions || 0;
+          const active = p?.active_sessions || 0;
+          const avgScore = p?.avg_score || 0;
+          const hasProgress = total > 0;
+          let statusIcon = '○';
+          let statusClass = 'kt-untouched';
+          if (completed === total && total > 0) { statusIcon = '✅'; statusClass = 'kt-mastered'; }
+          else if (active > 0) { statusIcon = '📖'; statusClass = 'kt-learning'; }
+          else if (hasProgress) { statusIcon = '🔁'; statusClass = 'kt-review'; }
+
+          const children = node.children?.length
+            ? node.children.map(c => renderNode(c, depth + 1)).join('') : '';
+
+          if (!depth && !hasProgress && !node.keywords?.length) {
+            // Top-level domain nodes without sessions: collapse children only
+            return children;
+          }
+
+          return `
+            <div class="kt-node ${statusClass}" style="padding-left:${indent}px">
+              <div class="kt-node-row">
+                <span class="kt-status">${statusIcon}</span>
+                <span class="kt-title">${node.title || node.id}</span>
+                ${hasProgress ? `<span class="kt-stats">${completed}/${total} 完成${avgScore ? ' · ' + avgScore + '分' : ''}</span>` : ''}
+              </div>
+              ${children}
+            </div>`;
+        }
+
+        const html = tree.map(n => renderNode(n)).join('');
+
+        const existing = document.getElementById('knowledgeTreeModal');
+        if (existing) existing.remove();
+        const el = document.createElement('div');
+        el.id = 'knowledgeTreeModal';
+        el.className = 'modal-overlay';
+        el.innerHTML = `
+          <div class="modal-box knowledge-tree-modal" role="dialog" style="max-width:620px; max-height:80vh;">
+            <div class="modal-header">
+              <div class="modal-title">📂 知识树进度</div>
+              <button class="modal-close" id="ktCloseBtn">✕</button>
+            </div>
+            <div class="modal-body" style="max-height:60vh; overflow-y:auto;">
+              <div class="kt-legend">
+                <span>✅ 已掌握</span> <span>📖 学习中</span> <span>🔁 待复习</span> <span>○ 未触及</span>
+              </div>
+              <div class="kt-tree">${html || '<div class="muted">还没有绑定知识节点的 session</div>'}</div>
+            </div>
+          </div>`;
+        document.body.appendChild(el);
+        document.getElementById('ktCloseBtn').addEventListener('click', () => el.remove());
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+        document.addEventListener('keydown', function esc(e) {
+          if (e.key === 'Escape') { el.remove(); document.removeEventListener('keydown', esc); }
+        });
+      } catch (err) {
+        console.error('knowledge tree error', err);
+      }
+    });
+  },
 };
 
 boot();

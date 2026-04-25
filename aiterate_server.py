@@ -392,6 +392,7 @@ class SessionCreate(BaseModel):
     content: str                        # 用户完整输入，title 由 AI 生成
     type: str = "question"        # question / viewpoint
     web_search: bool = False            # 是否联网搜索
+    knowledge_node_id: str | None = None  # 绑定知识节点
 
     @field_validator("content")
     @classmethod
@@ -422,11 +423,22 @@ async def create_session_and_answer(body: SessionCreate, background_tasks: Backg
     )
     db.update_session(sid, status="preparing")
 
+    # 如果有知识节点，立即绑定
+    knowledge_node = None
+    if body.knowledge_node_id:
+        db.set_knowledge_node(sid, body.knowledge_node_id)
+        tree = db.get_knowledge_tree()
+        knowledge_node = db.find_node_by_id(tree, body.knowledge_node_id)
+
     async def generate_answer():
         try:
             # 并行生成标题和回答
             title_task = ai.generate_title(body.content)
-            answer_task = ai.generate_initial_answer(body.content, "", body.type, web_search=body.web_search)
+            answer_task = ai.generate_initial_answer(
+                body.content, "", body.type,
+                web_search=body.web_search,
+                knowledge_node=knowledge_node,
+            )
             title, result = await asyncio.gather(title_task, answer_task)
             answer = result["answer"]
             db.update_session(sid, title=title, material=answer, error_msg=None, status="learning")
@@ -568,8 +580,16 @@ async def start_feynman(session_id: int):
     rounds = db.get_rounds(session_id)
     learning_history = " | ".join([r.get("output", "")[:100] for r in rounds])
 
+    # 注入知识节点上下文
+    knowledge_node = None
+    node_id = db.get_knowledge_node(session_id)
+    if node_id:
+        tree = db.get_knowledge_tree()
+        knowledge_node = db.find_node_by_id(tree, node_id)
+
     result = await ai.generate_review_questions(
         session["title"], session.get("material", ""), learning_history,
+        knowledge_node=knowledge_node,
     )
     questions = result["questions"]
     try:
@@ -710,6 +730,29 @@ async def suggest_nodes_for_session(session_id: int):
     tree = db.get_knowledge_tree()
     suggestions = db.suggest_knowledge_nodes(tree, query)
     return {"session_id": session_id, "suggestions": suggestions, "current_node_id": db.get_knowledge_node(session_id)}
+
+
+@app.get("/api/knowledge-tree/progress")
+async def get_tree_progress():
+    """知识树进度：每个节点的 session 统计"""
+    progress = db.get_knowledge_tree_progress()
+    # 注入节点标题
+    tree = db.get_knowledge_tree()
+    for p in progress:
+        node = db.find_node_by_id(tree, p["node_id"])
+        p["title"] = node["title"] if node else p["node_id"]
+    return {"progress": progress}
+
+
+@app.get("/api/knowledge-tree/sessions")
+async def get_sessions_for_node(node_id: str, limit: int = 50):
+    """获取某个知识节点的所有 session"""
+    sessions = db.get_sessions_by_node(node_id, limit)
+    # 注入节点标题
+    tree = db.get_knowledge_tree()
+    node = db.find_node_by_id(tree, node_id)
+    node_title = node["title"] if node else node_id
+    return {"node_id": node_id, "node_title": node_title, "sessions": sessions, "count": len(sessions)}
 
 
 # ── Maintenance ────────────────────────────────────────────

@@ -848,6 +848,54 @@ def suggest_knowledge_nodes(tree: list, query: str, limit: int = 3) -> list[dict
     return scored[:limit]
 
 
+def get_knowledge_tree_progress() -> list[dict]:
+    """Return progress stats for every node that has sessions."""
+    if _is_sqlite():
+        rows = _fetch_all("""
+            SELECT 
+                s.knowledge_node_id AS node_id,
+                COUNT(*) AS total_sessions,
+                SUM(CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END) AS completed_sessions,
+                SUM(CASE WHEN s.status NOT IN ('completed', 'error') THEN 1 ELSE 0 END) AS active_sessions,
+                ROUND(AVG(s.score), 1) AS avg_score
+            FROM sessions s
+            WHERE s.knowledge_node_id IS NOT NULL
+            GROUP BY s.knowledge_node_id
+            ORDER BY total_sessions DESC
+        """)
+    else:
+        rows = _fetch_all("""
+            SELECT 
+                s.knowledge_node_id AS node_id,
+                COUNT(*) AS total_sessions,
+                COUNT(*) FILTER (WHERE s.status = 'completed') AS completed_sessions,
+                COUNT(*) FILTER (WHERE s.status NOT IN ('completed', 'error')) AS active_sessions,
+                ROUND(AVG(s.score) FILTER (WHERE s.score IS NOT NULL)::numeric, 1) AS avg_score
+            FROM sessions s
+            WHERE s.knowledge_node_id IS NOT NULL
+            GROUP BY s.knowledge_node_id
+            ORDER BY total_sessions DESC
+        """)
+    result = []
+    for r in rows:
+        result.append({
+            "node_id": r["node_id"],
+            "total_sessions": int(r["total_sessions"]),
+            "completed_sessions": int(r["completed_sessions"]),
+            "active_sessions": int(r["active_sessions"]),
+            "avg_score": float(r["avg_score"]) if r["avg_score"] else 0.0,
+        })
+    return result
+
+
+def get_sessions_by_node(node_id: str, limit: int = 50) -> list[dict]:
+    """Get sessions bound to a specific knowledge node."""
+    return _fetch_all(
+        "SELECT * FROM sessions WHERE knowledge_node_id = :nid ORDER BY created_at DESC LIMIT :lim",
+        {"nid": node_id, "lim": limit}
+    )
+
+
 # ── Knowledge tree (file-based) ────────────────────────────────────────────────
 
 def get_knowledge_tree() -> list:

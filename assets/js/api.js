@@ -24,15 +24,19 @@ async function request(url, options = {}) {
   return resp.json();
 }
 
+export { request };
+
 export async function getSessions(limit = 100) {
   return request(`/api/sessions?limit=${limit}`);
 }
 
-export async function createSession(title, content, entryType, webSearch = false) {
+export async function createSession(title, content, entryType, webSearch = false, knowledgeNodeId = null) {
+  const body = { content, type: entryType, web_search: webSearch };
+  if (knowledgeNodeId) body.knowledge_node_id = knowledgeNodeId;
   return request('/api/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, type: entryType, web_search: webSearch }),
+    body: JSON.stringify(body),
   });
 }
 

@@ -753,7 +753,36 @@ select {
 .web-search-btn { opacity: 0.45; }
 .web-search-btn.active { opacity: 1 !important; background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
 
+/* ── modal node suggestions ──────────────────────────────────────────────────── */
+.modal-node-suggestions {
+  margin-top: -4px; margin-bottom: 10px; padding: 8px 10px;
+  border-radius: 6px; background: var(--bg-hover, rgba(255,255,255,0.03));
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.node-suggest-label { font-size: 11px; font-weight: 600; opacity: 0.5; margin-bottom: 6px; }
+.node-suggest-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.node-suggest-item {
+  padding: 3px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;
+  background: transparent; border: 1px solid rgba(255,255,255,0.1); color: inherit;
+  transition: all 0.15s;
+}
+.node-suggest-item:hover { background: rgba(79,142,247,0.1); border-color: #4f8ef7; }
+.node-suggest-item.selected { background: rgba(79,142,247,0.2); border-color: #4f8ef7; color: #4f8ef7; }
+.kn-score { opacity: 0.4; font-size: 10px; }
+
 /* ── modal-footer 左右布局 ───────────────────────────────────────────────────*/
+
+/* ── knowledge tree modal ───────────────────────────────────────────────────── */
+.kt-legend { display: flex; gap: 14px; margin-bottom: 12px; font-size: 11px; opacity: 0.5; }
+.kt-tree { font-size: 13px; line-height: 1.8; }
+.kt-node { padding: 2px 0; }
+.kt-node-row { display: flex; align-items: center; gap: 6px; }
+.kt-status { font-size: 12px; width: 20px; text-align: center; flex-shrink: 0; }
+.kt-title { font-weight: 500; }
+.kt-stats { font-size: 11px; opacity: 0.5; margin-left: auto; }
+.kt-mastered .kt-title { color: #48c774; }
+.kt-learning .kt-title { color: var(--accent, #4f8ef7); }
+.kt-review .kt-title { color: #ffaa32; }
 .modal-footer { display: flex; justify-content: space-between; align-items: center; }
 .modal-footer-left {}
 .modal-footer-right { display: flex; gap: 8px; }
