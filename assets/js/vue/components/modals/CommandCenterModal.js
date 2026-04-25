@@ -24,16 +24,9 @@ export default defineComponent({
     });
     
     async function completeReview(rid, btn) {
+      // Phase 5: Direct review completion is deprecated. Use start-review flow instead.
+      btn.textContent = '已停用';
       btn.disabled = true;
-      btn.textContent = '…';
-      try {
-        await api.completeReview(rid);
-        btn.textContent = '✓';
-        btn.classList.add('cmd-done');
-      } catch {
-        btn.textContent = '失败';
-        btn.disabled = false;
-      }
     }
     
     function gotoSession(id, panel) {
@@ -73,7 +66,7 @@ export default defineComponent({
                 <span class="cmd-badge cmd-badge-overdue">逾期复习</span>
                 <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'learn')">{{ r.title || '未命名' }}</a>
                 <span v-if="r.score" class="cmd-score">{{ r.score }}分</span>
-                <button class="btn btn-sm cmd-done-btn" @click="completeReview(r.review_id, $event.target)">✓完成</button>
+                <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'review')">开始复习 →</a>
               </div>
               <div v-for="s in data.feynman_pending" :key="'feyn-'+s.id" class="cmd-item cmd-item-urgent">
                 <span class="cmd-badge cmd-badge-feynman">待费曼</span>
@@ -92,7 +85,7 @@ export default defineComponent({
                 <span class="cmd-badge cmd-badge-review">{{ r.review_round > 0 ? '第'+(r.review_round+1)+'轮' : '复习' }}</span>
                 <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'learn')">{{ r.title || '未命名' }}</a>
                 <span v-if="r.score" class="cmd-score">{{ r.score }}分</span>
-                <button class="btn btn-sm cmd-done-btn" @click="completeReview(r.review_id, $event.target)">✓完成</button>
+                <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'review')">开始复习 →</a>
               </div>
               <div v-for="s in data.active_sessions" :key="'active-'+s.id" class="cmd-item">
                 <span :class="['cmd-badge-stage', statusLabel(s.status).cls]">{{ statusLabel(s.status).text }}</span>

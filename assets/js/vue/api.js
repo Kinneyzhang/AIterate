@@ -40,8 +40,11 @@ export const api = {
   getReady: () => request('/api/ready'),
   getKnowledgeTree: () => request('/api/knowledge-tree'),
   getKnowledgeProgress: () => request('/api/knowledge-tree/progress'),
+  getKnowledgeMastery: () => request('/api/knowledge-tree/mastery'),
+  getRecommendedNodes: () => request('/api/knowledge-tree/recommend'),
   getCommandCenter: () => request('/api/command-center'),
   completeReview: (rid) => request(`/api/review/${rid}/complete`, { method: 'POST', body: '{}' }),
+  skipReview: (rid) => request(`/api/review/${rid}/skip`, { method: 'POST' }),
   submitReview: (rid, content) => request(`/api/review/${rid}/submit`, { method: 'POST', body: JSON.stringify({ content }) }),
   saveDbConfig: (payload) => request('/api/db-config', { method: 'PUT', body: JSON.stringify(payload) }),
 };

@@ -1,6 +1,7 @@
 // ── NewSessionModal.js ────────────────────────────────────────────────────
 
 import { defineComponent, ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { api } from '../../api.js';
 import { icon } from '../../icons.js';
 import { setNotice } from '../../store.js';
@@ -9,6 +10,7 @@ export default defineComponent({
   emits: ['close', 'created'],
   
   setup(props, { emit }) {
+    const router = useRouter();
     const content = ref('');
     const selectedType = ref('question');
     const webSearch = ref(false);
@@ -74,7 +76,7 @@ export default defineComponent({
     
     function close() { emit('close'); }
     
-    return { content, selectedType, webSearch, selectedNodeId, submitting, ready, suggestions, onInput, submit, close, icon };
+    return { content, selectedType, webSearch, selectedNodeId, submitting, ready, suggestions, onInput, submit, close, icon, router };
   },
   
   template: `
@@ -86,7 +88,7 @@ export default defineComponent({
         </div>
         <div class="modal-body">
           <div v-if="!ready.llm" class="modal-config-warning" style="display:flex">
-            <span v-html="icon('warn')"></span> 尚未配置大模型，<a href="#" @click.prevent="close(); $parent.$emit('open-settings')">前往设置</a> 后再提交。
+            <span v-html="icon('warn')"></span> 尚未配置大模型，<a href="#" @click.prevent="close(); router.push({ name: 'settings-basic' })">前往设置</a> 后再提交。
           </div>
           <div class="type-toggle">
             <button :class="['type-btn', { active: selectedType === 'question' }]" @click="selectedType = 'question'" v-html="icon('search') + ' 问题'"></button>

@@ -637,6 +637,11 @@ async def deepen(session_id: int, body: DeepenRequest):
     if not session:
         raise HTTPException(404, "Session not found")
 
+    # Phase 5: state transition guard — only allow deepen in valid states
+    st = session.get("status", "")
+    if st not in ("learning", "deepening", "revising"):
+        raise HTTPException(409, f"Cannot deepen in status '{st}'. Allowed: learning, deepening, revising.")
+
     original_question = session["title"]
     ai_answer = session.get("material", "")
     rounds = db.get_rounds(session_id)
@@ -658,6 +663,9 @@ async def deepen(session_id: int, body: DeepenRequest):
             eval_json=eval_json,
         )
         db.update_session(session_id, status="deepening")
+
+        # Phase 5: persist gaps to learning_gaps table (with status tracking)
+        new_gaps = db.create_gaps_from_take(session_id, rid, eval_json)
 
         # 基于 gaps 生成追问建议（非阻塞）
         suggestions = []
@@ -720,6 +728,28 @@ async def start_feynman(session_id: int):
         if not session:
             raise HTTPException(404, "Session not found")
 
+        # Phase 5: state transition guard — only allow feynman in deepening or revising
+        st = session.get("status", "")
+        if st not in ("deepening", "revising"):
+            raise HTTPException(409, f"Cannot start feynman in status '{st}'. Allowed: deepening, revising.")
+
+        # Phase 5: require at least one take round before feynman
+        rounds = db.get_rounds(session_id)
+        take_rounds = [r for r in rounds if r.get("type") == "take"]
+        if not take_rounds:
+            raise HTTPException(409, "Cannot start feynman: no take rounds yet. Write at least one understanding summary first.")
+
+        # Phase 5: idempotency — reuse existing pending feynman group
+        existing = db.get_pending_feynman_group(session_id)
+        if existing:
+            group_id = existing[0]["group_id"]
+            return {
+                "group_id": group_id,
+                "round_ids": [r["id"] for r in existing],
+                "questions": [r["input"] for r in existing],
+                "reused": True,
+            }
+
         rounds = db.get_rounds(session_id)
         learning_history = " | ".join([r.get("output", "")[:100] for r in rounds])
 
@@ -773,6 +803,11 @@ async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
         if not session:
             raise HTTPException(404, "Session not found")
 
+        # Phase 5: state transition guard — complete_feynman requires feynman status
+        st = session.get("status", "")
+        if st != "feynman":
+            raise HTTPException(409, f"Cannot complete feynman in status '{st}'. Expected: feynman.")
+
         rounds = db.get_rounds(session_id)
         feynman_rounds = sorted(
             [r for r in rounds if r.get("group_id") == body.group_id],
@@ -815,8 +850,30 @@ async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
         }
         db.save_review_report(session_id, report)
 
+        # Phase 5: sync feynman weak_points into the gap ledger
+        if eval_result.get("weak_points"):
+            gap_results = db.sync_gaps_from_weak_points(session_id, eval_result["weak_points"])
+        else:
+            gap_results = []
+
         # 自动创建复习排期
         db.schedule_review(session_id, eval_result["final_score"])
+
+        # Phase 5: build correction plan for failed feynman
+        correction_plan = None
+        if not passed:
+            correction_plan = {
+                "type": "correction_plan",
+                "failed_items": eval_result.get("item_scores", []),
+                "weak_concepts": eval_result.get("weak_points", []),
+                "associated_gaps": gap_results,
+                "recommended_actions": [
+                    "re-take: rewrite your understanding after fixing the weak points above",
+                    "press: ask AI targeted questions about the specific concepts you failed",
+                    "review: look at the feynman questions you got wrong and study those concepts",
+                ],
+                "next_feynman_prerequisites": [wp for wp in eval_result.get("weak_points", [])[:3]],
+            }
 
         return {
             "item_scores":   eval_result.get("item_scores", []),
@@ -828,6 +885,7 @@ async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
             "passed":        passed,
             "pass_score":    pass_score,
             "new_status":    new_status,
+            "correction_plan": correction_plan,
         }
     except HTTPException:
         raise
@@ -843,6 +901,12 @@ async def complete_session(session_id: int):
     session = db.get_session(session_id)
     if not session:
         raise HTTPException(404, "Session not found")
+
+    # Phase 5: state transition guard
+    st = session.get("status", "")
+    if st not in ("learning", "deepening", "revising"):
+        raise HTTPException(409, f"Cannot complete in status '{st}'. Allowed: learning, deepening, revising.")
+
     db.update_session(session_id, status="completed")
 
     # 自动创建复习排期（如果有分数）
@@ -857,6 +921,12 @@ async def reopen_session(session_id: int):
     session = db.get_session(session_id)
     if not session:
         raise HTTPException(404, "Session not found")
+
+    # Phase 5: state transition guard
+    st = session.get("status", "")
+    if st not in ("completed", "revising"):
+        raise HTTPException(409, f"Cannot reopen in status '{st}'. Allowed: completed, revising.")
+
     db.update_session(session_id, status="deepening")
     return {"ok": True}
 
@@ -912,19 +982,25 @@ async def get_tree_progress():
 # ── Phase 4: DB-backed Job Worker ──────────────────────────
 
 _WORKER_SLEEP = 2  # seconds between polls
-
+_JOB_SEMAPHORE = asyncio.Semaphore(3)  # Phase 5: max concurrent AI jobs
 
 async def _job_worker():
     """Background worker: polls the jobs table and processes pending jobs."""
-    print("[Worker] Job worker started")
+    print("[Worker] Job worker started (max concurrency: 3)")
     while True:
         try:
             job = db.claim_pending_job()
             if job:
-                asyncio.create_task(_process_job(job))
+                asyncio.create_task(_process_job_with_sem(job))
         except Exception as e:
             print(f"[Worker] Poll error: {e}")
         await asyncio.sleep(_WORKER_SLEEP)
+
+
+async def _process_job_with_sem(job: dict):
+    """Process a job with concurrency limit."""
+    async with _JOB_SEMAPHORE:
+        await _process_job(job)
 
 
 async def _process_job(job: dict):
@@ -991,6 +1067,20 @@ async def get_sessions_for_node(node_id: str, limit: int = 50):
     node = db.find_node_by_id(tree, node_id)
     node_title = node["title"] if node else node_id
     return {"node_id": node_id, "node_title": node_title, "sessions": sessions, "count": len(sessions)}
+
+
+@app.get("/api/knowledge-tree/mastery", dependencies=[Depends(_require_admin)])
+async def get_knowledge_mastery():
+    """Phase 5: 知识树掌握度模型 — 每个节点的 mastery 评分、状态、gaps、复习"""
+    mastery = db.get_knowledge_tree_mastery()
+    return {"tree": mastery}
+
+
+@app.get("/api/knowledge-tree/recommend", dependencies=[Depends(_require_admin)])
+async def get_recommended():
+    """Phase 5: 智能推荐 — 下一步该学什么节点"""
+    nodes = db.get_recommended_nodes(3)
+    return {"recommended": nodes}
 
 
 # ── Maintenance ────────────────────────────────────────────
@@ -1083,6 +1173,17 @@ async def complete_review(review_id: int, body: ReviewCompleteRequest = ReviewCo
     return {"ok": True}
 
 
+@app.post("/api/review/{review_id}/skip", dependencies=[Depends(_require_admin)])
+async def skip_review(review_id: int):
+    """跳过本次复习，状态标记为 'skipped'（不算完成，下一轮按原间隔提前）。"""
+    with db.get_engine().begin() as conn:
+        conn.execute(
+            db.text("UPDATE review_schedule SET status = 'skipped', updated_at = NOW() WHERE id = :rid"),
+            {"rid": review_id}
+        )
+    return {"ok": True, "status": "skipped"}
+
+
 class ReviewSubmitRequest(BaseModel):
     content: str  # 用户重新解释的内容
 
@@ -1146,6 +1247,44 @@ async def command_center():
     return db.get_command_center_data()
 
 
+# ── Phase 4.2: Rubric Management ─────────────────────────────
+
+@app.get("/api/rubrics", dependencies=[Depends(_require_admin)])
+async def list_rubrics():
+    """列出所有评分标准及其版本信息。"""
+    settings = db.get_settings()
+    rubrics = settings.get("rubrics", {})
+    version = settings.get("rubric_version", 1)
+    return {
+        "rubrics": rubrics,
+        "version": version,
+    }
+
+
+class RubricUpdateRequest(BaseModel):
+    role: str
+    system_prompt: str
+
+    @field_validator("role")
+    @classmethod
+    def role_valid(cls, v):
+        allowed = {"review_explain", "feynman", "deepen_evaluate"}
+        if v not in allowed:
+            raise ValueError(f"Unknown role: {v}. Allowed: {sorted(allowed)}")
+        return v
+
+
+@app.patch("/api/rubrics", dependencies=[Depends(_require_admin)])
+async def update_rubric(body: RubricUpdateRequest):
+    """更新某个 role 的评分标准，自动递增版本号。"""
+    result = db.upsert_rubric(body.role, body.system_prompt)
+    return {
+        "ok": True,
+        "role": body.role,
+        "version": result["version"],
+    }
+
+
 # ── Maintenance: Invariant Checks ──────────────────────────────
 
 @app.get("/api/maintenance/check-invariants", dependencies=[Depends(_require_admin)])
@@ -1158,6 +1297,74 @@ async def check_invariants(stale_minutes: int = 10):
 async def repair_invariants(dry_run: bool = True):
     """修复常见的状态机不一致。dry_run=true 只预览不执行。"""
     return db.repair_invariants(dry_run=dry_run)
+
+
+# ── Phase 4.3: Weekly Report ─────────────────────────────────
+
+@app.get("/api/report/weekly", dependencies=[Depends(_require_admin)])
+async def weekly_report():
+    """生成本周学习周报（Markdown 格式）。"""
+    data = db.get_weekly_report_data()
+
+    # 构建 Markdown 报告
+    from datetime import datetime
+    lines = []
+    lines.append(f"# 📊 学习周报")
+    lines.append(f"**{data['week_start']}** ~ **{data['week_end']}**")
+    lines.append("")
+
+    # 1. 概览
+    lines.append("## 📈 本周概览")
+    lines.append("")
+    lines.append(f"- 新建会话：**{data['sessions_created']}** 个")
+    lines.append(f"- 完成学习：**{data['sessions_completed']}** 个")
+    lines.append("")
+
+    # 2. 复习统计
+    lines.append("## 🔁 间隔复习")
+    lines.append("")
+    lines.append(f"- 完成复习：**{data['reviews_completed']}** 次")
+    if data['review_avg_score'] is not None:
+        avg = data['review_avg_score']
+        emoji = "🟢" if avg >= 80 else ("🟡" if avg >= 60 else "🔴")
+        lines.append(f"- 复习均分：{emoji} **{avg}**")
+    lines.append(f"- 待复习：**{data['reviews_pending']}** 项")
+    lines.append("")
+
+    # 3. 薄弱点
+    lines.append("## 🎯 薄弱环节")
+    lines.append("")
+    lines.append(f"- 未解决的薄弱点：**{data['open_gaps']}** 个")
+    lines.append("")
+
+    # 4. 本周完成的 session
+    if data['recent_done']:
+        lines.append("## ✅ 本周完成")
+        lines.append("")
+        for s in data['recent_done']:
+            score_str = f" ({s.get('score', '?')}/5)" if s.get('score') is not None else ""
+            lines.append(f"- [{s['title']}{score_str}](/#session/{s['id']})")
+        lines.append("")
+
+    # 5. 推荐
+    if data['recommended']:
+        lines.append("## 🚀 下周建议")
+        lines.append("")
+        for i, node in enumerate(data['recommended'][:3], 1):
+            title = node.get("title", node.get("id", "?"))
+            reason = node.get("reason", "")
+            lines.append(f"{i}. **{title}** — {reason}")
+        lines.append("")
+
+    lines.append("---")
+    lines.append(f"*生成于 {datetime.now().strftime('%Y-%m-%d %H:%M')}*")
+
+    report_md = "\n".join(lines)
+
+    return {
+        "data": data,
+        "markdown": report_md,
+    }
 
 
 if __name__ == "__main__":

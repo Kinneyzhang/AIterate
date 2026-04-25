@@ -60,7 +60,8 @@ export default defineComponent({
 
     const canDeepen = computed(() => {
       const s = currentSession.value?.status;
-      return s && !['processing', 'idle'].includes(s);
+      // Phase 5: whitelist — only allow deepen in these states
+      return s && ['learning', 'deepening', 'revising'].includes(s);
     });
     const canReview = computed(() => {
       const s = currentSession.value?.status;
@@ -115,8 +116,8 @@ export default defineComponent({
       btn.disabled = true;
       btn.textContent = '…';
       try {
-        await api.completeReview(rid);
-        btn.textContent = '✓';
+        await api.skipReview(rid);
+        btn.textContent = '已跳过';
         emit('refresh');
       } catch {
         btn.textContent = '✗';
@@ -339,7 +340,7 @@ export default defineComponent({
                         {{ reviewSubmitting[rs.id] ? '…' : '提交解释' }}
                       </button>
                       <button class="btn btn-sm"
-                              @click="completeReviewDirect(rs.id, $event.target)">跳过</button>
+                              @click="completeReviewDirect(rs.id, $event.target)">稍后提醒</button>
                     </div>
                   </template>
                   <!-- Just submitted: show AI feedback -->

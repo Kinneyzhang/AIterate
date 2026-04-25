@@ -1016,3 +1016,35 @@ select {
 .login-error {
   color: #ff7070; font-size: 13px; margin-bottom: 12px;
 }
+
+/* ── Knowledge Tree Mastery (Phase 5) ──────────────────────── */
+.kt-mastery-badge {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.2px;
+  padding: 0px 6px; border-radius: 8px;
+  white-space: nowrap; flex-shrink: 0;
+  margin-right: 6px;
+  line-height: 1.6;
+}
+.kt-mastery-mastered { background: rgba(34,197,94,0.12); color: #22c55e; border: 1px solid #22c55e; }
+.kt-mastery-reviewing { background: rgba(59,130,246,0.1); color: #3b82f6; border: 1px solid #3b82f6; }
+.kt-mastery-learning { background: rgba(168,85,247,0.1); color: #a855f7; border: 1px solid #a855f7; }
+.kt-mastery-weak { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid #ef4444; }
+.kt-mastery-untouched { background: rgba(107,114,128,0.08); color: #6b7280; border: 1px solid #6b7280; }
+
+.kt-node-issues {
+  display: inline-flex; align-items: center;
+  font-size: 10px; opacity: 0.55;
+  color: var(--warn, #f59e0b);
+  margin-left: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* child row layout */
+.kt-child-row {
+  display: flex; align-items: center;
+  padding: 3px 0;
+  flex-wrap: wrap;
+}
+

@@ -388,6 +388,44 @@ def init_db():
                 except Exception:
                     pass  # SQLite 不支持 IF NOT EXISTS in ALTER TABLE
 
+        # learning_gaps — Phase 5: independent gap entity with status tracking
+        if sqlite:
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS learning_gaps (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id          INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                source_round_id     INTEGER REFERENCES rounds(id) ON DELETE SET NULL,
+                text                TEXT    NOT NULL,
+                concept_tags        TEXT    NOT NULL DEFAULT '[]',
+                severity            TEXT    NOT NULL DEFAULT 'medium',
+                status              TEXT    NOT NULL DEFAULT 'open',
+                resolved_by_round_id INTEGER REFERENCES rounds(id) ON DELETE SET NULL,
+                recurrence_count    INTEGER NOT NULL DEFAULT 0,
+                created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+                resolved_at         TEXT
+            )"""))
+        else:
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS learning_gaps (
+                id                  SERIAL PRIMARY KEY,
+                session_id          INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                source_round_id     INTEGER REFERENCES rounds(id) ON DELETE SET NULL,
+                text                TEXT    NOT NULL,
+                concept_tags        {jb}    NOT NULL DEFAULT '[]',
+                severity            TEXT    NOT NULL DEFAULT 'medium',
+                status              TEXT    NOT NULL DEFAULT 'open',
+                resolved_by_round_id INTEGER REFERENCES rounds(id) ON DELETE SET NULL,
+                recurrence_count    INTEGER NOT NULL DEFAULT 0,
+                created_at          {ts}    NOT NULL DEFAULT NOW(),
+                resolved_at         {ts}
+            )"""))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_learning_gaps_session ON learning_gaps(session_id)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_learning_gaps_status ON learning_gaps(status)"
+            ))
+
         # jobs — Phase 4: DB-backed async job queue
         if sqlite:
             conn.execute(text(f"""
@@ -428,7 +466,7 @@ def init_db():
     # 迁移旧格式 settings（幂等）
     _migrate_settings()
 
-    print(f"[DB] aiterate ready — {cfg.get('type','postgresql')} — sessions / rounds / profile / review_schedule / jobs")
+    print(f"[DB] aiterate ready — {cfg.get('type','postgresql')} — sessions / rounds / profile / review_schedule / learning_gaps / jobs")
 
 
 _LLM_ROLES = ["title", "answer", "evaluate", "review", "deepen"]
@@ -471,6 +509,61 @@ def _migrate_settings():
 
 # ── Profile ────────────────────────────────────────────────────────────────────
 
+# Phase 4.2: 默认评分标准（可被用户通过 settings 自定义覆盖）
+_DEFAULT_RUBRICS = {
+    "review_explain": (
+        "你是一位学习导师，正在评估学习者对已学知识的间隔复习效果。\n"
+        "\n"
+        "学习者之前学过某个主题，现在隔了一段时间重新用自己的话解释。\n"
+        "请从以下维度评估：\n"
+        "\n"
+        "1. 概念的准确性（是否理解正确）\n"
+        "2. 表达的完整性（是否涵盖核心要点）\n"
+        "3. 理解的深度（是否停留在表面）\n"
+        "\n"
+        "请输出 JSON：\n"
+        '{\n'
+        '  "score": <0-100 整数，60以上=基本掌握，80以上=熟练掌握>,\n'
+        '  "praise": "<做得好的方面，1-2句>",\n'
+        '  "gap": "<需要加强的地方，1-2句>",\n'
+        '  "verdict": "<一句话总结评价>"\n'
+        "}"
+    ),
+    "feynman": (
+        "你是一位费曼学习法的导师，通过提问检验学习者对知识的理解深度。\n"
+        "\n"
+        "学习者已经完成了对某个主题的初始学习和深化追问，现在你需要：\n"
+        "1. 生成 3-5 道渐进式问题（从浅到深）\n"
+        "2. 评估学习者的回答质量\n"
+        "\n"
+        "生成问题输出 JSON：\n"
+        '{\n'
+        '  "questions": ["问题1", "问题2", ...]\n'
+        "}\n"
+        "\n"
+        "评估回答输出 JSON：\n"
+        '{\n'
+        '  "answers": [{"score": 0-100, "comment": "评价"}, ...],\n'
+        '  "final_score": 0-100,\n'
+        '  "summary": "一句话总结"\n'
+        "}"
+    ),
+    "deepen_evaluate": (
+        "你是一位学习导师，正在评估学习者的总结和对概念的深入探索。\n"
+        "\n"
+        "请从以下维度评估：\n"
+        "1. 总结是否抓住了核心概念\n"
+        "2. 追问是否触及该主题的深层原理\n"
+        "\n"
+        "输出 JSON：\n"
+        '{\n'
+        '  "score": <0-5 整数>,\n'
+        '  "comment": "<一句话评价>",\n'
+        '  "suggestion": "<建议的下一步方向>"\n'
+        "}"
+    ),
+}
+
 def get_profile() -> dict:
     r = _fetch_one("SELECT * FROM profile WHERE id = :id", {"id": PROFILE_ID})
     if not r:
@@ -481,7 +574,50 @@ def get_profile() -> dict:
     return r
 
 def get_settings() -> dict:
-    return get_profile().get("settings") or {}
+    s = get_profile().get("settings") or {}
+
+    # Phase 4.2: 注入默认 rubrics（如果用户未自定义）
+    if "rubrics" not in s:
+        s["rubrics"] = dict(_DEFAULT_RUBRICS)
+    else:
+        # Merge: 用户可能只覆盖了部分 role
+        for role, rubric in _DEFAULT_RUBRICS.items():
+            if role not in s["rubrics"]:
+                s["rubrics"][role] = rubric
+
+    # Phase 4.2: rubric_version 自动递增（当 rubrics 首次存在或发生变化时）
+    # 这个值由 upsert_rubric 管理，get_settings 只读取
+    if "rubric_version" not in s:
+        s["rubric_version"] = 1
+
+    return s
+
+
+def get_rubric(role: str) -> dict:
+    """Phase 4.2: 获取指定 role 的评分标准（含版本信息）。"""
+    settings = get_settings()
+    rubrics = settings.get("rubrics", {})
+    rubric = rubrics.get(role, _DEFAULT_RUBRICS.get(role, ""))
+    version = settings.get("rubric_version", 1)
+    return {
+        "content": rubric if isinstance(rubric, str) else rubric.get("system", ""),
+        "version": version,
+        "role": role,
+    }
+
+
+def upsert_rubric(role: str, system_prompt: str) -> dict:
+    """Phase 4.2: 更新某个 role 的 rubric，自动递增版本号。"""
+    settings = get_settings()
+    if "rubrics" not in settings:
+        settings["rubrics"] = {}
+
+    settings["rubrics"][role] = system_prompt
+    settings["rubric_version"] = settings.get("rubric_version", 0) + 1
+
+    upsert_profile(**{"settings__rubrics": settings["rubrics"],
+                       "settings__rubric_version": settings["rubric_version"]})
+    return get_rubric(role)
 
 
 def get_or_create_admin_token() -> str:
@@ -825,28 +961,205 @@ def mark_stale_preparing_as_error(timeout_minutes: int = 5):
             {"msg": "Background task lost (server restart)", "tm": str(timeout_minutes)}
         )
 
+# ── Learning Gaps (Phase 5) ─────────────────────────────────────────────────
 
-# ── Gaps ───────────────────────────────────────────────────────────────────
+def create_gaps_from_take(session_id: int, round_id: int, eval_json: dict) -> list[dict]:
+    """Extract gaps from a take round's eval_json and persist as learning_gaps.
+    
+    Deduplication: only creates gaps for text not already open in this session.
+    Returns the list of created gap dicts.
+    """
+    gaps_text = eval_json.get("gaps") or []
+    if not gaps_text:
+        return []
+    
+    # Get existing open gap texts for this session
+    existing = _fetch_all(
+        "SELECT text FROM learning_gaps WHERE session_id = :sid AND status = 'open'",
+        {"sid": session_id}
+    )
+    existing_texts = {r["text"] for r in existing}
+    
+    created = []
+    for g in gaps_text:
+        g_text = str(g).strip()
+        if not g_text or g_text in existing_texts:
+            continue
+        gid = _insert_returning_id("""
+            INSERT INTO learning_gaps (session_id, source_round_id, text, severity)
+            VALUES (:sid, :rid, :txt, 'medium') RETURNING id
+        """, {"sid": session_id, "rid": round_id, "txt": g_text})
+        gap = {
+            "id": gid, "session_id": session_id, "source_round_id": round_id,
+            "text": g_text, "status": "open", "severity": "medium",
+            "concept_tags": [], "recurrence_count": 0, "resolved_by_round_id": None,
+            "created_at": _now_str(), "resolved_at": None
+        }
+        created.append(gap)
+    return created
+
+
+def get_session_gaps(session_id: int, status: str = None) -> list[dict]:
+    """Get gaps for a session, optionally filtered by status."""
+    if status:
+        rows = _fetch_all(
+            "SELECT * FROM learning_gaps WHERE session_id = :sid AND status = :st ORDER BY created_at DESC",
+            {"sid": session_id, "st": status}
+        )
+    else:
+        rows = _fetch_all(
+            "SELECT * FROM learning_gaps WHERE session_id = :sid ORDER BY created_at DESC",
+            {"sid": session_id}
+        )
+    for r in rows:
+        r["concept_tags"] = _jload(r.get("concept_tags") or [])
+    return rows
+
 
 def get_unresolved_gaps(session_id: int) -> list[dict]:
-    """Get all unresolved gaps from take rounds for a session."""
-    rows = _fetch_all("""
-        SELECT id, seq, eval_json, created_at FROM rounds
-        WHERE session_id = :sid AND type = 'take'
-        ORDER BY seq DESC
-    """, {"sid": session_id})
+    """Backward-compatible: return unresolved gaps for workspace payload.
+    
+    Looks in learning_gaps first (Phase 5), falls back to old round.eval_json extraction.
+    """
+    rows = _fetch_all(
+        """SELECT id, session_id, source_round_id, text, severity, status,
+                  concept_tags, resolved_by_round_id, recurrence_count, created_at, resolved_at
+           FROM learning_gaps
+           WHERE session_id = :sid AND status IN ('open', 'reappeared')
+           ORDER BY created_at DESC""",
+        {"sid": session_id}
+    )
+    
+    if rows:
+        # New format from learning_gaps table
+        gaps = []
+        for r in rows:
+            gaps.append({
+                "id": r["id"],
+                "session_id": r["session_id"],
+                "source_round_id": r["source_round_id"],
+                "gap": r["text"],
+                "text": r["text"],
+                "severity": r["severity"],
+                "status": r["status"],
+                "concept_tags": _jload(r.get("concept_tags") or []),
+                "resolved_by_round_id": r.get("resolved_by_round_id"),
+                "recurrence_count": r.get("recurrence_count", 0),
+                "created_at": r.get("created_at"),
+                "resolved_at": r.get("resolved_at"),
+            })
+        return gaps
+    
+    # Fallback: extract from old rounds.eval_json (backward compat)
+    rounds = _fetch_all(
+        """SELECT id, seq, eval_json, created_at FROM rounds
+           WHERE session_id = :sid AND type = 'take'
+           ORDER BY seq DESC""",
+        {"sid": session_id}
+    )
     gaps = []
-    for r in rows:
+    for r in rounds:
         ev = _jload(r.get("eval_json")) if r.get("eval_json") else {}
-        for g in (ev.get("gaps") or []):
+        for g_text in (ev.get("gaps") or []):
             gaps.append({
                 "round_id": r["id"],
                 "seq": r["seq"],
-                "gap": g,
+                "gap": g_text,
                 "praise": ev.get("praise", ""),
                 "created_at": r.get("created_at"),
             })
     return gaps
+
+
+def update_gap(gap_id: int, **kwargs) -> bool:
+    """Update gap fields. Returns True if a row was updated."""
+    if "concept_tags" in kwargs and isinstance(kwargs["concept_tags"], list):
+        if _is_sqlite():
+            kwargs["concept_tags"] = json.dumps(kwargs["concept_tags"], ensure_ascii=False)
+        else:
+            kwargs["concept_tags"] = json.dumps(kwargs["concept_tags"], ensure_ascii=False)
+    
+    sets = [f"{k} = :{k}" for k in kwargs]
+    params = {**kwargs, "gid": gap_id}
+    _exec(f"UPDATE learning_gaps SET {', '.join(sets)} WHERE id = :gid", params)
+    return True
+
+
+def resolve_gap(gap_id: int, resolved_by_round_id: int = None) -> dict:
+    """Mark a gap as resolved."""
+    with _tx() as conn:
+        conn.execute(text(
+            "UPDATE learning_gaps SET status = 'resolved',"
+            " resolved_by_round_id = :rrid, resolved_at = :ts WHERE id = :gid"
+        ), {"gid": gap_id, "rrid": resolved_by_round_id, "ts": _now_str()})
+    return {"id": gap_id, "status": "resolved"}
+
+
+def reopen_gap(gap_id: int) -> dict:
+    """Mark a gap as reappeared (e.g., from feynman weak_points or review failure)."""
+    with _tx() as conn:
+        conn.execute(text(
+            "UPDATE learning_gaps SET status = 'reappeared', recurrence_count = recurrence_count + 1,"
+            " resolved_at = NULL WHERE id = :gid"
+        ), {"gid": gap_id})
+    return {"id": gap_id, "status": "reappeared"}
+
+
+def sync_gaps_from_weak_points(session_id: int, weak_points: list[str]) -> list[dict]:
+    """Sync feynman/review weak_points into the gap ledger.
+    
+    For each weak point: look for matching open/resolved gaps and reopen them,
+    or create new gaps if no match.
+    Returns list of affected gaps.
+    """
+    affected = []
+    for wp in weak_points:
+        wp_text = str(wp).strip()
+        if not wp_text:
+            continue
+        
+        # Try fuzzy match: find gap containing this text or vice versa
+        existing = _fetch_one(
+            """SELECT id, status, recurrence_count FROM learning_gaps
+               WHERE session_id = :sid
+                 AND (text ILIKE :wp1 OR :wp2 ILIKE '%' || text || '%')
+               LIMIT 1""",
+            {"sid": session_id, "wp1": f"%{wp_text}%", "wp2": wp_text}
+        )
+        
+        if existing and existing["status"] in ("resolved", "ignored"):
+            reopen_gap(existing["id"])
+            affected.append({"id": existing["id"], "action": "reopened", "text": wp_text})
+        elif existing and existing["status"] in ("open", "reappeared"):
+            affected.append({"id": existing["id"], "action": "already_open", "text": wp_text})
+        else:
+            # Create new gap
+            gid = _insert_returning_id("""
+                INSERT INTO learning_gaps (session_id, text, severity, status)
+                VALUES (:sid, :txt, 'high', 'open') RETURNING id
+            """, {"sid": session_id, "txt": wp_text})
+            affected.append({"id": gid, "action": "created", "text": wp_text})
+    
+    return affected
+
+
+def get_gap_stats(session_id: int = None) -> dict:
+    """Get gap statistics: open, resolved, total, by severity."""
+    where = "WHERE session_id = :sid" if session_id else ""
+    params = {"sid": session_id} if session_id else {}
+    
+    rows = _fetch_all(f"""
+        SELECT status, severity, COUNT(*) AS n
+        FROM learning_gaps {where}
+        GROUP BY status, severity ORDER BY status, severity
+    """, params)
+    
+    stats = {"open": 0, "resolved": 0, "ignored": 0, "reappeared": 0, "total": 0}
+    for r in rows:
+        stats[r["status"]] = stats.get(r["status"], 0) + r["n"]
+        stats["total"] += r["n"]
+    
+    return stats
 
 
 # ── Review Report ──────────────────────────────────────────────────────────
@@ -996,6 +1309,256 @@ def get_knowledge_tree_progress() -> list[dict]:
     return result
 
 
+# ── Knowledge Tree Mastery (Phase 5) ─────────────────────────────────────────
+
+def _collect_node_ids(tree: list, node_id: str) -> set:
+    """Collect a node's id and all descendant ids from the tree."""
+    ids = {node_id}
+    for node in tree:
+        if node["id"] == node_id:
+            stack = [node]
+            while stack:
+                n = stack.pop()
+                for child in n.get("children", []):
+                    ids.add(child["id"])
+                    stack.append(child)
+            break
+        found = _collect_node_ids(node.get("children", []), node_id)
+        if found:
+            ids.update(found)
+            break
+    return ids
+
+
+def get_knowledge_tree_mastery() -> list[dict]:
+    """Compute per-node mastery stats: score, status, gaps, reviews, prerequisites.
+    
+    Returns the knowledge tree with mastery fields added to each node.
+    The returned structure mirrors knowledge_tree.json but each node gets:
+      { mastery_score, status, total_sessions, completed_sessions, avg_score,
+        gap_count, review_due_count, low_score_count, 
+        prerequisites (child IDs from tree), last_activity }
+    """
+    tree = get_knowledge_tree()
+    if not tree:
+        return []
+    
+    # Get flat list of all node IDs
+    def flatten(nodes, result):
+        for n in nodes:
+            result.append({"id": n["id"], "title": n["title"], "parent": None})
+            for c in n.get("children", []):
+                flatten_children(c, n["id"], result)
+    
+    def flatten_children(node, parent_id, result):
+        result.append({"id": node["id"], "title": node["title"], "parent": parent_id})
+        for c in node.get("children", []):
+            flatten_children(c, node["id"], result)
+    
+    flat = []
+    for domain in tree:
+        flatten([domain], flat)
+    
+    # Build id → descendant_ids map using the tree structure
+    def collect_descendants(node, ancestor_ids=None):
+        if ancestor_ids is None:
+            ancestor_ids = []
+        all_ids = set()
+        for n in node.get("children", []):
+            all_ids.add(n["id"])
+            all_ids.update(collect_descendants(n, [n["id"]]))
+        return all_ids
+    
+    node_descendants = {}
+    for domain in tree:
+        node_descendants[domain["id"]] = collect_descendants(domain)
+        stack = list(domain.get("children", []))
+        while stack:
+            n = stack.pop()
+            node_descendants[n["id"]] = collect_descendants(n)
+            stack.extend(n.get("children", []))
+    
+    # Build id_set → stats map (node_id + all descendants)
+    from datetime import date
+    today = date.today().isoformat()
+    
+    # Get all sessions with knowledge_node_id
+    all_sessions = _fetch_all(
+        "SELECT id, knowledge_node_id, status, score, updated_at FROM sessions WHERE knowledge_node_id IS NOT NULL"
+    )
+    
+    # Get gap counts per session
+    gap_rows = _fetch_all(
+        "SELECT session_id, COUNT(*) AS n FROM learning_gaps WHERE status IN ('open', 'reappeared') GROUP BY session_id"
+    )
+    session_gaps = {r["session_id"]: r["n"] for r in gap_rows}
+    
+    # Get due review counts per session
+    review_rows = _fetch_all(
+        "SELECT r.session_id, COUNT(*) AS n FROM review_schedule r WHERE r.status = 'pending' AND r.review_date <= :today GROUP BY r.session_id",
+        {"today": today}
+    )
+    session_reviews = {r["session_id"]: r["n"] for r in review_rows}
+    
+    # Compute per-node stats
+    node_stats = {}
+    for ni in flat:
+        node_id = ni["id"]
+        descendant_ids = node_descendants.get(node_id, set()) | {node_id}
+        
+        # Filter sessions for this node and descendants
+        matching = [s for s in all_sessions if s["knowledge_node_id"] in descendant_ids]
+        
+        total = len(matching)
+        completed = sum(1 for s in matching if s["status"] == "completed")
+        scores = [s["score"] for s in matching if s["score"] is not None and s["score"] > 0]
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
+        
+        gap_count = sum(session_gaps.get(s["id"], 0) for s in matching)
+        review_due = sum(session_reviews.get(s["id"], 0) for s in matching)
+        low_score_count = sum(1 for s in matching if s.get("score") and s["score"] > 0 and s["score"] < 40)
+        
+        last_activity = max((s["updated_at"] for s in matching if s.get("updated_at")), default=None)
+        
+        # Compute mastery_score: weighted combo of completion rate + avg score
+        if total == 0:
+            mastery_score = 0
+            status = "unseen"
+        else:
+            completion_rate = completed / total if total > 0 else 0
+            score_norm = avg_score / 100 if avg_score > 0 else 0
+            mastery_score = round((completion_rate * 50 + score_norm * 50))
+            
+            if mastery_score >= 80:
+                status = "mastered"
+            elif mastery_score >= 60:
+                status = "reviewing"
+            elif mastery_score >= 40:
+                status = "learning"
+            elif mastery_score >= 20:
+                status = "weak"
+            else:
+                status = "unseen"
+        
+        node_stats[node_id] = {
+            "node_id": node_id,
+            "title": ni["title"],
+            "mastery_score": mastery_score,
+            "status": status,
+            "total_sessions": total,
+            "completed_sessions": completed,
+            "avg_score": avg_score,
+            "gap_count": gap_count,
+            "review_due_count": review_due,
+            "low_score_count": low_score_count,
+            "last_activity": str(last_activity) if last_activity else None,
+        }
+    
+    # Build result tree with mastery stats
+    def enrich_node(node):
+        nid = node["id"]
+        stats = node_stats.get(nid, {"mastery_score": 0, "status": "unseen"})
+        enriched = {
+            **{k: v for k, v in node.items() if k not in ("children",)},
+            "mastery_score": stats["mastery_score"],
+            "status": stats["status"],
+            "total_sessions": stats.get("total_sessions", 0),
+            "completed_sessions": stats.get("completed_sessions", 0),
+            "avg_score": stats.get("avg_score", 0.0),
+            "gap_count": stats.get("gap_count", 0),
+            "review_due_count": stats.get("review_due_count", 0),
+            "low_score_count": stats.get("low_score_count", 0),
+            "last_activity": stats.get("last_activity"),
+            "children": [enrich_node(c) for c in node.get("children", [])],
+        }
+        # Prerequisites: child node IDs
+        enriched["prerequisites"] = [c["id"] for c in node.get("children", [])]
+        return enriched
+    
+    return [enrich_node(domain) for domain in tree]
+
+
+# ── Smart Recommendation (Phase 5) ─────────────────────────────────────────
+
+def get_recommended_nodes(limit: int = 3) -> list[dict]:
+    """Recommend next learning nodes based on priority:
+    1. 逾期复习优先 (due reviews)
+    2. 待费曼优先 (feynman pending)
+    3. 低分节点优先 (low_score_count > 0)
+    4. gap 多的节点优先
+    5. mastered 节点的后继节点
+    """
+    mastery = get_knowledge_tree_mastery()
+    
+    def flatten_mastery(nodes, result):
+        for n in nodes:
+            result.append(n)
+            flatten_mastery(n.get("children", []), result)
+    
+    flat = []
+    flatten_mastery(mastery, flat)
+    
+    # Sort by priority
+    def priority(n):
+        score = 0
+        if n.get("review_due_count", 0) > 0:
+            score += 10000 + n["review_due_count"] * 100
+        if n.get("status") == "learning" or n.get("total_sessions", 0) > 0:
+            if n.get("low_score_count", 0) > 0:
+                score += 5000 + n["low_score_count"] * 50
+            if n.get("gap_count", 0) > 0:
+                score += 3000 + n["gap_count"] * 20
+            score += n.get("mastery_score", 0)  # lower mastery = higher need
+        # Prerequisite nodes: if this is mastered, score its children
+        if n.get("status") == "mastered" and n.get("prerequisites"):
+            # Don't score the mastered node itself high, but let children bubble up
+            pass
+        # Unseen nodes with prerequisites met
+        if n.get("status") == "unseen":
+            score += -100  # Don't prioritize unseen unless nothing else
+        
+        return -score  # Negative for descending sort
+    
+    scored = sorted(
+        [(n, priority(n)) for n in flat if n.get("total_sessions", 0) > 0],
+        key=lambda x: x[1]
+    )
+    
+    result = []
+    seen = set()
+    for n, _ in scored:
+        nid = n.get("id", n.get("node_id"))
+        if nid not in seen and len(result) < limit:
+            result.append({
+                "node_id": nid,
+                "title": n.get("title", ""),
+                "status": n.get("status"),
+                "mastery_score": n.get("mastery_score", 0),
+                "total_sessions": n.get("total_sessions", 0),
+                "gap_count": n.get("gap_count", 0),
+                "review_due_count": n.get("review_due_count", 0),
+            })
+            seen.add(nid)
+    
+    # Fallback: if no active nodes, suggest the shallowest unseen nodes
+    if not result:
+        for n in flat:
+            nid = n.get("id", n.get("node_id"))
+            if nid not in seen and len(result) < limit:
+                result.append({
+                    "node_id": nid,
+                    "title": n.get("title", ""),
+                    "status": "unseen",
+                    "mastery_score": 0,
+                    "total_sessions": n.get("total_sessions", 0),
+                    "gap_count": 0,
+                    "review_due_count": 0,
+                })
+                seen.add(nid)
+    
+    return result
+
+
 # ── Job Queue (Phase 4) ────────────────────────────────────────────────────
 # DB-backed async job queue, replaces FastAPI BackgroundTasks.
 # Survives server restarts.
@@ -1099,20 +1662,110 @@ def recover_stale_jobs(timeout_minutes: int = 5):
 _EBBINGHAUS_INTERVALS = [1, 2, 6, 31, 90]  # R1, R2, R3, R4, R5
 
 
+# ── Phase 4.1: 个性化难度系数 ──────────────────────────────────────────
+
+def _get_session_review_scores(session_id: int) -> list[int]:
+    """获取某个 session 的历史复习分数（按时间升序）。"""
+    rows = _fetch_all(
+        "SELECT review_score FROM review_schedule "
+        "WHERE session_id = :sid AND review_score IS NOT NULL "
+        "ORDER BY completed_at ASC",
+        {"sid": session_id}
+    )
+    return [r["review_score"] for r in rows]
+
+
+def _compute_difficulty_factor(session_id: int, current_score: int | None) -> float:
+    """Phase 4.1: 基于历史复习表现计算个性化难度系数。
+
+    算法：
+    - 取最近 3 次复习分数（含当前）的加权平均
+    - avg >= 80: 因子 1.5（拉长间隔，掌握得好）
+    - avg >= 60: 因子 1.0（标准）
+    - avg >= 40: 因子 0.7（缩短间隔，薄弱）
+    - avg <  40: 因子 0.5（紧急，频繁复习）
+
+    同时考虑知识节点聚合（如果 session 绑定了 knowledge_node）：
+    节点下所有 session 的复习均分也参与计算，session:node = 0.6:0.4 加权。
+    """
+    scores = _get_session_review_scores(session_id)
+
+    # 合并历史分数 + 当前分数
+    all_scores = list(scores)
+    if current_score is not None:
+        all_scores.append(current_score)
+
+    if not all_scores:
+        return 1.0  # 无历史数据，默认标准间隔
+
+    # 最近 3 次加权（越近权重越高）
+    recent = all_scores[-3:]
+    weights = list(range(1, len(recent) + 1))  # [1, 2, 3] 或 [1, 2] 或 [1]
+    session_avg = sum(s * w for s, w in zip(recent, weights)) / sum(weights)
+
+    # Session 级因子
+    if session_avg >= 80:
+        session_factor = 1.5
+    elif session_avg >= 60:
+        session_factor = 1.0
+    elif session_avg >= 40:
+        session_factor = 0.7
+    else:
+        session_factor = 0.5
+
+    # 尝试获取知识节点聚合
+    session = _fetch_one(
+        "SELECT knowledge_node_id FROM sessions WHERE id = :sid",
+        {"sid": session_id}
+    )
+    node_id = session.get("knowledge_node_id") if session else None
+
+    if node_id:
+        # 查询该节点下所有 session 的复习均分
+        node_row = _fetch_one("""
+            SELECT AVG(rs.review_score)::float AS node_avg
+            FROM review_schedule rs
+            JOIN sessions s ON s.id = rs.session_id
+            WHERE s.knowledge_node_id = :nid AND rs.review_score IS NOT NULL
+        """, {"nid": node_id})
+        node_avg = node_row["node_avg"] if node_row and node_row["node_avg"] is not None else None
+
+        if node_avg is not None:
+            if node_avg >= 80:
+                node_factor = 1.5
+            elif node_avg >= 60:
+                node_factor = 1.0
+            elif node_avg >= 40:
+                node_factor = 0.7
+            else:
+                node_factor = 0.5
+            # session:node = 0.6:0.4
+            return round(session_factor * 0.6 + node_factor * 0.4, 2)
+        else:
+            return session_factor
+
+    return session_factor
+
+
 def schedule_review(session_id: int, score: int | None) -> int | None:
-    """创建复习排期（艾宾浩斯遗忘曲线）。
+    """创建复习排期（个性化艾宾浩斯遗忘曲线，Phase 4.1）。
 
-    根据已完成复习次数确定间隔：
-    - 第 1 次复习：1 天后
-    - 第 2 次复习：2 天后
-    - 第 3 次复习：6 天后
-    - 第 4 次复习：31 天后
-    - 第 5 次复习：90 天后
+    基础间隔（艾宾浩斯曲线）：
+    - R1: 1天  R2: 2天  R3: 6天  R4: 31天  R5: 90天
 
-    分数调制：score < 40 时降一档（最少 1 天）。
+    个性化调制：
+    1. 历史表现难度系数（_compute_difficulty_factor）：0.5~1.5
+       - 高分历史 → 拉长间隔；低分历史 → 缩短间隔
+    2. 即时分数调制：
+       - score < 40: 明天立即重来（1天）
+       - score 40-60: 间隔 × 0.6（加速）
+       - score >= 60: 正常应用难度系数
+    3. 最小 1 天，最大 base × 2.0（防过度拉长）
+
     已有 pending 排期时跳过，返回 None。
     """
     from datetime import date, timedelta
+    import math
 
     # 检查是否已有 pending 排期
     existing = _fetch_one(
@@ -1122,25 +1775,34 @@ def schedule_review(session_id: int, score: int | None) -> int | None:
     if existing:
         return None
 
-    # 统计已完成复习次数 → 决定下一轮间隔
+    # 统计已完成复习次数 → 决定下一轮基础间隔
     completed = _fetch_one(
         "SELECT COUNT(*) AS n FROM review_schedule WHERE session_id = :sid AND status = 'completed'",
         {"sid": session_id}
     )
     review_round = (completed["n"] if completed else 0)  # 0 = 首次复习
 
-    # 选择间隔
+    # 基础间隔
     if review_round >= len(_EBBINGHAUS_INTERVALS):
-        days = _EBBINGHAUS_INTERVALS[-1]  # 超过曲线范围用最后一档
+        base_days = _EBBINGHAUS_INTERVALS[-1]
     else:
-        days = _EBBINGHAUS_INTERVALS[review_round]
+        base_days = _EBBINGHAUS_INTERVALS[review_round]
 
-    # 分数调制：低分提前复习（降一档，最低 1 天）
+    # ── 个性化调制 ──
+    difficulty = _compute_difficulty_factor(session_id, score)
+
     if score is not None and score < 40:
-        if review_round > 0:
-            days = max(1, _EBBINGHAUS_INTERVALS[review_round - 1])
-        else:
-            days = 1
+        # 极低分：紧急复习，明天再来
+        days = 1
+    elif score is not None and score < 60:
+        # 中低分：加速复习
+        days = max(1, round(base_days * difficulty * 0.6))
+    else:
+        # 正常或高分：用难度系数
+        days = max(1, round(base_days * difficulty))
+
+    # 上限保护：不超过 base × 2.0
+    days = min(days, max(1, round(base_days * 2.0)))
 
     review_date = (date.today() + timedelta(days=days)).isoformat()
 
@@ -1281,31 +1943,8 @@ def get_command_center_data() -> dict:
         LIMIT 5
     """)
 
-    # 5. 推荐下一个知识节点：取有 session 但还没完成的节点
-    if _is_sqlite():
-        next_node_rows = _fetch_all("""
-            SELECT s.knowledge_node_id, 
-                   COUNT(*) AS total,
-                   SUM(CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END) AS done
-            FROM sessions s
-            WHERE s.knowledge_node_id IS NOT NULL
-            GROUP BY s.knowledge_node_id
-            HAVING done < total
-            ORDER BY RANDOM()
-            LIMIT 3
-        """)
-    else:
-        next_node_rows = _fetch_all("""
-            SELECT s.knowledge_node_id, 
-                   COUNT(*) AS total,
-                   COUNT(*) FILTER (WHERE s.status = 'completed') AS done
-            FROM sessions s
-            WHERE s.knowledge_node_id IS NOT NULL
-            GROUP BY s.knowledge_node_id
-            HAVING COUNT(*) FILTER (WHERE s.status = 'completed') < COUNT(*)
-            ORDER BY RANDOM()
-            LIMIT 3
-        """)
+    # 5. 推荐下一个知识节点：Phase 5 智能推荐
+    next_node_rows = get_recommended_nodes(3)
 
     return {
         "feynman_pending": feynman_pending,
@@ -1575,6 +2214,80 @@ def repair_invariants(dry_run: bool = True) -> dict:
             })
     
     return {"dry_run": dry_run, "repairs": repairs, "count": len(repairs)}
+
+
+# ── Phase 4.3: Weekly Learning Report ─────────────────────────────────
+
+def get_weekly_report_data() -> dict:
+    """聚合本周学习数据，用于生成周报。"""
+    from datetime import date, timedelta
+    today = date.today()
+    week_start = (today - timedelta(days=7)).isoformat()
+    today_str = today.isoformat()
+
+    # 1. 本周会话
+    sessions_created = _fetch_one(
+        "SELECT COUNT(*) AS n FROM sessions WHERE created_at >= :ws",
+        {"ws": week_start}
+    )["n"]
+
+    sessions_completed = _fetch_one(
+        "SELECT COUNT(*) AS n FROM sessions WHERE status = 'completed' AND updated_at >= :ws",
+        {"ws": week_start}
+    )["n"]
+
+    # 2. 本周复习
+    reviews_completed = _fetch_one(
+        "SELECT COUNT(*) AS n FROM review_schedule WHERE status = 'completed' AND completed_at >= :ws",
+        {"ws": week_start}
+    )["n"]
+
+    review_avg = _fetch_one(
+        "SELECT AVG(review_score)::float AS avg FROM review_schedule "
+        "WHERE review_score IS NOT NULL AND completed_at >= :ws",
+        {"ws": week_start}
+    )
+    review_avg_score = round(review_avg["avg"], 1) if review_avg and review_avg["avg"] else None
+
+    reviews_pending = _fetch_one(
+        "SELECT COUNT(*) AS n FROM review_schedule WHERE status = 'pending' AND review_date <= :today",
+        {"today": today_str}
+    )["n"]
+
+    # 3. 薄弱点
+    open_gaps = _fetch_one(
+        "SELECT COUNT(*) AS n FROM learning_gaps WHERE status = 'open'",
+    )["n"]
+
+    # 4. 知识节点掌握度变化（本周有活动的节点）
+    active_nodes = _fetch_all("""
+        SELECT DISTINCT s.knowledge_node_id
+        FROM sessions s
+        WHERE s.knowledge_node_id IS NOT NULL AND s.updated_at >= :ws
+    """, {"ws": week_start})
+
+    # 5. 推荐学习节点
+    recommended = get_recommended_nodes(limit=3)
+
+    # 6. 本周完成的 session 标题
+    recent_done = _fetch_all(
+        "SELECT id, title, score FROM sessions WHERE status = 'completed' AND updated_at >= :ws ORDER BY updated_at DESC LIMIT 5",
+        {"ws": week_start}
+    )
+
+    return {
+        "week_start": week_start,
+        "week_end": today_str,
+        "sessions_created": sessions_created,
+        "sessions_completed": sessions_completed,
+        "reviews_completed": reviews_completed,
+        "review_avg_score": review_avg_score,
+        "reviews_pending": reviews_pending,
+        "open_gaps": open_gaps,
+        "active_node_ids": [n["knowledge_node_id"] for n in active_nodes],
+        "recommended": recommended,
+        "recent_done": [dict(r) for r in recent_done],
+    }
 
 
 if __name__ == "__main__":

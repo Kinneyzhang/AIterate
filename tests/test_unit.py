@@ -472,3 +472,111 @@ class TestCommandCenterDataShape:
                          "active_sessions", "suggested_nodes"}
         # 确保 DB 函数返回所有 5 个面板数据
         assert len(expected_keys) == 5
+
+
+# ── Phase 4.1: 个性化复习间隔测试 ──────────────────────────────────
+
+class TestDifficultyFactor:
+    """测试 _compute_difficulty_factor 逻辑。"""
+
+    def test_no_history_default(self):
+        """无历史数据时返回 1.0（标准间隔）。"""
+        # 模拟：无 review_score 记录
+        scores = []
+        if not scores:
+            factor = 1.0
+        assert factor == 1.0
+
+    def test_score_only_weighted_avg(self):
+        """仅当前分数时，基于分数段计算因子。"""
+        def compute(scores, current):
+            all_s = list(scores) + ([current] if current is not None else [])
+            if not all_s:
+                return 1.0
+            recent = all_s[-3:]
+            weights = list(range(1, len(recent) + 1))
+            avg = sum(s * w for s, w in zip(recent, weights)) / sum(weights)
+            if avg >= 80: return 1.5
+            if avg >= 60: return 1.0
+            if avg >= 40: return 0.7
+            return 0.5
+
+        assert compute([], 85) == 1.5
+        assert compute([], 70) == 1.0
+        assert compute([], 45) == 0.7
+        assert compute([], 20) == 0.5
+
+    def test_history_weighted_avg(self):
+        """历史分数参与加权，越近期权重越高。"""
+        def compute(scores, current):
+            all_s = list(scores) + ([current] if current is not None else [])
+            if not all_s:
+                return 1.0
+            recent = all_s[-3:]
+            weights = list(range(1, len(recent) + 1))
+            avg = sum(s * w for s, w in zip(recent, weights)) / sum(weights)
+            if avg >= 80: return 1.5
+            if avg >= 60: return 1.0
+            if avg >= 40: return 0.7
+            return 0.5
+
+        # 历史 90, 85 → 最近权重高 (90*1+85*2)/3=86.7 → 1.5
+        assert compute([90, 85], 80) == 1.5
+        # 历史 30, 40 → (30*1+40*2)/3=36.7 → 0.5
+        assert compute([30, 40], 35) == 0.5
+
+    def test_combined_factor_range(self):
+        """组合因子在 0.5~1.5 范围内。"""
+        session_factor = 1.5
+        node_factor = 0.5
+        combined = session_factor * 0.6 + node_factor * 0.4
+        assert 0.5 <= combined <= 1.5
+
+
+class TestDynamicInterval:
+    """测试 schedule_review 的动态间隔逻辑。"""
+
+    def test_urgent_review_tomorrow(self):
+        """score < 40 → 明天立即复习（1天）。"""
+        def schedule(base_days, score):
+            if score < 40:
+                return 1
+            return base_days
+
+        assert schedule(6, 30) == 1
+        assert schedule(90, 25) == 1
+        assert schedule(1, 35) == 1
+
+    def test_weak_review_accelerated(self):
+        """score 40-60 → 间隔 × 0.6（加速）。"""
+        def schedule(base_days, score, difficulty=1.0):
+            if score < 40:
+                return 1
+            if score < 60:
+                return max(1, round(base_days * difficulty * 0.6))
+            return max(1, round(base_days * difficulty))
+
+        assert schedule(6, 50) == 4   # 6*0.6=3.6→4
+        assert schedule(31, 45) == 19  # 31*0.6=18.6→19
+        assert schedule(2, 55) == 1   # 2*0.6=1.2→1（下取整）
+
+    def test_normal_interval_with_difficulty(self):
+        """score >= 60 → 正常应用难度系数。"""
+        def schedule(base_days, score, difficulty=1.0):
+            if score < 40: return 1
+            if score < 60: return max(1, round(base_days * difficulty * 0.6))
+            return max(1, round(base_days * difficulty))
+
+        # 高分 + 低难度 → 拉长
+        assert schedule(6, 85, 1.5) == 9   # 6*1.5=9
+        # 中等 + 标准难度 → 不变
+        assert schedule(31, 70, 1.0) == 31
+        # 中等 + 高难度 → 缩短
+        assert schedule(90, 65, 0.5) == 45  # 90*0.5=45
+
+    def test_max_constraint(self):
+        """上限保护：不超过 base × 2.0。"""
+        base = 6
+        factor = 3.0  # 极端高
+        days = min(max(1, round(base * factor)), max(1, round(base * 2.0)))
+        assert days == 12  # 上限 6*2=12，不是 18

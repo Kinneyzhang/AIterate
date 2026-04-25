@@ -477,29 +477,24 @@ async def evaluate_review_answers(original_question: str, review_questions: list
                 "weak_points": [], "final_summary": "评估解析失败", "raw": raw, "parse_failed": True}
 
 
-# ── Phase 4.2: Review Re-explanation Evaluation ─────────────
+# ── Phase 4.2: Rubric 版本化 ───────────────────────────────
 
-REVIEW_RE_EXPLAIN_SYSTEM = """你是一位学习导师，正在评估学习者对已学知识的间隔复习效果。
-
-学习者之前学过某个主题，现在隔了一段时间重新用自己的话解释。
-请从以下维度评估：
-
-1. 概念的准确性（是否理解正确）
-2. 表达的完整性（是否涵盖核心要点）
-3. 理解的深度（是否停留在表面）
-
-请输出 JSON：
-{
-  "score": <0-100 整数，60以上=基本掌握，80以上=熟练掌握>,
-  "praise": "<做得好的方面，1-2句>",
-  "gap": "<需要加强的地方，1-2句>",
-  "verdict": "<一句话总结评价>"
-}"""
+def _resolve_rubric(role: str) -> str:
+    """从 DB 读取指定 role 的评分标准（支持用户自定义）。"""
+    import aiterate_db as db
+    rubric = db.get_rubric(role)
+    return rubric.get("content", "")
 
 
 async def evaluate_review_re_explanation(original_question: str, ai_material: str,
                                           user_explanation: str) -> dict:
-    """Phase 4.2: Evaluate a user's re-explanation during spaced repetition review."""
+    """Phase 4.2: Evaluate a user's re-explanation during spaced repetition review.
+    
+    使用 DB 中配置的 review_explain rubric（可自定义版本化）。
+    """
+    rubric = _resolve_rubric("review_explain") or (
+        "你是一位学习导师，评估学习者的间隔复习效果。输出 JSON：{score, praise, gap, verdict}"
+    )
     prompt = f"""原始问题：
 {original_question}
 
@@ -512,7 +507,7 @@ async def evaluate_review_re_explanation(original_question: str, ai_material: st
 请评估学习者在间隔复习中的表现。"""
 
     messages = [
-        {"role": "system", "content": REVIEW_RE_EXPLAIN_SYSTEM},
+        {"role": "system", "content": rubric},
         {"role": "user", "content": prompt},
     ]
     raw = await _call_llm(messages, temperature=0.3, max_tokens=400, role="review")
