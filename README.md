@@ -4,6 +4,7 @@
 
 **AI 迭代学习系统 · 问题驱动 · AI 全程伴学 · 费曼验证**
 
+[![Vue](https://img.shields.io/badge/Vue-3.x-4FC08D.svg)](https://vuejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-green.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688.svg)](https://fastapi.tiangolo.com)
@@ -423,7 +424,7 @@ AIterate/
 
 | 层次 | 技术选型 | 说明 |
 |------|----------|------|
-| 前端 | 原生 HTML / CSS / JS | 无框架 SPA，ES Module，零构建步骤 |
+| 前端 | Vue 3 + Vue Router（ES Module，零构建） | 响应式 SPA，CompAPI，importmap 加载 |
 | 后端 | Python 3.11 + FastAPI | 异步路由，后台任务调度 |
 | 数据库 | SQLAlchemy Core | 统一抽象层，SQLite / PG / MySQL |
 | AI 调用 | aiohttp | 异步 HTTP，OpenAI-compatible API |

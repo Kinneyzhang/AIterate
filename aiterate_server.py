@@ -171,10 +171,7 @@ async def startup():
 async def serve_frontend():
     token = db.get_or_create_admin_token()
     html = FRONTEND.read_text(encoding="utf-8")
-    html = html.replace(
-        '<script type="module" src="/assets/js/app.js"></script>',
-        '<script>window.AITERATE_TOKEN="' + token + '";</script>\n  <script type="module" src="/assets/js/app.js"></script>',
-    )
+    html = html.replace('"%%AITERATE_TOKEN%%"', f'"{token}"')
     return HTMLResponse(content=html)
 
 

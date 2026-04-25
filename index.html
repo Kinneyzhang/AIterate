@@ -12,20 +12,15 @@
   <link rel="stylesheet" href="/assets/themes/night.css">
   <link rel="stylesheet" href="/assets/themes/mono.css">
   <script>
+    // 主题初始化（防闪烁）
     (function () {
-    try {
-      // 两套主题 CSS 同时加载，靠 [data-theme] 选择器隔离，切换无闪烁
-      const t = localStorage.getItem('aiterate-theme') || 'night';
-      document.documentElement.dataset.theme = t;
-    } catch (_) {}
-    document.addEventListener('DOMContentLoaded', function () {
-      const t = document.documentElement.dataset.theme || 'night';
-      const btn = document.getElementById('themeToggleBtn');
-      if (btn) btn.innerHTML = t === 'mono'
-        ? '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
-        : '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-    });
+      try {
+        const t = localStorage.getItem('aiterate-theme') || 'night';
+        document.documentElement.dataset.theme = t;
+      } catch (_) {}
     })();
+    // Admin token（由服务端注入）
+    window.AITERATE_TOKEN = "%%AITERATE_TOKEN%%";
   </script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
@@ -33,82 +28,33 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" id="hljs-theme-dark" disabled>
   <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
   <script>
-    // 配置 marked 使用 highlight.js
     document.addEventListener('DOMContentLoaded', function () {
       if (window.marked && window.hljs) {
         marked.setOptions({
           highlight: function (code, lang) {
-            if (lang && hljs.getLanguage(lang)) {
-              return hljs.highlight(code, { language: lang }).value;
-            }
+            if (lang && hljs.getLanguage(lang)) return hljs.highlight(code, { language: lang }).value;
             return hljs.highlightAuto(code).value;
           }
         });
       }
     });
-    // 跟随主题切换 hljs css
     function syncHljsTheme(theme) {
       document.getElementById('hljs-theme-light').disabled = (theme !== 'mono');
       document.getElementById('hljs-theme-dark').disabled  = (theme === 'mono');
     }
-    try {
-      syncHljsTheme(localStorage.getItem('aiterate-theme') || 'night');
-    } catch (_) {}
+    try { syncHljsTheme(localStorage.getItem('aiterate-theme') || 'night'); } catch (_) {}
+  </script>
+  <script type="importmap">
+  {
+    "imports": {
+      "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js",
+      "vue-router": "https://unpkg.com/vue-router@4/dist/vue-router.esm-browser.js"
+    }
+  }
   </script>
 </head>
 <body>
-
-  <!-- ── topbar ───────────────────────────────────────────────────────────── -->
-  <header class="topbar">
-    <button class="btn sidebar-toggle" id="sidebarToggle" title="折叠/展开" onclick="window.app.toggleSidebar()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
-    <div class="topbar-title"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/></svg> AIterate</div>
-    <div class="topbar-actions">
-      <button class="btn btn-sm" id="knowledgeTreeBtn" title="知识地图" onclick="window.app.showKnowledgeTree()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></button>
-      <button class="btn btn-sm" id="commandCenterBtn" title="指挥中心" onclick="window.app.showCommandCenter()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></button>
-      <button class="btn btn-sm" title="设置" onclick="window.app.openSettings()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-      <button class="btn btn-icon" title="新建问题/观点" onclick="window.app.openNewSession()">＋</button>
-      <button class="btn btn-sm" id="themeToggleBtn" onclick="window.app.toggleTheme()" title="切换主题"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
-    </div>
-  </header>
-
-  <!-- ── sidebar overlay (mobile) ─────────────────────────────────────────── -->
-  <div class="sidebar-overlay" id="sidebarOverlay" onclick="window.app.toggleSidebar()"></div>
-
-  <!-- ── layout ───────────────────────────────────────────────────────────── -->
-  <div class="workspace-shell">
-
-    <!-- sidebar -->
-    <aside class="sidebar" id="sessionSidebar">
-      <div class="sidebar-head">
-        <div class="sidebar-head-row">
-          <div class="sidebar-title">会话 </div>
-          <span id="sessionStats" class="sidebar-stat"></span>
-        </div>
-      </div>
-      <div class="session-list" id="sessionList">
-        <div class="sidebar-empty">加载中…</div>
-      </div>
-      <div class="sidebar-resizer" id="sidebarResizer"></div>
-    </aside>
-
-    <!-- main -->
-    <main class="main-pane">
-
-      <!-- notice bar -->
-      <div id="noticeBar" class="notice-bar"></div>
-
-      <!-- workspace -->
-      <div id="workspacePanel">
-        <div class="empty-state">
-          <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></div>
-          <h3>从左侧选一个 session，或点 ＋ 新建</h3>
-          <p>每个问题 / 观点都是独立迭代单元，经过三个阶段走向完成。</p>
-        </div>
-      </div>
-
-    </main>
-  </div>
-
-  <script type="module" src="/assets/js/app.js"></script>
+  <div id="app"></div>
+  <script type="module" src="/assets/js/vue/main.js?v=003"></script>
 </body>
 </html>
