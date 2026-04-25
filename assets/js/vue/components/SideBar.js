@@ -1,7 +1,7 @@
 // ── SideBar.js ── 精确复刻原版 sidebar ───────────────────────────────────
 
 import { defineComponent, computed, ref, onMounted } from 'vue';
-import { store, getStageMeta, formatDate } from '../store.js?v=027';
+import { store, getStageMeta, formatDate } from '../store.js';
 
 export default defineComponent({
   props: { sessions: Array, selectedId: Number, expanded: Boolean },

@@ -146,12 +146,30 @@ def _jsonb() -> str:
 def _now_str() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-def _ensure_column(conn, table: str, column: str, col_type: str):
-    """SQLite only: add column if it doesn't exist (idempotent)."""
-    rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
-    existing = {r[1] for r in rows}
-    if column not in existing:
-        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+def _ensure_column(conn, table: str, column: str, col_type: str, default: str = None):
+    """Add column if it doesn't exist (idempotent). Works for SQLite and PostgreSQL."""
+    cfg = load_db_config()
+    db_type = cfg.get("type", "")
+
+    if db_type == "sqlite":
+        rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
+        existing = {r[1] for r in rows}
+        if column not in existing:
+            ddl = f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
+            if default is not None:
+                ddl += f" DEFAULT {default}"
+            conn.execute(text(ddl))
+    else:
+        # PostgreSQL
+        rows = conn.execute(text(
+            "SELECT column_name FROM information_schema.columns"
+            " WHERE table_name=:t AND column_name=:c"
+        ), {"t": table, "c": column}).fetchall()
+        if not rows:
+            ddl = f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
+            if default is not None:
+                ddl += f" DEFAULT {default}"
+            conn.execute(text(ddl))
 
 from contextlib import contextmanager
 
@@ -229,6 +247,7 @@ def init_db():
                 score           INTEGER,
                 review_report   TEXT,
                 knowledge_node_id TEXT,
+                web_search      INTEGER     NOT NULL DEFAULT 0,
                 error_msg       TEXT,
                 created_at      TEXT        NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT        NOT NULL DEFAULT (datetime('now'))
@@ -245,6 +264,7 @@ def init_db():
                 score      SMALLINT,
                 review_report {jb},
                 knowledge_node_id TEXT,
+                web_search      SMALLINT    NOT NULL DEFAULT 0,
                 error_msg  TEXT,
                 created_at {ts} NOT NULL DEFAULT NOW(),
                 updated_at {ts} NOT NULL DEFAULT NOW()
@@ -253,11 +273,11 @@ def init_db():
                 "CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at DESC)"
             ))
 
-        # ── 迁移：为已有 SQLite 表添加缺失列 ──
-        if sqlite:
-            _ensure_column(conn, "sessions", "review_report", "TEXT")
-            _ensure_column(conn, "sessions", "knowledge_node_id", "TEXT")
-            _ensure_column(conn, "rounds", "eval_json", "TEXT")
+        # ── 迁移：为已有表添加缺失列（SQLite + PostgreSQL）──
+        _ensure_column(conn, "sessions", "review_report", "TEXT")
+        _ensure_column(conn, "sessions", "knowledge_node_id", "TEXT")
+        _ensure_column(conn, "sessions", "web_search", "SMALLINT", "0")
+        _ensure_column(conn, "rounds", "eval_json", "TEXT")
 
         # rounds
         if sqlite:
@@ -528,17 +548,17 @@ def upsert_profile(**kwargs) -> dict:
 
 # ── Sessions ───────────────────────────────────────────────────────────────────
 
-def create_session(title: str, content: str = "", type: str = "question") -> int:
+def create_session(title: str, content: str = "", type: str = "question", web_search: bool = False) -> int:
     if _is_sqlite():
         return _insert_returning_id("""
-        INSERT INTO sessions (title, content, type, status)
-        VALUES (:title, :content, :type, 'preparing') RETURNING id
-        """, {"title": title, "content": content, "type": type})
+        INSERT INTO sessions (title, content, type, status, web_search)
+        VALUES (:title, :content, :type, 'preparing', :web_search) RETURNING id
+        """, {"title": title, "content": content, "type": type, "web_search": int(web_search)})
     else:
         return _insert_returning_id("""
-        INSERT INTO sessions (title, content, type, status)
-        VALUES (:title, :content, :type, 'preparing') RETURNING id
-        """, {"title": title, "content": content, "type": type})
+        INSERT INTO sessions (title, content, type, status, web_search)
+        VALUES (:title, :content, :type, 'preparing', :web_search) RETURNING id
+        """, {"title": title, "content": content, "type": type, "web_search": int(web_search)})
 
 def get_session(session_id: int) -> dict | None:
     return _fetch_one("SELECT * FROM sessions WHERE id = :id", {"id": session_id})

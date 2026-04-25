@@ -1,9 +1,9 @@
 // ── NewSessionModal.js ────────────────────────────────────────────────────
 
 import { defineComponent, ref, onMounted } from 'vue';
-import { api } from '../../api.js?v=027';
-import { icon } from '../../icons.js?v=027';
-import { setNotice } from '../../store.js?v=027';
+import { api } from '../../api.js';
+import { icon } from '../../icons.js';
+import { setNotice } from '../../store.js';
 
 export default defineComponent({
   emits: ['close', 'created'],

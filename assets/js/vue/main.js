@@ -2,9 +2,9 @@
 
 import { createApp } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
-import { store, setNotice } from './store.js?v=027';
-import { api } from './api.js?v=027';
-import AppRoot from './components/AppRoot.js?v=027';
+import { store, setNotice } from './store.js';
+import { api } from './api.js';
+import AppRoot from './components/AppRoot.js';
 
 // ── 路由结构 ─────────────────────────────────────────────────────────────────
 //

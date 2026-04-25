@@ -1,7 +1,7 @@
 // ── LoginModal.js ── Phase 4.3: Login overlay ──────────────────────────────
 
 import { defineComponent, ref } from 'vue';
-import { api } from '../../api.js?v=027';
+import { api } from '../../api.js';
 
 export default defineComponent({
   emits: ['authenticated'],

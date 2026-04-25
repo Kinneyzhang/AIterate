@@ -2,16 +2,16 @@
 
 import { defineComponent, watch, computed, ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { store, setNotice } from '../store.js?v=027';
-import { api } from '../api.js?v=027';
-import TopBar from './TopBar.js?v=027';
-import SideBar from './SideBar.js?v=027';
-import Workspace from './Workspace.js?v=027';
-import NewSessionModal from './modals/NewSessionModal.js?v=027';
-import SettingsModal from './modals/SettingsModal.js?v=027';
-import KnowledgeTreeModal from './modals/KnowledgeTreeModal.js?v=027';
-import CommandCenterModal from './modals/CommandCenterModal.js?v=027';
-import LoginModal from './modals/LoginModal.js?v=027';
+import { store, setNotice } from '../store.js';
+import { api } from '../api.js';
+import TopBar from './TopBar.js';
+import SideBar from './SideBar.js';
+import Workspace from './Workspace.js';
+import NewSessionModal from './modals/NewSessionModal.js';
+import SettingsModal from './modals/SettingsModal.js';
+import KnowledgeTreeModal from './modals/KnowledgeTreeModal.js';
+import CommandCenterModal from './modals/CommandCenterModal.js';
+import LoginModal from './modals/LoginModal.js';
 
 export default defineComponent({
   components: { TopBar, SideBar, Workspace, NewSessionModal, SettingsModal, KnowledgeTreeModal, CommandCenterModal, LoginModal },

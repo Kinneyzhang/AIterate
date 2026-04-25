@@ -23,11 +23,13 @@ import aiterate_ai as ai
 logger = logging.getLogger("aiterate")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 
-FRONTEND = Path(__file__).parent / "index.html"
-ASSETS_DIR = Path(__file__).parent / "assets"
+FRONTEND = Path(__file__).parent / "dist" / "index.html"
+ASSETS_DIR = Path(__file__).parent / "dist" / "assets"
+VENDOR_DIR = Path(__file__).parent / "dist" / "vendor"
 
 app = FastAPI(title="AIIterate API", version="3.0.0")
 app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+app.mount("/vendor", StaticFiles(directory=str(VENDOR_DIR)), name="vendor")
 
 
 # ── Auth System (Phase 4.3: Cookie-based session auth) ─────
@@ -134,6 +136,14 @@ async def healthz():
         "db_type": db.load_db_config().get("type", "unknown"),
         "version": "3.0.0",
     }
+
+
+@app.get("/favicon.svg")
+async def favicon():
+    favicon_path = Path(__file__).parent / "dist" / "favicon.svg"
+    if not favicon_path.exists():
+        favicon_path = Path(__file__).parent / "assets" / "favicon.svg"
+    return FileResponse(favicon_path, media_type="image/svg+xml")
 
 
 app.add_middleware(
@@ -262,7 +272,7 @@ async def startup():
                         db.create_job(
                             "generate_session_answer",
                             {"session_id": s["id"], "content": s.get("content", ""),
-                             "type": s.get("type", "question"), "web_search": False,
+                             "type": s.get("type", "question"), "web_search": s.get("web_search", False),
                              "knowledge_node_id": s.get("knowledge_node_id")},
                         )
                         retried += 1
@@ -540,6 +550,7 @@ async def create_session_and_answer(body: SessionCreate):
         title=temp_title,
         content=body.content,
         type=body.type,
+        web_search=body.web_search,
     )
     db.update_session(sid, status="preparing")
 
@@ -673,7 +684,8 @@ async def deepen(session_id: int, body: DeepenRequest):
             {"question": r.get("input", ""), "answer": r.get("output", "")}
             for r in rounds if r.get("type") == "press"
         ]
-        answer_result = await ai.answer_followup_question(original_question, ai_answer, body.content, history)
+        answer_result = await ai.answer_followup_question(original_question, ai_answer, body.content, history,
+                                                           web_search=session.get("web_search", False))
         rid = db.create_round_with_seq(
             session_id=session_id, type="press",
             input=body.content, output=answer_result["answer"],
@@ -770,7 +782,8 @@ async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
             raise HTTPException(404, "Feynman group not found")
 
         questions = [r["input"] for r in feynman_rounds]
-        eval_result = await ai.evaluate_review_answers(session["title"], questions, body.answers)
+        eval_result = await ai.evaluate_review_answers(session["title"], questions, body.answers,
+                                                        web_search=session.get("web_search", False))
         pass_score = db.get_settings().get("feynman_pass_score", 60)
         passed = eval_result["final_score"] >= pass_score
         new_status = "completed" if passed else "revising"
@@ -1028,7 +1041,7 @@ async def retry_preparing(session_id: int):
     db.create_job(
         "generate_session_answer",
         {"session_id": session_id, "content": session.get("content", ""),
-         "type": session.get("type", "question"), "web_search": False,
+         "type": session.get("type", "question"), "web_search": session.get("web_search", False),
          "knowledge_node_id": session.get("knowledge_node_id")},
     )
     return {"ok": True, "session_id": session_id, "status": "preparing"}

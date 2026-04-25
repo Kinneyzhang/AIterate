@@ -9,3 +9,7 @@ __pycache__/
 learn.db
 assets/fonts/
 config/db.json
+
+dist/
+node_modules/
+package-lock.json

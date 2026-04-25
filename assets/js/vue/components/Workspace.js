@@ -2,8 +2,8 @@
 
 import { defineComponent, ref, watch, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { store, currentSession, currentRounds, feynmanGroup, unresolvedGaps, reviewReport, knowledgeNode, setNotice, getStageMeta, escapeHtml, renderMarkdown, formatDate } from '../store.js?v=027';
-import { api } from '../api.js?v=027';
+import { store, currentSession, currentRounds, feynmanGroup, unresolvedGaps, reviewReport, knowledgeNode, setNotice, getStageMeta, escapeHtml, renderMarkdown, formatDate } from '../store.js';
+import { api } from '../api.js';
 
 export default defineComponent({
   emits: ['refresh'],

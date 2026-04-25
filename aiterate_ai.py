@@ -124,6 +124,20 @@ async def _call_llm(messages: list, temperature: float = 0.7, max_tokens: int = 
 
 # ── Tavily web search ─────────────────────────────────────
 
+def _clean_search_query(question: str) -> str:
+    """从用户输入中提取干净的搜索关键词，去掉大段引用和噪声。"""
+    # 取第一段——遇到引用分隔符或空行就截断
+    for sep in ['下面是原文', '原文如下', '以下是原文', '下面是', '\n\n', '\n']:
+        idx = question.find(sep)
+        if idx > 10:  # 至少保留 10 个字
+            question = question[:idx].strip()
+            break
+    # 截断到 ~120 字，太长的 query 对 Tavily 效果差
+    if len(question) > 120:
+        question = question[:120].rsplit('，', 1)[0].rsplit('。', 1)[0]
+    return question.strip()
+
+
 async def tavily_search(query: str) -> str:
     """调用 Tavily API 搜索，返回摘要文本（用于注入 prompt）"""
     import aiterate_db as db
@@ -193,7 +207,8 @@ async def generate_initial_answer(title: str, content: str, type: str = "questio
 
     if web_search:
         try:
-            search_results = await tavily_search(question)
+            clean_query = _clean_search_query(question)
+            search_results = await tavily_search(clean_query)
             system_prompt = (
                 ANSWER_SYSTEM
                 + f"\n\n【联网搜索参考资料】\n{search_results}\n\n请结合以上最新资料给出答案，可以引用具体信息，但要用自己的语言组织。"
@@ -275,11 +290,26 @@ FOLLOWUP_ANSWER_SYSTEM = """你是一位耐心的导师，正在回答学习者�
 - 200-400字，清晰简洁
 - 结尾不要再追问"""
 
-async def answer_followup_question(original_question: str, ai_answer: str, press_input: str, history: list = None) -> dict:
+async def answer_followup_question(original_question: str, ai_answer: str, press_input: str,
+                                   history: list = None, web_search: bool = False) -> dict:
     history_text = ""
     if history:
         for h in history[-3:]:
             history_text += f"\n之前的追问：{h.get('question', '')}\n回答：{h.get('answer', '')[:200]}\n"
+
+    system_prompt = FOLLOWUP_ANSWER_SYSTEM
+
+    # 如果初始选了联网搜索，追问也联网
+    if web_search:
+        try:
+            clean_query = _clean_search_query(press_input)
+            search_results = await tavily_search(clean_query)
+            system_prompt = (
+                FOLLOWUP_ANSWER_SYSTEM
+                + f"\n\n【联网搜索参考资料】\n{search_results}\n\n请结合以上最新资料回答追问。"
+            )
+        except Exception:
+            pass
 
     prompt = f"""原始问题/观点：{original_question}
 初始回答摘要：{ai_answer[:400]}
@@ -289,7 +319,7 @@ async def answer_followup_question(original_question: str, ai_answer: str, press
 请回答这个追问。"""
 
     messages = [
-        {"role": "system", "content": FOLLOWUP_ANSWER_SYSTEM},
+        {"role": "system", "content": system_prompt},
         {"role": "user",   "content": prompt},
     ]
     raw = await _call_llm(messages, temperature=0.5, max_tokens=800, role="deepen")
@@ -402,7 +432,8 @@ REVIEW_EVAL_SYSTEM = """你是一位考官，正在评估学习者的费曼检�
 
 item_scores 数组长度必须与题目数量完全一致。"""
 
-async def evaluate_review_answers(original_question: str, review_questions: list, review_answers: list) -> dict:
+async def evaluate_review_answers(original_question: str, review_questions: list, review_answers: list,
+                                   web_search: bool = False) -> dict:
     qa_pairs = "\n".join([f"题目：{q}\n回答：{a}" for q, a in zip(review_questions, review_answers)])
     prompt = f"""主题：{original_question}
 
@@ -411,8 +442,21 @@ async def evaluate_review_answers(original_question: str, review_questions: list
 
 请评估学习者的掌握程度。"""
 
+    system_prompt = REVIEW_EVAL_SYSTEM
+
+    if web_search:
+        try:
+            clean_query = _clean_search_query(original_question)
+            search_results = await tavily_search(clean_query)
+            system_prompt = (
+                REVIEW_EVAL_SYSTEM
+                + f"\n\n【联网搜索参考资料】\n{search_results}\n\n请结合以上最新资料评估学习者的回答准确性和深度。"
+            )
+        except Exception:
+            pass
+
     messages = [
-        {"role": "system", "content": REVIEW_EVAL_SYSTEM},
+        {"role": "system", "content": system_prompt},
         {"role": "user",   "content": prompt},
     ]
     raw = await _call_llm(messages, temperature=0.3, max_tokens=600, role="review")

@@ -2,7 +2,7 @@
 
 import { defineComponent } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { store } from '../store.js?v=027';
+import { store } from '../store.js';
 
 export default defineComponent({
   emits: ['toggle-sidebar', 'refresh'],

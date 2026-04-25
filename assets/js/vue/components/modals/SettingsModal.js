@@ -2,9 +2,9 @@
 
 import { defineComponent, ref, onMounted, reactive, nextTick, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { api } from '../../api.js?v=027';
-import { icon } from '../../icons.js?v=027';
-import { setNotice } from '../../store.js?v=027';
+import { api } from '../../api.js';
+import { icon } from '../../icons.js';
+import { setNotice } from '../../store.js';
 
 const PROVIDER_PRESETS = {
   openai: { base_url: 'https://api.openai.com/v1', models: 'gpt-4o / gpt-4o-mini / o1' },

@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AIterate</title>
-  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/fonts.css?v=027">
-  <link rel="stylesheet" href="/assets/app.css?v=027">
-  <link rel="stylesheet" href="/assets/themes/night.css?v=027">
-  <link rel="stylesheet" href="/assets/themes/mono.css?v=027">
-  <link rel="stylesheet" href="/assets/vendor/github.min.css" id="hljs-theme-light">
-  <link rel="stylesheet" href="/assets/vendor/github-dark.min.css" id="hljs-theme-dark" disabled>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/assets/fonts.css">
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/themes/night.css">
+  <link rel="stylesheet" href="/assets/themes/mono.css">
+  <link rel="stylesheet" href="/vendor/github.min.css" id="hljs-theme-light">
+  <link rel="stylesheet" href="/vendor/github-dark.min.css" id="hljs-theme-dark" disabled>
   <script>
     (function () {
       try {
@@ -23,9 +23,9 @@
       });
     })();
   </script>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/vendor/purify.min.js"></script>
-  <script src="/assets/vendor/highlight.min.js"></script>
+  <script src="/vendor/marked.min.js"></script>
+  <script src="/vendor/purify.min.js"></script>
+  <script src="/vendor/highlight.min.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       if (window.marked && window.hljs) {
@@ -42,19 +42,10 @@
       document.getElementById('hljs-theme-dark').disabled  = (theme === 'mono');
     }
   </script>
-  <script type="importmap">
-  {
-    "imports": {
-      "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js",
-      "vue-router": "https://unpkg.com/vue-router@4/dist/vue-router.esm-browser.js",
-      "@vue/devtools-api": "https://unpkg.com/@vue/devtools-api@6/lib/esm/index.js"
-    }
-  }
-  </script>
 </head>
 <body>
-  <div id="app"><!-- Vue mounts here, template matches original DOM exactly --></div>
+  <div id="app"><!-- Vue mounts here --></div>
   <script>window.AITERATE_TOKEN="%%AITERATE_TOKEN%%";</script>
-  <script type="module" src="/assets/js/vue/main.js?v=027"></script>
+  <script type="module" src="/assets/js/vue/main.js"></script>
 </body>
 </html>
