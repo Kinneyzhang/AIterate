@@ -26,12 +26,10 @@
   - [方式三：裸机运行](#方式三裸机运行)
   - [方式四：systemd 服务](#方式四systemd-服务)
 - [配置指南](#-配置指南)
-  - [LLM 配置](#llm-配置)
-  - [数据库配置](#数据库配置)
-  - [联网搜索](#联网搜索可选)
 - [架构概览](#-架构概览)
 - [项目结构](#-项目结构)
 - [技术栈](#-技术栈)
+- [安全设计](#-安全设计)
 - [开发与贡献](#-开发与贡献)
 - [License](#-license)
 
@@ -59,23 +57,30 @@
 ## ✨ 功能特性
 
 ### 学习核心
+
 | 功能 | 说明 |
 |------|------|
 | 📝 **AI 材料生成** | 输入问题，AI 自动生成结构化学习材料 |
-| 🤔 **理解评分（Take）** | 写下你的理解，AI 给出评分 + 深化建议 |
+| 🤔 **理解评分（Take）** | 写下你的理解，AI 给出评分 + 薄弱点定位 |
 | ❓ **追问深化（Press）** | 随时追问疑点，AI 直接解答 |
-| 🎓 **费曼自测（Feynman）** | AI 出多道考题，用户作答，AI 逐题评分，低于 60 分退回重学 |
-| 🌲 **知识树管理** | 计算机 / 写作 / 心理学 / 哲学四大领域，支持自定义扩展 |
+| 🎓 **费曼自测（Feynman）** | AI 出多道考题，逐题评分，低于及格线退回重学 |
+| 🗺️ **知识地图** | 计算机/写作/心理学/哲学四大领域，卡片式展示已学知识点 |
+| 🎯 **指挥中心** | 待完成费曼、今日复习、待修正 session 一览 |
+| 📋 **薄弱点追踪** | 每次理解评价提取 gap，持久化并在深化页集中展示 |
+| 📊 **学习报告** | 费曼完成后生成掌握度/强项/弱项/复习建议报告 |
+| 🔁 **间隔复习** | 完成 session 后自动排期下次复习，逾期高亮提醒 |
 
 ### 技术能力
+
 | 功能 | 说明 |
 |------|------|
 | 🤖 **多 Provider 支持** | DeepSeek / Kimi / 豆包 / GitHub Copilot / 任意 OpenAI-compatible API |
-| 🎭 **角色级 LLM 配置** | 标题生成、材料回答、评价、追问、深化——每个角色可用不同模型 |
+| 🎭 **角色级 LLM 配置** | 标题生成、材料回答、评价、追问、深化——每个角色可独立配置模型 |
 | 🌐 **联网搜索增强** | Tavily API 集成，时效性问题自动触发实时搜索 |
 | 🗄️ **多数据库支持** | SQLite（零配置）/ PostgreSQL / MySQL，UI 中切换无需重启 |
 | 🎨 **双主题** | 暗色（night）/ 亮色（mono），无抖动切换 |
 | 🏠 **完全自托管** | 所有数据本地存储，无任何外部依赖或数据上传 |
+| 🔐 **安全加固** | Admin token 鉴权、密钥掩码、DOMPurify XSS 防护、CORS 白名单 |
 
 ---
 
@@ -87,15 +92,18 @@
 │     └─→ AI 生成学习材料（status: preparing → learning）            │
 │                                                                  │
 │  ② 阅读 + 写理解                                                   │
-│     └─→ AI 评分 + 给出深化方向（status: deepening）                │
+│     └─→ AI 评分 + 定位薄弱点（status: deepening）                  │
 │                                                                  │
 │  ③ 追问 / 深化（可选，多轮）                                        │
-│     └─→ AI 直接解答追问                                            │
+│     └─→ AI 直接解答追问 + 持续定位薄弱点                            │
 │                                                                  │
 │  ④ 费曼自测                                                        │
 │     └─→ AI 出题（3～5道）→ 用户作答 → AI 逐题评分                   │
-│         ├── 平均分 ≥ 60  →  completed ✅                          │
+│         ├── 平均分 ≥ 60  →  completed ✅ + 生成学习报告             │
 │         └── 平均分 < 60  →  revising（退回重学）🔁                 │
+│                                                                  │
+│  ⑤ 复习计划                                                        │
+│     └─→ 自动排期下次复习（低分 1 天 / 中等 3-5 天 / 高分 7-14 天）  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -150,7 +158,7 @@ docker compose up -d
 
 **4. 访问**
 
-打开浏览器访问 `http://localhost:7070`，点击右上角 ⚙ **设置**，填入你的 LLM API Key，即可开始学习。
+打开浏览器访问 `http://localhost:7070`，点击右上角设置按钮，填入你的 LLM API Key，即可开始学习。
 
 **常用命令：**
 
@@ -273,7 +281,6 @@ uvicorn aiterate_server:app --host 0.0.0.0 --port 7070
 适合在 Linux 服务器上长期运行，开机自启，自动重启。
 
 ```bash
-# 创建 systemd 用户服务（无需 root 权限）
 mkdir -p ~/.config/systemd/user
 
 cat > ~/.config/systemd/user/aiterate.service << EOF
@@ -292,22 +299,15 @@ RestartSec=5
 WantedBy=default.target
 EOF
 
-# 替换实际路径
-# WorkingDirectory 和 ExecStart 中的路径请修改为实际安装目录和 Python 路径
-
 systemctl --user daemon-reload
 systemctl --user enable --now aiterate
-
-# 查看状态
-systemctl --user status aiterate
-journalctl --user -u aiterate -f
 ```
 
 ---
 
 ## ⚙ 配置指南
 
-所有配置通过页面右上角 **⚙ 设置** 完成，无需修改任何配置文件。
+所有配置通过页面右上角设置入口完成，无需修改任何配置文件。
 
 ### LLM 配置
 
@@ -317,7 +317,7 @@ journalctl --user -u aiterate -f
 |------|------|
 | Provider | 选择预设（deepseek / kimi / 豆包 / copilot）或选「自定义」手动填 Base URL |
 | Base URL | API 地址，选预设后自动填充 |
-| API Key | 对应 Provider 的密钥 |
+| API Key | 对应 Provider 的密钥（已配置时显示为掩码，留空不修改） |
 | 默认模型 | 全局默认，各角色未单独配置时使用此模型 |
 
 **预设 Provider 信息：**
@@ -341,32 +341,13 @@ journalctl --user -u aiterate -f
 
 ### 数据库配置
 
-进入 **设置 → 数据库**，支持三种数据库：
+进入 **设置 → 数据库**，支持三种数据库。切换后点击保存，服务自动重连，无需重启。
 
-**SQLite**（推荐个人使用）
-```
-文件路径：/data/aiterate.db（Docker 内路径，对应宿主机 ./data/）
-```
-
-**PostgreSQL**
-```
-Host / Port / 数据库名 / 用户名 / 密码
-```
-
-**MySQL**
-```
-Host / Port / 数据库名 / 用户名 / 密码
-```
-
-> 切换数据库后点击保存，服务会自动重连，**无需重启**。
->
-> ⚠️ 注意：切换数据库不会迁移历史数据，请提前做好备份。
+> ⚠️ 切换数据库不会迁移历史数据，请提前做好备份。
 
 ### 联网搜索（可选）
 
-进入 **设置 → 联网搜索**，填入 [Tavily API Key](https://app.tavily.com)。
-
-启用后，系统会自动判断问题是否具有时效性（如"最新版本"、"今年"等），并触发实时网络搜索，将搜索结果作为上下文注入 AI 回答。
+进入 **设置 → 联网搜索**，填入 [Tavily API Key](https://app.tavily.com)。启用后系统自动判断问题时效性并触发实时搜索。
 
 ---
 
@@ -381,25 +362,21 @@ Host / Port / 数据库名 / 用户名 / 密码
 ┌────────────────────────▼────────────────────────────┐
 │            FastAPI  (aiterate_server.py)             │
 │         路由 / 参数校验 / 后台任务调度                  │
+│         鉴权 (_require_admin) / CORS 白名单           │
 └──────────┬──────────────────────┬───────────────────┘
            │                      │
 ┌──────────▼──────────┐  ┌────────▼──────────────────┐
 │   aiterate_db.py    │  │      aiterate_ai.py        │
 │  SQLAlchemy Core    │  │  LLM 调用 / Prompt 构建     │
 │  多数据库 CRUD 封装   │  │  Tavily 联网搜索            │
+│  事务化写入           │  │  JSON 鲁棒解析             │
 └──────────┬──────────┘  └────────────────────────────┘
            │
 ┌──────────▼──────────────────────────────────────────┐
 │            Database（SQLite / PG / MySQL）           │
-│              sessions  /  rounds  /  profile        │
+│   sessions / rounds / review_reports / profile      │
 └─────────────────────────────────────────────────────┘
 ```
-
-**数据模型简述：**
-
-- `sessions` — 每个学习会话（topic、status、stage、type 等）
-- `rounds` — 会话下的每一轮交互（take/press/feynman，含 input/output/score）
-- `profile` — 系统配置（LLM 设置、主题、知识树等）
 
 ---
 
@@ -408,29 +385,35 @@ Host / Port / 数据库名 / 用户名 / 密码
 ```
 AIterate/
 ├── index.html                  # SPA 入口
-├── aiterate_server.py          # FastAPI 路由层
-├── aiterate_db.py              # 数据库 CRUD（SQLAlchemy Core）
+├── aiterate_server.py          # FastAPI 路由层（含鉴权）
+├── aiterate_db.py              # 数据库 CRUD（SQLAlchemy Core，事务化）
 ├── aiterate_ai.py              # LLM 调用 / Prompt / Tavily
-├── aiterate_flow.py            # 流程辅助模块
 ├── requirements.txt            # Python 依赖
 ├── Dockerfile                  # Docker 镜像构建
 ├── docker-compose.yml          # Docker Compose 编排
 ├── config/
 │   ├── db.json                 # 数据库配置（gitignored，含密码）
-│   └── db.json.example         # 配置模板（入库）
+│   ├── db.json.example         # 配置模板（入库）
+│   └── knowledge_tree.json     # 知识树领域定义
 ├── assets/
 │   ├── app.css                 # 全局基础样式
+│   ├── fonts.css               # 字体声明
 │   ├── themes/
 │   │   ├── night.css           # 暗色主题
 │   │   └── mono.css            # 亮色主题
 │   └── js/
-│       ├── app.js              # 主入口，状态协调
+│       ├── app.js              # 主入口，状态协调，知识地图，指挥中心
 │       ├── api.js              # 所有 HTTP 请求封装
 │       ├── sidebar.js          # 左侧会话列表
-│       ├── workspace.js        # 右侧工作区（学习主界面）
-│       ├── settings.js         # 设置弹窗（4 个 tab）
-│       └── utils.js            # 常量 / 工具函数
-├── tests/                      # 测试脚本
+│       ├── workspace.js        # 右侧工作区（学习/深化/费曼三 tab）
+│       ├── modal.js            # 新建 session 弹窗 + 知识节点推荐
+│       ├── settings.js         # 设置弹窗（5 个 tab）
+│       └── utils.js            # 工具函数 + SVG 图标库
+├── tests/
+│   ├── conftest.py             # pytest 配置
+│   ├── test_unit.py            # 19 个离线单测（CI 稳定）
+│   └── live_full_flow.py       # 全量 AI 回归测试（手动运行）
+├── README.md
 └── DESIGN.md                   # 详细系统设计文档
 ```
 
@@ -440,13 +423,28 @@ AIterate/
 
 | 层次 | 技术选型 | 说明 |
 |------|----------|------|
-| 前端 | 原生 HTML / CSS / JavaScript | 无框架 SPA，零构建步骤 |
+| 前端 | 原生 HTML / CSS / JS | 无框架 SPA，ES Module，零构建步骤 |
 | 后端 | Python 3.11 + FastAPI | 异步路由，后台任务调度 |
-| 数据库 | SQLAlchemy Core | 统一抽象层，支持 SQLite / PG / MySQL |
+| 数据库 | SQLAlchemy Core | 统一抽象层，SQLite / PG / MySQL |
 | AI 调用 | aiohttp | 异步 HTTP，OpenAI-compatible API |
 | 搜索增强 | Tavily API | 实时网络搜索，结构化结果 |
+| 安全 | DOMPurify + Admin Token | XSS 防护，接口鉴权 |
+| 图标 | 内联 SVG | 17 个 Lucide 风格图标，全平台一致 |
 | 字体 | LXGW WenKai Screen | 霞鹜文楷屏幕版，subset 分片加载 |
 | 容器化 | Docker + Compose | 一键部署，数据持久化 |
+
+---
+
+## 🔐 安全设计
+
+| 措施 | 说明 |
+|------|------|
+| **Admin Token** | 首次启动自动生成 UUID token 注入 HTML，写操作需 `X-Admin-Token` 头 |
+| **密钥掩码** | API Key 返回 `sk-...abcd`，前端留空表示不修改，`__CLEAR__` 清除 |
+| **CORS 白名单** | 限定 `localhost` + `127.0.0.1` + 局域网 IP，非 `*` 通配 |
+| **XSS 防护** | DOMPurify 消毒 AI 输出 Markdown，白名单标签和属性 |
+| **输入限制** | Session 20000 / Deepen 10000 / Feynman 5000 字符上限 |
+| **DB 配置安全** | 先测试候选配置再保存，防止坏配置落盘导致服务崩溃 |
 
 ---
 
@@ -460,15 +458,19 @@ cd AIterate
 
 pip install -r requirements.txt
 cp config/db.json.example config/db.json
-# 编辑 config/db.json
-
 python aiterate_db.py
 uvicorn aiterate_server:app --host 0.0.0.0 --port 7070 --reload
 ```
 
-`--reload` 开启热重载，修改 Python 文件后自动重启。
+**运行测试：**
 
-前端文件（HTML/CSS/JS）修改后**刷新浏览器**即可生效，无需重启服务。
+```bash
+# 离线单测（CI 稳定）
+pytest tests/test_unit.py -q
+
+# 全量 AI 回归（消耗额度，手动运行）
+python tests/live_full_flow.py
+```
 
 **详细设计文档：** [DESIGN.md](./DESIGN.md)
 
