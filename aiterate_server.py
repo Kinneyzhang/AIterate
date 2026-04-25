@@ -360,12 +360,12 @@ async def update_db_config(body: DbConfigUpdate):
     return {"ok": True}
 
 
-@app.get("/api/knowledge-tree")
+@app.get("/api/knowledge-tree", dependencies=[Depends(_require_admin)])
 async def get_knowledge_tree():
     return {"tree": db.get_knowledge_tree()}
 
 
-@app.get("/api/profile")
+@app.get("/api/profile", dependencies=[Depends(_require_admin)])
 async def get_profile():
     p = db.get_profile()
     return {"id": p["id"], "theme": p["theme"], "updated_at": p.get("updated_at")}
@@ -485,7 +485,7 @@ async def update_settings(body: SettingsUpdate):
     return await get_settings()
 
 
-@app.get("/api/ready")
+@app.get("/api/ready", dependencies=[Depends(_require_admin)])
 async def get_ready():
     """返回当前配置是否就绪（LLM、Tavily）"""
     settings = db.get_settings()
@@ -496,14 +496,14 @@ async def get_ready():
 
 # ── Stats ─────────────────────────────────────────────────
 
-@app.get("/api/stats")
+@app.get("/api/stats", dependencies=[Depends(_require_admin)])
 async def get_stats():
     return db.get_stats()
 
 
 # ── Sessions ──────────────────────────────────────────────
 
-@app.get("/api/sessions")
+@app.get("/api/sessions", dependencies=[Depends(_require_admin)])
 async def get_sessions(limit: int = 200):
     return db.get_recent_sessions(limit=limit)
 
@@ -565,7 +565,7 @@ async def create_session_and_answer(body: SessionCreate):
     }
 
 
-@app.get("/api/sessions/{session_id}")
+@app.get("/api/sessions/{session_id}", dependencies=[Depends(_require_admin)])
 async def get_session(session_id: int):
     s = db.get_session(session_id)
     if not s:
@@ -573,7 +573,7 @@ async def get_session(session_id: int):
     return s
 
 
-@app.get("/api/sessions/{session_id}/rounds")
+@app.get("/api/sessions/{session_id}/rounds", dependencies=[Depends(_require_admin)])
 async def get_rounds(session_id: int):
     session = db.get_session(session_id)
     if not session:
@@ -582,7 +582,7 @@ async def get_rounds(session_id: int):
     return {"session_id": session_id, "rounds": rounds}
 
 
-@app.get("/api/sessions/{session_id}/workspace")
+@app.get("/api/sessions/{session_id}/workspace", dependencies=[Depends(_require_admin)])
 async def get_session_workspace(session_id: int):
     session = db.get_session(session_id)
     if not session:
@@ -850,7 +850,7 @@ async def reopen_session(session_id: int):
 
 # ── Gaps API ──────────────────────────────────────────────
 
-@app.get("/api/sessions/{session_id}/gaps")
+@app.get("/api/sessions/{session_id}/gaps", dependencies=[Depends(_require_admin)])
 async def get_session_gaps(session_id: int):
     session = db.get_session(session_id)
     if not session:
@@ -873,7 +873,7 @@ async def update_knowledge_node(session_id: int, body: KnowledgeNodeUpdate):
     return {"ok": True, "knowledge_node_id": body.knowledge_node_id}
 
 
-@app.post("/api/sessions/{session_id}/suggest-knowledge-nodes")
+@app.post("/api/sessions/{session_id}/suggest-knowledge-nodes", dependencies=[Depends(_require_admin)])
 async def suggest_nodes_for_session(session_id: int):
     session = db.get_session(session_id)
     if not session:
@@ -884,7 +884,7 @@ async def suggest_nodes_for_session(session_id: int):
     return {"session_id": session_id, "suggestions": suggestions, "current_node_id": db.get_knowledge_node(session_id)}
 
 
-@app.get("/api/knowledge-tree/progress")
+@app.get("/api/knowledge-tree/progress", dependencies=[Depends(_require_admin)])
 async def get_tree_progress():
     """知识树进度：每个节点的 session 统计"""
     progress = db.get_knowledge_tree_progress()
@@ -969,7 +969,7 @@ async def _process_generate_session_answer(job_id: int, job: dict):
 
 # ── Maintenance ────────────────────────────────────────────
 
-@app.get("/api/knowledge-tree/sessions")
+@app.get("/api/knowledge-tree/sessions", dependencies=[Depends(_require_admin)])
 async def get_sessions_for_node(node_id: str, limit: int = 50):
     """获取某个知识节点的所有 session"""
     sessions = db.get_sessions_by_node(node_id, limit)
