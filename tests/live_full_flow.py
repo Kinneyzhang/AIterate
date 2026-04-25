@@ -455,7 +455,309 @@ def test_flow5_manual_complete():
     return f"status→{ws['session']['status']}"
 
 # ══════════════════════════════════════════════════════════════════════════
-# Flow 6: 边界情况
+# Flow 6: 心理学 — 认知失调（简单完美路径）
+# ══════════════════════════════════════════════════════════════════════════
+
+def test_flow6_create():
+    """Flow6: 心理学 — 创建 session"""
+    r = api("POST", "/api/sessions", {
+        "content": "什么是认知失调？请解释费斯廷格的认知失调理论及其在日常生活中的表现。",
+        "type": "question",
+        "web_search": False
+    })
+    SESSION_IDS.append(r["session_id"])
+    return f"sid={r['session_id']}"
+
+def test_flow6_wait_answer():
+    sid = SESSION_IDS[-1]
+    ws = wait_until(sid, {"learning", "error"})
+    if ws["session"]["status"] == "error":
+        raise RuntimeError(ws["session"].get("error_msg", ""))
+    return f"title={ws['session']['title']}"
+
+def test_flow6_take():
+    sid = SESSION_IDS[-1]
+    r = api("POST", f"/api/sessions/{sid}/deepen", {
+        "action_type": "take",
+        "content": (
+            "认知失调是指人同时持有两个互相矛盾的信念/行为时产生的心理不适感。"
+            "费斯廷格1957年提出：人会自动寻求减少这种不适。常见策略有三种：改变信念（吸烟者开始怀疑研究）、"
+            "改变行为（真的戒烟）、增加新认知来合理化（'活在当下，死前再后悔也不迟'）。"
+            "经典实验：让人做无聊任务，只给1美元的比给20美元的更觉得任务有趣——因为前者需要自我说服。"
+            "日常例子：高价买的东西自动觉得更好（合理化投资），环保主义者开空调时觉得'偶尔一次没关系'。"
+        )
+    })
+    return f"score={r['score']}"
+
+def test_flow6_feynman_pass():
+    """Flow6: 费曼通过 → completed"""
+    sid = SESSION_IDS[-1]
+    api("POST", f"/api/sessions/{sid}/start-feynman")
+    ws = wait_until(sid, {"feynman", "completed"})
+    ws2 = api("GET", f"/api/sessions/{sid}/workspace")
+    group = ws2.get("current_review_group", [])
+    if not group:
+        return "already completed"
+    questions = [rnd["input"] for rnd in group]
+    gid = group[0]["group_id"]
+    answers = [
+        f"针对「{q}」：认知失调的核心洞见是，人并非总是理性的——我们会主动扭曲现实来保护自我形象。"
+        f"当行为和信念冲突时，改变信念比改变行为容易得多。这解释了很多非理性行为：为什么买了彩票的人"
+        f"突然觉得自己会赢；为什么加入邪教后越难退出；为什么受苦越多越爱一个团体（投入越大越合理化）。"
+        f"费斯廷格的实验设计非常精妙：通过控制报酬大小，操纵人是否需要用认知改变来解释自己的行为。"
+        f"这个理论后来发展出自我知觉理论的争议，但核心现象——人在矛盾下会自动寻求一致性——已被大量实验证实。"
+        for q in questions
+    ]
+    r = api("POST", f"/api/sessions/{sid}/complete-feynman", {"group_id": gid, "answers": answers})
+    return f"score={r['final_score']}, passed={r['passed']}, status→{r['new_status']}"
+
+def test_flow6_verify():
+    sid = SESSION_IDS[-1]
+    ws = api("GET", f"/api/sessions/{sid}/workspace")
+    assert_eq(ws["session"]["status"], "completed", "flow6 should be completed")
+
+# ══════════════════════════════════════════════════════════════════════════
+# Flow 7: 生物学 — DNA 复制（简单完美路径）
+# ══════════════════════════════════════════════════════════════════════════
+
+def test_flow7_create():
+    """Flow7: 生物学 — 创建 session"""
+    r = api("POST", "/api/sessions", {
+        "content": "解释 DNA 半保留复制的机制：主要酶的作用、前导链和滞后链的合成差异是什么？",
+        "type": "question",
+        "web_search": False
+    })
+    SESSION_IDS.append(r["session_id"])
+    return f"sid={r['session_id']}"
+
+def test_flow7_wait_and_take():
+    sid = SESSION_IDS[-1]
+    wait_until(sid, {"learning", "error"})
+    r = api("POST", f"/api/sessions/{sid}/deepen", {
+        "action_type": "take",
+        "content": (
+            "DNA 复制是半保留的：每条子链保留一条亲代链。关键酶：解旋酶打开双链，"
+            "引物酶合成 RNA 引物（DNA 聚合酶只能延伸不能从头合成），DNA 聚合酶 III 从 5'→3' 方向合成，"
+            "DNA 连接酶连接冈崎片段。前导链连续合成（与解链方向一致），"
+            "滞后链不连续合成产生冈崎片段（因为聚合酶只能 5'→3'，方向相反），"
+            "之后 RNA 引物被切除、填补、连接。整个过程需要 SSB 蛋白稳定单链，拓扑异构酶消除超螺旋张力。"
+        )
+    })
+    return f"score={r['score']}"
+
+def test_flow7_feynman_pass():
+    """Flow7: 费曼通过"""
+    sid = SESSION_IDS[-1]
+    api("POST", f"/api/sessions/{sid}/start-feynman")
+    wait_until(sid, {"feynman", "completed"})
+    ws = api("GET", f"/api/sessions/{sid}/workspace")
+    group = ws.get("current_review_group", [])
+    if not group:
+        return "already completed"
+    gid = group[0]["group_id"]
+    questions = [rnd["input"] for rnd in group]
+    answers = [
+        f"针对「{q}」：DNA 半保留复制的精妙之处在于它保证了遗传信息的精确传递。"
+        f"解旋酶消耗 ATP 打开氢键，形成复制叉；SSB 蛋白防止单链重新折叠；"
+        f"拓扑异构酶 II 在前方切断并重接来释放超螺旋张力，否则 DNA 会被拧断。"
+        f"聚合酶只能 5'→3' 延伸这一限制导致了前导链/滞后链的不对称性——这不是设计缺陷，"
+        f"而是化学约束下的最优解。滞后链的冈崎片段（原核约1000-2000 nt，真核约100-200 nt）"
+        f"需要 DNA Pol I 替换引物、连接酶封口，整个过程消耗更多时间和酶资源，"
+        f"但这是物理定律下不可避免的。半保留机制由 Meselson-Stahl 实验通过 N15/N14 密度梯度离心完美证实。"
+        for q in questions
+    ]
+    r = api("POST", f"/api/sessions/{sid}/complete-feynman", {"group_id": gid, "answers": answers})
+    return f"score={r['final_score']}, passed={r['passed']}"
+
+def test_flow7_verify():
+    sid = SESSION_IDS[-1]
+    ws = api("GET", f"/api/sessions/{sid}/workspace")
+    assert_eq(ws["session"]["status"], "completed", "flow7 should be completed")
+
+# ══════════════════════════════════════════════════════════════════════════
+# Flow 8: 经济学 — 纳什均衡（简单完美路径）
+# ══════════════════════════════════════════════════════════════════════════
+
+def test_flow8_create():
+    """Flow8: 经济学 — 博弈论纳什均衡"""
+    r = api("POST", "/api/sessions", {
+        "content": "什么是纳什均衡？用囚徒困境解释为什么理性个体会陷入集体次优结果。",
+        "type": "question",
+        "web_search": False
+    })
+    SESSION_IDS.append(r["session_id"])
+    return f"sid={r['session_id']}"
+
+def test_flow8_wait_and_take():
+    sid = SESSION_IDS[-1]
+    wait_until(sid, {"learning", "error"})
+    r = api("POST", f"/api/sessions/{sid}/deepen", {
+        "action_type": "take",
+        "content": (
+            "纳什均衡是博弈中没有玩家单方面改变策略能让自己获益的状态。"
+            "囚徒困境：两个囚犯分开审讯，互相背叛是纳什均衡（无论对方怎么选，背叛都是最优反应），"
+            "但双方合作才是帕累托最优。理性个体基于自身利益选择背叛，导致集体次优（5年+5年 vs 合作的1年+1年）。"
+            "这解释了军备竞赛、公地悲剧、价格战——个体理性导致集体非理性。"
+            "解决方案：重复博弈（声誉机制）、外部约束（法律）、小群体（相互监督）。"
+        )
+    })
+    return f"score={r['score']}"
+
+def test_flow8_feynman_pass():
+    """Flow8: 费曼通过"""
+    sid = SESSION_IDS[-1]
+    api("POST", f"/api/sessions/{sid}/start-feynman")
+    wait_until(sid, {"feynman", "completed"})
+    ws = api("GET", f"/api/sessions/{sid}/workspace")
+    group = ws.get("current_review_group", [])
+    if not group:
+        return "already completed"
+    gid = group[0]["group_id"]
+    questions = [rnd["input"] for rnd in group]
+    answers = [
+        f"针对「{q}」：纳什均衡的深刻之处在于它揭示了'理性'的内在悖论。"
+        f"每个玩家都是理性的，逻辑链完全正确，但集体结果却是次优的。"
+        f"这不是因为人愚蠢，而是因为激励结构本身有问题。囚徒困境的数学结构：背叛是严格占优策略——"
+        f"无论对方合作还是背叛，背叛对我都更好（0年 vs 1年，5年 vs 8年）。"
+        f"当双方都用这个逻辑，就陷入(5,5)的均衡，而非(1,1)的最优。"
+        f"真实世界应用：OPEC 成员总想超额生产（破坏油价协议），核大国陷入军备竞赛，"
+        f"企业价格战打到无利可图。解法的关键是改变博弈结构：无限重复博弈中'以牙还牙'策略可以维持合作——"
+        f"Axelrod 的计算机锦标赛证明了这一点。这就是为什么长期关系、重复互动是合作的基础。"
+        for q in questions
+    ]
+    r = api("POST", f"/api/sessions/{sid}/complete-feynman", {"group_id": gid, "answers": answers})
+    return f"score={r['final_score']}, passed={r['passed']}"
+
+def test_flow8_verify():
+    sid = SESSION_IDS[-1]
+    ws = api("GET", f"/api/sessions/{sid}/workspace")
+    assert_eq(ws["session"]["status"], "completed", "flow8 should be completed")
+
+# ══════════════════════════════════════════════════════════════════════════
+# Flow 9: 物理 — 量子叠加与测量（简单完美路径）
+# ══════════════════════════════════════════════════════════════════════════
+
+def test_flow9_create():
+    """Flow9: 物理 — 量子叠加"""
+    r = api("POST", "/api/sessions", {
+        "content": "解释量子叠加态和波函数坍缩：薛定谔的猫思想实验说明了什么问题？",
+        "type": "question",
+        "web_search": False
+    })
+    SESSION_IDS.append(r["session_id"])
+    return f"sid={r['session_id']}"
+
+def test_flow9_wait_and_take():
+    sid = SESSION_IDS[-1]
+    wait_until(sid, {"learning", "error"})
+    r = api("POST", f"/api/sessions/{sid}/deepen", {
+        "action_type": "take",
+        "content": (
+            "量子叠加：粒子在未被测量前同时处于多种状态，描述为波函数（各状态的概率幅叠加）。"
+            "测量时波函数坍缩到一个确定状态，概率由波函数模的平方给出（玻恩规则）。"
+            "薛定谔的猫：将量子不确定性放大到宏观——猫与衰变粒子纠缠，在观测前既活又死。"
+            "这暴露了量子力学的测量问题：叠加态的边界在哪里？观测者效应是什么？"
+            "主要诠释：哥本哈根诠释（波函数坍缩是真实的，不追问'之前'）、"
+            "多世界诠释（波函数从不坍缩，所有结果在平行宇宙中实现）、退相干理论（宏观环境与系统纠缠，"
+            "叠加态在环境中'消散'，显现为经典行为）。"
+        )
+    })
+    return f"score={r['score']}"
+
+def test_flow9_feynman_pass():
+    """Flow9: 费曼通过"""
+    sid = SESSION_IDS[-1]
+    api("POST", f"/api/sessions/{sid}/start-feynman")
+    wait_until(sid, {"feynman", "completed"})
+    ws = api("GET", f"/api/sessions/{sid}/workspace")
+    group = ws.get("current_review_group", [])
+    if not group:
+        return "already completed"
+    gid = group[0]["group_id"]
+    questions = [rnd["input"] for rnd in group]
+    answers = [
+        f"针对「{q}」：薛定谔设计这个思想实验的本意是批判哥本哈根诠释——他认为'既死又活'是荒谬的，"
+        f"说明量子力学在宏观尺度下一定不完备。量子叠加的核心数学是线性叠加原理：|ψ⟩ = α|0⟩ + β|1⟩，"
+        f"|α|²+|β|²=1。这不是'不知道是哪个状态'，而是'真的同时是两个状态'——双缝实验证明了这点，"
+        f"单个粒子能与自己干涉，说明它真的同时通过了两条缝。测量问题的困难在于：什么算'测量'？"
+        f"意识参与？任何宏观相互作用？退相干理论给出了最令人满意的物理答案：宏观物体与环境的"
+        f"大量粒子纠缠，导致量子相干性极快地消失（飞秒量级），我们看到的经典行为是量子力学在"
+        f"环境耦合下的涌现。但这并不解决多世界vs单一结果的哲学问题，这仍然是开放问题。"
+        for q in questions
+    ]
+    r = api("POST", f"/api/sessions/{sid}/complete-feynman", {"group_id": gid, "answers": answers})
+    return f"score={r['final_score']}, passed={r['passed']}"
+
+def test_flow9_verify():
+    sid = SESSION_IDS[-1]
+    ws = api("GET", f"/api/sessions/{sid}/workspace")
+    assert_eq(ws["session"]["status"], "completed", "flow9 should be completed")
+
+# ══════════════════════════════════════════════════════════════════════════
+# Flow 10: 历史 — 工业革命（观点类型）
+# ══════════════════════════════════════════════════════════════════════════
+
+def test_flow10_create():
+    """Flow10: 历史/观点 — 工业革命起源"""
+    r = api("POST", "/api/sessions", {
+        "content": "我认为工业革命首先在英国发生不是偶然的，而是制度、地理、文化多重因素共同作用的必然结果。",
+        "type": "viewpoint",
+        "web_search": False
+    })
+    SESSION_IDS.append(r["session_id"])
+    return f"sid={r['session_id']}"
+
+def test_flow10_wait_and_take():
+    sid = SESSION_IDS[-1]
+    ws = wait_until(sid, {"learning", "error"})
+    if ws["session"]["status"] == "error":
+        raise RuntimeError(ws["session"].get("error_msg", ""))
+    r = api("POST", f"/api/sessions/{sid}/deepen", {
+        "action_type": "take",
+        "content": (
+            "英国工业革命的多因素论：制度层面——光荣革命后议会保护产权和专利（1624年专利法），"
+            "降低创新风险；殖民地市场提供需求和原料。地理层面——丰富的煤矿与铁矿相邻分布，"
+            "可通航河流降低运输成本；岛国地位减少战争破坏。文化层面——非国教徒（贵格会、清教徒）"
+            "重视勤劳、储蓄、实用技能，大量工匠精英阶层；皇家学会促进科学实用化。"
+            "劳动力价格：高工资促使用机器替代人工（与低工资的中国和印度形成对比）。"
+            "这些因素缺一不可，互相强化——制度稳定才能让资本积累，高工资才有机器替代的动力。"
+        )
+    })
+    return f"score={r['score']}"
+
+def test_flow10_feynman_pass():
+    """Flow10: 费曼通过"""
+    sid = SESSION_IDS[-1]
+    api("POST", f"/api/sessions/{sid}/start-feynman")
+    wait_until(sid, {"feynman", "completed"})
+    ws = api("GET", f"/api/sessions/{sid}/workspace")
+    group = ws.get("current_review_group", [])
+    if not group:
+        return "already completed"
+    gid = group[0]["group_id"]
+    questions = [rnd["input"] for rnd in group]
+    answers = [
+        f"针对「{q}」：工业革命的'必然性'是个危险的说法——历史没有必然，但有条件。"
+        f"更准确的说法是：18世纪英国的条件组合，使得工业化的涌现概率远高于其他地方。"
+        f"Robert Allen 的高工资/低能源价格理论特别有说服力：英国矿工工资是阿姆斯特丹的2倍、"
+        f"中国的5倍，而煤炭价格极低（矿山旁边）。在这个价格信号下，用蒸汽机替代工人是划算的，"
+        f"而在中国和印度则不然——这解释了为什么同样的技术知识只在英国被产业化。"
+        f"制度因素不可忽视：Gregory Clark 的研究显示光荣革命后违约率下降，利率降至4%，"
+        f"长期投资成为可能。但文化决定论（如韦伯的新教伦理）已被历史学家质疑——"
+        f"荷兰更新教但工业革命没在那里发生。历史解释的艺术在于识别'最关键的瓶颈因素'，"
+        f"而不是列举所有相关因素。"
+        for q in questions
+    ]
+    r = api("POST", f"/api/sessions/{sid}/complete-feynman", {"group_id": gid, "answers": answers})
+    return f"score={r['final_score']}, passed={r['passed']}"
+
+def test_flow10_verify():
+    sid = SESSION_IDS[-1]
+    ws = api("GET", f"/api/sessions/{sid}/workspace")
+    assert_eq(ws["session"]["status"], "completed", "flow10 should be completed")
+
+# ══════════════════════════════════════════════════════════════════════════
+# Flow 11: 边界情况
 # ══════════════════════════════════════════════════════════════════════════
 
 def test_edge_empty_content():
@@ -598,6 +900,40 @@ ALL_TESTS = [
     ("Flow5-1 创建 session", test_flow5_create),
     ("Flow5-2 深化", test_flow5_wait_and_deepen),
     ("Flow5-3 手动完成", test_flow5_manual_complete),
+
+    # Flow 6-10 前重设低通过分（Flow3 已恢复默认 60，新 flow 需要低分线）
+    ("Flow6-0 重设通过分为 20", lambda: api("PATCH", "/api/settings", {"feynman_pass_score": 20}) or "pass_score→20"),
+
+    # Flow 6: 心理学 — 认知失调
+    ("Flow6-1 创建 session(心理学)", test_flow6_create),
+    ("Flow6-2 AI 生成回答", test_flow6_wait_answer),
+    ("Flow6-3 写理解", test_flow6_take),
+    ("Flow6-4 费曼通过 → completed", test_flow6_feynman_pass),
+    ("Flow6-5 验证 completed", test_flow6_verify),
+
+    # Flow 7: 生物学 — DNA 复制
+    ("Flow7-1 创建 session(生物学)", test_flow7_create),
+    ("Flow7-2 深化", test_flow7_wait_and_take),
+    ("Flow7-3 费曼通过 → completed", test_flow7_feynman_pass),
+    ("Flow7-4 验证 completed", test_flow7_verify),
+
+    # Flow 8: 经济学 — 纳什均衡
+    ("Flow8-1 创建 session(经济学)", test_flow8_create),
+    ("Flow8-2 深化", test_flow8_wait_and_take),
+    ("Flow8-3 费曼通过 → completed", test_flow8_feynman_pass),
+    ("Flow8-4 验证 completed", test_flow8_verify),
+
+    # Flow 9: 物理 — 量子叠加
+    ("Flow9-1 创建 session(物理)", test_flow9_create),
+    ("Flow9-2 深化", test_flow9_wait_and_take),
+    ("Flow9-3 费曼通过 → completed", test_flow9_feynman_pass),
+    ("Flow9-4 验证 completed", test_flow9_verify),
+
+    # Flow 10: 历史 — 工业革命(观点)
+    ("Flow10-1 创建 session(历史/观点)", test_flow10_create),
+    ("Flow10-2 AI 分析 + 深化", test_flow10_wait_and_take),
+    ("Flow10-3 费曼通过 → completed", test_flow10_feynman_pass),
+    ("Flow10-4 验证 completed", test_flow10_verify),
 
     # 边界情况
     ("Edge1 空内容拒绝", test_edge_empty_content),

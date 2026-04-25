@@ -5,14 +5,15 @@ Port: 7070
 import asyncio
 import json
 import logging
+import secrets
 from pathlib import Path
 from typing import Annotated, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
@@ -29,12 +30,82 @@ app = FastAPI(title="AIIterate API", version="3.0.0")
 app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
 
-# ── Admin Token ────────────────────────────────────────────
+# ── Auth System (Phase 4.3: Cookie-based session auth) ─────
 
-async def _require_admin(x_admin_token: Annotated[str | None, Header()] = None):
-    if not db.check_admin_token(x_admin_token):
-        raise HTTPException(401, "Missing or invalid admin token")
-    return True
+AUTH_COOKIE_NAME = "aiterate_session"
+# In-memory session store (survives until restart; for local use this is fine)
+_active_sessions: dict[str, str] = {}  # token → "authenticated"
+
+
+def _generate_session_token() -> str:
+    return secrets.token_hex(32)
+
+
+async def _require_admin(
+    request: Request,
+    x_admin_token: Annotated[str | None, Header()] = None,
+    aiterate_session: Annotated[str | None, Cookie()] = None,
+):
+    # 1. Cookie-based session (Phase 4.3)
+    if aiterate_session and aiterate_session in _active_sessions:
+        return True
+
+    # 2. Header-based token (backward compat)
+    if x_admin_token and db.check_admin_token(x_admin_token):
+        return True
+
+    raise HTTPException(401, "Missing or invalid admin token")
+
+
+# ── Auth Endpoints (Phase 4.3) ──────────────────────────────
+
+class LoginRequest(BaseModel):
+    token: str
+
+
+@app.post("/api/auth/login")
+async def auth_login(body: LoginRequest, response: Response):
+    """验证 admin token，设置 session cookie。"""
+    if not db.check_admin_token(body.token):
+        raise HTTPException(401, "Invalid token")
+
+    session_token = _generate_session_token()
+    _active_sessions[session_token] = "authenticated"
+
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=session_token,
+        httponly=True,
+        samesite="lax",
+        max_age=86400 * 30,  # 30 days
+    )
+    return {"ok": True, "message": "Logged in"}
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(
+    request: Request,
+    response: Response,
+    aiterate_session: Annotated[str | None, Cookie()] = None,
+):
+    """清除 session cookie。"""
+    if aiterate_session:
+        _active_sessions.pop(aiterate_session, None)
+    response.delete_cookie(AUTH_COOKIE_NAME)
+    return {"ok": True, "message": "Logged out"}
+
+
+@app.get("/api/auth/status")
+async def auth_status(
+    aiterate_session: Annotated[str | None, Cookie()] = None,
+    x_admin_token: Annotated[str | None, Header()] = None,
+):
+    """检查当前认证状态。"""
+    if aiterate_session and aiterate_session in _active_sessions:
+        return {"authenticated": True, "method": "cookie"}
+    if x_admin_token and db.check_admin_token(x_admin_token):
+        return {"authenticated": True, "method": "header"}
+    return {"authenticated": False}
 
 
 @app.exception_handler(RuntimeError)
@@ -125,6 +196,7 @@ def _build_session_workspace_payload(session: dict, rounds: list[dict]) -> dict:
     gaps = db.get_unresolved_gaps(session["id"])
     review_report = db.get_review_report(session["id"])
     knowledge_node_id = db.get_knowledge_node(session["id"])
+    review_schedule = db.get_session_review_schedule(session["id"])
 
     payload = {
         "session": session,
@@ -135,6 +207,7 @@ def _build_session_workspace_payload(session: dict, rounds: list[dict]) -> dict:
         "take_evaluations":      take_rounds_with_eval,
         "unresolved_gaps":       gaps,
         "review_report":         review_report,
+        "review_schedule":       review_schedule,
         "knowledge_node_id":     knowledge_node_id,
     }
 
@@ -156,15 +229,58 @@ def _build_session_workspace_payload(session: dict, rounds: list[dict]) -> dict:
 @app.on_event("startup")
 async def startup():
     db.init_db()
-    # 自动恢复重启时丢失的 preparing 任务（> 2 分钟 stale 才标 error）
+    # Phase 4: 恢复重启时丢失的 running jobs
     try:
-        stale = db.get_stale_preparing_sessions(timeout_minutes=2)
-        if stale["count"] > 0:
-            db.mark_stale_preparing_as_error(timeout_minutes=2)
-            print(f"[AIIterate] Marked {stale['count']} stale preparing sessions as error")
+        recovered = db.recover_stale_jobs(timeout_minutes=2)
+        if recovered["recovered_jobs"] > 0:
+            print(f"[AIIterate] Job recovery: {recovered['recovered_jobs']} jobs reset to pending")
+        if recovered["stuck_sessions"]:
+            print(f"[AIIterate] ⚠ {len(recovered['stuck_sessions'])} sessions stuck in preparing, will be recovered by worker")
     except Exception as e:
-        print(f"[AIIterate] Stale check failed (non-fatal): {e}")
-    print("[AIIterate] DB ready")
+        print(f"[AIIterate] Job recovery failed (non-fatal): {e}")
+
+    # Also handle legacy: sessions stuck in preparing without a job (pre-Phase 4 data)
+    try:
+        stale = db.get_stale_preparing_sessions(timeout_minutes=5)
+        if stale["count"] > 0:
+            from datetime import datetime, timezone, timedelta
+            retried = 0
+            errored = 0
+            for s in stale["stale"]:
+                try:
+                    created = s.get("created_at", "")
+                    is_recent = True
+                    if created:
+                        try:
+                            ct = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                            age = datetime.now(timezone.utc) - ct
+                            is_recent = age < timedelta(minutes=10)
+                        except Exception:
+                            pass
+                    if is_recent:
+                        # Create a job to recover this session
+                        db.create_job(
+                            "generate_session_answer",
+                            {"session_id": s["id"], "content": s.get("content", ""),
+                             "type": s.get("type", "question"), "web_search": False,
+                             "knowledge_node_id": s.get("knowledge_node_id")},
+                        )
+                        retried += 1
+                    else:
+                        db.update_session(s["id"], status="error",
+                                         error_msg="Background task lost (too old to retry)")
+                        errored += 1
+                except Exception as e:
+                    db.update_session(s["id"], status="error", error_msg=f"Startup retry failed: {e}")
+                    errored += 1
+            if retried or errored:
+                print(f"[AIIterate] Legacy stale preparing: {retried} enqueued, {errored} marked error")
+    except Exception as e:
+        print(f"[AIIterate] Legacy stale check failed (non-fatal): {e}")
+
+    # 启动后台 job worker
+    asyncio.create_task(_job_worker())
+    print("[AIIterate] DB ready + job worker started")
 
 
 @app.get("/")
@@ -232,6 +348,9 @@ async def update_db_config(body: DbConfigUpdate):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(400, "no fields to update")
+    # 拒绝未实现的数据库类型
+    if updates.get("type") in ("mysql", "oracle"):
+        raise HTTPException(400, "MySQL/Oracle 尚未实现，请使用 sqlite 或 postgresql")
     # 先用候选配置测试连接，成功再落盘
     test_result = db.test_db_config(updates)
     if not test_result["ok"]:
@@ -385,7 +504,7 @@ async def get_stats():
 # ── Sessions ──────────────────────────────────────────────
 
 @app.get("/api/sessions")
-async def get_sessions(limit: int = 20):
+async def get_sessions(limit: int = 200):
     return db.get_recent_sessions(limit=limit)
 
 
@@ -413,8 +532,8 @@ class SessionCreate(BaseModel):
 
 
 @app.post("/api/sessions", dependencies=[Depends(_require_admin)])
-async def create_session_and_answer(body: SessionCreate, background_tasks: BackgroundTasks):
-    """阶段1：创建 session，后台异步AI生成标题+初始回答"""
+async def create_session_and_answer(body: SessionCreate):
+    """阶段1：创建 session，通过 DB job queue 后台异步生成标题+初始回答"""
     # 先用 content 前 40 字作为临时标题，AI 生成正式标题后更新
     temp_title = body.content[:40].strip()
     sid = db.create_session(
@@ -425,28 +544,20 @@ async def create_session_and_answer(body: SessionCreate, background_tasks: Backg
     db.update_session(sid, status="preparing")
 
     # 如果有知识节点，立即绑定
-    knowledge_node = None
     if body.knowledge_node_id:
         db.set_knowledge_node(sid, body.knowledge_node_id)
-        tree = db.get_knowledge_tree()
-        knowledge_node = db.find_node_by_id(tree, body.knowledge_node_id)
 
-    async def generate_answer():
-        try:
-            # 并行生成标题和回答
-            title_task = ai.generate_title(body.content)
-            answer_task = ai.generate_initial_answer(
-                body.content, "", body.type,
-                web_search=body.web_search,
-                knowledge_node=knowledge_node,
-            )
-            title, result = await asyncio.gather(title_task, answer_task)
-            answer = result["answer"]
-            db.update_session(sid, title=title, material=answer, error_msg=None, status="learning")
-        except Exception as exc:
-            db.update_session(sid, status="error", error_msg=str(exc))
-
-    background_tasks.add_task(generate_answer)
+    # 用 DB-backed job queue 替代 BackgroundTasks
+    db.create_job(
+        job_type="generate_session_answer",
+        payload={
+            "session_id": sid,
+            "content": body.content,
+            "type": body.type,
+            "web_search": body.web_search,
+            "knowledge_node_id": body.knowledge_node_id,
+        },
+    )
 
     return {
         "session_id": sid,
@@ -481,24 +592,31 @@ async def get_session_workspace(session_id: int):
 
 
 class DeepenRequest(BaseModel):
-    action_type: str  # "take" 或 "press"
-    content: str      # take: 用户的理解文本; press: 用户的追问文本
+    action_type: str | None = None  # "take" 或 "press"
+    content: str | None = None      # take: 用户的理解文本; press: 用户的追问文本
+    # 兼容前端旧字段名
+    action: str | None = None
+    text: str | None = None
 
-    @field_validator("action_type")
-    @classmethod
-    def action_type_valid(cls, v):
-        if v not in ("take", "press"):
+    @model_validator(mode='after')
+    def normalize_fields(self):
+        """兼容前端旧 payload {action, text} 和后端标准 {action_type, content}"""
+        if self.action_type is None and self.action is not None:
+            self.action_type = self.action
+        if self.content is None and self.text is not None:
+            self.content = self.text
+        if self.action_type is None:
+            raise ValueError('缺少 action_type（或旧字段 action）')
+        if self.content is None:
+            raise ValueError('缺少 content（或旧字段 text）')
+        if self.action_type not in ("take", "press"):
             raise ValueError('action_type 必须是 take 或 press')
-        return v
-
-    @field_validator("content")
-    @classmethod
-    def content_valid(cls, v):
-        if not v or not v.strip():
+        if not self.content or not self.content.strip():
             raise ValueError("内容不能为空")
-        if len(v) > 10000:
-            raise ValueError(f"内容过长（{len(v)} 字符），最多 10000 字符")
-        return v.strip()
+        if len(self.content) > 10000:
+            raise ValueError(f"内容过长（{len(self.content)} 字符），最多 10000 字符")
+        self.content = self.content.strip()
+        return self
 
 
 @app.post("/api/sessions/{session_id}/deepen", dependencies=[Depends(_require_admin)])
@@ -520,6 +638,7 @@ async def deepen(session_id: int, body: DeepenRequest):
             "praise": eval_result["praise"],
             "gaps": eval_result["gaps"],
             "verdict": eval_result["verdict"],
+            "parse_failed": eval_result.get("parse_failed", False),
         }
         rid = db.create_round_with_seq(
             session_id=session_id, type="take",
@@ -679,6 +798,7 @@ async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
             "final_summary": eval_result["final_summary"],
             "passed":        passed,
             "pass_score":    pass_score,
+            "parse_failed":  eval_result.get("parse_failed", False),
         }
         db.save_review_report(session_id, report)
 
@@ -776,6 +896,79 @@ async def get_tree_progress():
     return {"progress": progress}
 
 
+# ── Phase 4: DB-backed Job Worker ──────────────────────────
+
+_WORKER_SLEEP = 2  # seconds between polls
+
+
+async def _job_worker():
+    """Background worker: polls the jobs table and processes pending jobs."""
+    print("[Worker] Job worker started")
+    while True:
+        try:
+            job = db.claim_pending_job()
+            if job:
+                asyncio.create_task(_process_job(job))
+        except Exception as e:
+            print(f"[Worker] Poll error: {e}")
+        await asyncio.sleep(_WORKER_SLEEP)
+
+
+async def _process_job(job: dict):
+    """Process a single job by job_type."""
+    job_id = job["id"]
+    job_type = job.get("job_type", "")
+    try:
+        if job_type == "generate_session_answer":
+            await _process_generate_session_answer(job_id, job)
+        else:
+            db.fail_job(job_id, f"Unknown job_type: {job_type}", rescind=True)
+    except Exception as e:
+        err_msg = f"{type(e).__name__}: {str(e)}"
+        db.fail_job(job_id, err_msg)
+
+
+async def _process_generate_session_answer(job_id: int, job: dict):
+    """Process a 'generate_session_answer' job: generate title + answer for a new session."""
+    payload = db._jload(job.get("payload")) if job.get("payload") else {}
+    sid = payload.get("session_id")
+    if not sid:
+        return db.fail_job(job_id, "Missing session_id in payload", rescind=True)
+
+    session = db.get_session(sid)
+    if not session:
+        # Session was deleted — discard the job
+        return db.complete_job(job_id, {"discarded": True, "reason": "session deleted"})
+
+    # If session is already in a later state (e.g., manually fixed), skip
+    if session.get("status") not in ("preparing", "error"):
+        return db.complete_job(job_id, {"skipped": True, "reason": f"session already {session.get('status')}"})
+
+    content = payload.get("content", session.get("content", ""))
+    stype = payload.get("type", session.get("type", "question"))
+    web_search = payload.get("web_search", False)
+    node_id = payload.get("knowledge_node_id")
+
+    # 如果有知识节点，获取节点上下文
+    knowledge_node = None
+    if node_id:
+        tree = db.get_knowledge_tree()
+        knowledge_node = db.find_node_by_id(tree, node_id)
+
+    # 并行生成标题和回答
+    title, result = await asyncio.gather(
+        ai.generate_title(content),
+        ai.generate_initial_answer(content, "", stype,
+                                   web_search=web_search,
+                                   knowledge_node=knowledge_node),
+    )
+    answer = result["answer"]
+    db.update_session(sid, title=title, material=answer, error_msg=None, status="learning")
+    db.complete_job(job_id, {"title": title, "answer_len": len(answer)})
+
+
+# ── Maintenance ────────────────────────────────────────────
+
 @app.get("/api/knowledge-tree/sessions")
 async def get_sessions_for_node(node_id: str, limit: int = 50):
     """获取某个知识节点的所有 session"""
@@ -804,11 +997,11 @@ async def _retry_preparing_session(session_id: int):
     
     try:
         # Parallel title + answer generation
-        title, material = await asyncio.gather(
+        title, result = await asyncio.gather(
             ai.generate_title(content),
             ai.generate_initial_answer(content, "", session_type),
         )
-        db.update_session(session_id, title=title, material=material, status="learning")
+        db.update_session(session_id, title=title, material=result["answer"], status="learning")
     except Exception as e:
         db.update_session(session_id, status="error", error_msg=str(e))
         raise
@@ -824,9 +1017,21 @@ async def list_stale_preparing(timeout_minutes: int = 5):
 
 @app.post("/api/maintenance/retry-preparing/{session_id}", dependencies=[Depends(_require_admin)])
 async def retry_preparing(session_id: int):
-    """Retry a stale preparing session from the question content."""
-    from fastapi import BackgroundTasks
-    return await _retry_preparing_session(session_id)
+    """Retry a stale preparing session via job queue."""
+    session = db.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    if session.get("status") not in ("preparing", "error"):
+        raise HTTPException(400, f"Session is {session.get('status')}, not preparing/error")
+
+    db.update_session(session_id, status="preparing", error_msg=None)
+    db.create_job(
+        "generate_session_answer",
+        {"session_id": session_id, "content": session.get("content", ""),
+         "type": session.get("type", "question"), "web_search": False,
+         "knowledge_node_id": session.get("knowledge_node_id")},
+    )
+    return {"ok": True, "session_id": session_id, "status": "preparing"}
 
 
 @app.post("/api/maintenance/recover-all-stale", dependencies=[Depends(_require_admin)])
@@ -834,6 +1039,15 @@ async def recover_all_stale(timeout_minutes: int = 5):
     """Mark all stale preparing sessions as error."""
     db.mark_stale_preparing_as_error(timeout_minutes)
     return db.get_stale_preparing_sessions(timeout_minutes)
+
+
+@app.get("/api/jobs/status", dependencies=[Depends(_require_admin)])
+async def jobs_status():
+    """Job queue status (Phase 4)."""
+    return {
+        "pending": db.get_pending_job_count(),
+        "running": db.get_running_job_count(),
+    }
 
 
 # ── Review Schedule APIs ──────────────────────────────────────────────────
@@ -856,10 +1070,81 @@ async def complete_review(review_id: int, body: ReviewCompleteRequest = ReviewCo
     return {"ok": True}
 
 
+class ReviewSubmitRequest(BaseModel):
+    content: str  # 用户重新解释的内容
+
+
+@app.post("/api/review/{review_id}/submit", dependencies=[Depends(_require_admin)])
+async def submit_review(review_id: int, body: ReviewSubmitRequest):
+    """Phase 4.2: 提交复习内容（重新解释），AI 评估后完成复习。"""
+    # 获取复习记录
+    from sqlalchemy import text as sa_text
+    row = None
+    with db.get_engine().connect() as conn:
+        r = conn.execute(
+            sa_text("SELECT * FROM review_schedule WHERE id = :rid"),
+            {"rid": review_id}
+        ).mappings().fetchone()
+        if r:
+            row = dict(r)
+
+    if not row:
+        raise HTTPException(404, "Review not found")
+    if row.get("status") != "pending":
+        raise HTTPException(400, f"Review is {row.get('status')}, not pending")
+
+    session_id = row["session_id"]
+    session = db.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    # 调用 AI 评估重新解释
+    original_question = session.get("content") or session.get("title", "")
+    ai_material = session.get("material", "")
+
+    result = await ai.evaluate_review_re_explanation(
+        original_question, ai_material, body.content
+    )
+
+    # 格式化 AI 反馈
+    feedback_lines = []
+    if result.get("verdict"):
+        feedback_lines.append(f"**评价**: {result['verdict']}")
+    if result.get("praise"):
+        feedback_lines.append(f"\n**亮点**: {result['praise']}")
+    if result.get("gap"):
+        feedback_lines.append(f"\n**待加强**: {result['gap']}")
+    feedback = "\n".join(feedback_lines)
+
+    score = result.get("score", 50)
+    db.submit_review_content(review_id, body.content, feedback, score)
+
+    return {
+        "ok": True,
+        "score": score,
+        "feedback": feedback,
+        "passed": score >= 60,
+    }
+
+
 @app.get("/api/command-center", dependencies=[Depends(_require_admin)])
 async def command_center():
     """聚合仪表盘：待办费曼 + 今日复习 + 失败项 + 学习中 + 推荐节点。"""
     return db.get_command_center_data()
+
+
+# ── Maintenance: Invariant Checks ──────────────────────────────
+
+@app.get("/api/maintenance/check-invariants", dependencies=[Depends(_require_admin)])
+async def check_invariants(stale_minutes: int = 10):
+    """检查状态机一致性。"""
+    return db.check_invariants(stale_minutes)
+
+
+@app.post("/api/maintenance/repair-invariants", dependencies=[Depends(_require_admin)])
+async def repair_invariants(dry_run: bool = True):
+    """修复常见的状态机不一致。dry_run=true 只预览不执行。"""
+    return db.repair_invariants(dry_run=dry_run)
 
 
 if __name__ == "__main__":

@@ -34,10 +34,19 @@ def load_db_config() -> dict:
     if DB_CONFIG_PATH.exists():
         try:
             raw = json.loads(DB_CONFIG_PATH.read_text(encoding="utf-8"))
-            return {**_DEFAULT_DB_CFG, **raw}
+            cfg = {**_DEFAULT_DB_CFG, **raw}
         except Exception:
-            pass
-    return dict(_DEFAULT_DB_CFG)
+            cfg = dict(_DEFAULT_DB_CFG)
+    else:
+        cfg = dict(_DEFAULT_DB_CFG)
+    # 拒绝未实现的数据库类型
+    db_type = cfg.get("type", "")
+    if db_type in ("mysql", "oracle"):
+        raise RuntimeError(
+            f"数据库类型 '{db_type}' 尚未实现（SQL/方言未适配）。"
+            f"请使用 sqlite 或 postgresql。"
+        )
+    return cfg
 
 def save_db_config(cfg: dict):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -317,7 +326,7 @@ def init_db():
                 "INSERT INTO profile (id) VALUES ('default') ON CONFLICT (id) DO NOTHING"
             ))
 
-        # review_schedule — 复习排期
+        # review_schedule — 复习排期 (Phase 4.2: +user_content, ai_feedback, review_score)
         if sqlite:
             conn.execute(text(f"""
             CREATE TABLE IF NOT EXISTS review_schedule (
@@ -325,8 +334,12 @@ def init_db():
                 session_id      INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
                 review_date     TEXT    NOT NULL,
                 status          TEXT    NOT NULL DEFAULT 'pending',
+                user_content    TEXT,
+                ai_feedback     TEXT,
+                review_score    INTEGER,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-                updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+                updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+                completed_at    TEXT
             )"""))
         else:
             conn.execute(text(f"""
@@ -335,17 +348,67 @@ def init_db():
                 session_id INTEGER  NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
                 review_date DATE    NOT NULL,
                 status     TEXT     NOT NULL DEFAULT 'pending',
+                user_content TEXT,
+                ai_feedback  TEXT,
+                review_score SMALLINT,
                 created_at {ts}     NOT NULL DEFAULT NOW(),
-                updated_at {ts}     NOT NULL DEFAULT NOW()
+                updated_at {ts}     NOT NULL DEFAULT NOW(),
+                completed_at {ts}
             )"""))
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS idx_review_schedule_date ON review_schedule(review_date)"
+            ))
+            # 迁移：为旧表添加列
+            for col, col_type in [("completed_at", ts), ("user_content", "TEXT"),
+                                   ("ai_feedback", "TEXT"), ("review_score", "SMALLINT")]:
+                try:
+                    conn.execute(text(
+                        f"ALTER TABLE review_schedule ADD COLUMN IF NOT EXISTS {col} {col_type}"
+                    ))
+                except Exception:
+                    pass  # SQLite 不支持 IF NOT EXISTS in ALTER TABLE
+
+        # jobs — Phase 4: DB-backed async job queue
+        if sqlite:
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS jobs (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_type        TEXT    NOT NULL,
+                status          TEXT    NOT NULL DEFAULT 'pending',
+                payload         TEXT,
+                result          TEXT,
+                error_msg       TEXT,
+                retries         INTEGER NOT NULL DEFAULT 0,
+                max_retries     INTEGER NOT NULL DEFAULT 3,
+                created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+                started_at      TEXT,
+                claimed_at      TEXT,
+                completed_at    TEXT
+            )"""))
+        else:
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS jobs (
+                id         SERIAL PRIMARY KEY,
+                job_type   TEXT     NOT NULL,
+                status     TEXT     NOT NULL DEFAULT 'pending',
+                payload    {jb},
+                result     {jb},
+                error_msg  TEXT,
+                retries    SMALLINT NOT NULL DEFAULT 0,
+                max_retries SMALLINT NOT NULL DEFAULT 3,
+                created_at {ts}     NOT NULL DEFAULT NOW(),
+                started_at {ts},
+                claimed_at {ts},
+                completed_at {ts}
+            )"""))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, created_at)"
             ))
 
     # 迁移旧格式 settings（幂等）
     _migrate_settings()
 
-    print(f"[DB] aiterate ready — {cfg.get('type','postgresql')} — sessions / rounds / profile / review_schedule")
+    print(f"[DB] aiterate ready — {cfg.get('type','postgresql')} — sessions / rounds / profile / review_schedule / jobs")
 
 
 _LLM_ROLES = ["title", "answer", "evaluate", "review", "deepen"]
@@ -913,6 +976,103 @@ def get_knowledge_tree_progress() -> list[dict]:
     return result
 
 
+# ── Job Queue (Phase 4) ────────────────────────────────────────────────────
+# DB-backed async job queue, replaces FastAPI BackgroundTasks.
+# Survives server restarts.
+
+def create_job(job_type: str, payload: dict | None = None, max_retries: int = 3) -> int:
+    """Create a pending job. Returns job id."""
+    p = json.dumps(payload) if payload else None
+    if _is_sqlite():
+        return _insert_returning_id(
+            """INSERT INTO jobs (job_type, payload, max_retries, created_at)
+               VALUES (:jt, :p, :mr, datetime('now')) RETURNING id""",
+            {"jt": job_type, "p": p, "mr": max_retries})
+    return _insert_returning_id(
+        """INSERT INTO jobs (job_type, payload, max_retries)
+           VALUES (:jt, :p ::jsonb, :mr) RETURNING id""",
+        {"jt": job_type, "p": p, "mr": max_retries})
+
+
+def claim_pending_job() -> dict | None:
+    """Claim the oldest pending job (atomic). Returns job or None."""
+    job = _fetch_one(
+        """UPDATE jobs SET status = 'running', started_at = NOW(), claimed_at = NOW()
+           WHERE id = (
+             SELECT id FROM jobs
+             WHERE status = 'pending'
+             ORDER BY created_at LIMIT 1
+             FOR UPDATE SKIP LOCKED
+           )
+           RETURNING *""")
+    return job
+
+
+def complete_job(job_id: int, result: dict | None = None):
+    """Mark a job as completed."""
+    _exec(
+        """UPDATE jobs SET status = 'completed', result = :r, completed_at = NOW()
+           WHERE id = :id""",
+        {"r": json.dumps(result) if result else None, "id": job_id})
+
+
+def fail_job(job_id: int, error_msg: str, rescind: bool = False):
+    """Mark a job as failed. If rescind=False and retries < max_retries, re-queue as pending."""
+    job = _fetch_one("SELECT * FROM jobs WHERE id = :id", {"id": job_id})
+    if not job:
+        return
+    current_retries = job.get("retries", 0) + 1
+    max_retries = job.get("max_retries", 3)
+
+    if not rescind and current_retries < max_retries:
+        # Re-queue: increment retry count, set back to pending
+        _exec(
+            """UPDATE jobs SET status = 'pending', retries = :r, error_msg = :e,
+               started_at = NULL, claimed_at = NULL
+               WHERE id = :id""",
+            {"r": current_retries, "e": error_msg, "id": job_id})
+    else:
+        _exec(
+            """UPDATE jobs SET status = 'failed', error_msg = :e,
+               retries = :r, completed_at = NOW()
+               WHERE id = :id""",
+            {"e": error_msg, "r": current_retries, "id": job_id})
+
+
+def get_pending_job_count() -> int:
+    r = _fetch_one("SELECT COUNT(*) as cnt FROM jobs WHERE status = 'pending'")
+    return r["cnt"] if r else 0
+
+
+def get_running_job_count() -> int:
+    r = _fetch_one("SELECT COUNT(*) as cnt FROM jobs WHERE status = 'running'")
+    return r["cnt"] if r else 0
+
+
+def recover_stale_jobs(timeout_minutes: int = 5):
+    """Reset jobs stuck in 'running' back to 'pending' (server restart recovery)."""
+    warn_sessions = []
+    # Recover running jobs
+    jobs = _fetch_all(
+        """SELECT id, job_type, payload FROM jobs
+           WHERE status = 'running'
+             AND started_at < NOW() - (:t || ' minutes')::interval""",
+        {"t": str(timeout_minutes)})
+    for j in jobs:
+        _exec("UPDATE jobs SET status = 'pending', started_at = NULL, claimed_at = NULL WHERE id = :id",
+              {"id": j["id"]})
+        # If it's a session answer job, check if session is still stuck in preparing
+        if j.get("job_type") == "generate_session_answer":
+            payload = _jload(j.get("payload")) if j.get("payload") else {}
+            sid = payload.get("session_id")
+            if sid:
+                s = _fetch_one("SELECT status FROM sessions WHERE id = :id", {"id": sid})
+                if s and s.get("status") == "preparing":
+                    warn_sessions.append(sid)
+
+    return {"recovered_jobs": len(jobs), "stuck_sessions": warn_sessions}
+
+
 # ── Review Schedule ────────────────────────────────────────────────────────
 
 # 艾宾浩斯遗忘曲线间隔（天）：第 n 次复习距第 n-1 次的天数
@@ -1002,6 +1162,14 @@ def get_due_reviews(limit: int = 20) -> list[dict]:
     return get_today_reviews(limit)
 
 
+def get_session_review_schedule(session_id: int) -> list[dict]:
+    """获取某个 session 的全部复习排期记录。"""
+    return _fetch_all(
+        "SELECT * FROM review_schedule WHERE session_id = :sid ORDER BY review_date ASC",
+        {"sid": session_id}
+    )
+
+
 def mark_review_complete(review_id: int, score: int | None = None):
     """标记一次复习完成，并自动排期下一轮复习（艾宾浩斯曲线）。"""
     # 获取关联的 session_id
@@ -1013,14 +1181,15 @@ def mark_review_complete(review_id: int, score: int | None = None):
         return
 
     # 标记当前为完成
+    ts = _now_str()
     if _is_sqlite():
         _exec("""
-            UPDATE review_schedule SET status = 'completed', updated_at = :ts 
+            UPDATE review_schedule SET status = 'completed', updated_at = :ts, completed_at = :ts2
             WHERE id = :rid
-        """, {"rid": review_id, "ts": _now_str()})
+        """, {"rid": review_id, "ts": ts, "ts2": ts})
     else:
         _exec("""
-            UPDATE review_schedule SET status = 'completed', updated_at = NOW() 
+            UPDATE review_schedule SET status = 'completed', updated_at = NOW(), completed_at = NOW()
             WHERE id = :rid
         """, {"rid": review_id})
 
@@ -1028,25 +1197,57 @@ def mark_review_complete(review_id: int, score: int | None = None):
     schedule_review(row["session_id"], score)
 
 
+def submit_review_content(review_id: int, user_content: str, ai_feedback: str, review_score: int):
+    """Phase 4.2: 提交复习内容（用户重新解释 + AI 评价），标记完成并排期下一轮。"""
+    row = _fetch_one(
+        "SELECT session_id FROM review_schedule WHERE id = :rid",
+        {"rid": review_id}
+    )
+    if not row:
+        return
+
+    # 更新复习记录
+    if _is_sqlite():
+        ts = _now_str()
+        _exec("""
+            UPDATE review_schedule
+            SET status = 'completed', user_content = :uc, ai_feedback = :fb,
+                review_score = :sc, updated_at = :ts, completed_at = :ts2
+            WHERE id = :rid
+        """, {"rid": review_id, "uc": user_content, "fb": ai_feedback,
+              "sc": review_score, "ts": ts, "ts2": ts})
+    else:
+        _exec("""
+            UPDATE review_schedule
+            SET status = 'completed', user_content = :uc, ai_feedback = :fb,
+                review_score = :sc, updated_at = NOW(), completed_at = NOW()
+            WHERE id = :rid
+        """, {"rid": review_id, "uc": user_content, "fb": ai_feedback, "sc": review_score})
+
+    # 自动排期下一轮
+    schedule_review(row["session_id"], review_score)
+
+
 def get_command_center_data() -> dict:
     """聚合 Command Center 需要的所有数据。"""
-    # 1. 费曼未完成的 session
+    # 1. 费曼未完成的 session（status=feynman 或有 pending feynman rounds）
     feynman_pending = _fetch_all("""
-        SELECT id, title, score, knowledge_node_id, updated_at
-        FROM sessions
-        WHERE status = 'feynman'
-        ORDER BY updated_at DESC
+        SELECT DISTINCT s.id, s.title, s.score, s.knowledge_node_id, s.updated_at
+        FROM sessions s
+        WHERE s.status = 'feynman'
+           OR EXISTS (SELECT 1 FROM rounds r WHERE r.session_id = s.id AND r.type = 'feynman' AND r.status = 'pending')
+        ORDER BY s.updated_at DESC
         LIMIT 5
     """)
 
     # 2. 今日到期的复习
     review_due = get_today_reviews(10)
 
-    # 3. 失败/revising 的 session（尚未通过的）
+    # 3. 失败 session（真正出错的，不含 revising）
     failed_sessions = _fetch_all("""
         SELECT id, title, score, knowledge_node_id, updated_at
         FROM sessions
-        WHERE status IN ('revising', 'error')
+        WHERE status = 'error'
         ORDER BY updated_at DESC
         LIMIT 5
     """)
@@ -1092,6 +1293,84 @@ def get_command_center_data() -> dict:
         "failed_sessions": failed_sessions,
         "active_sessions": active_sessions,
         "suggested_nodes": next_node_rows,
+        # 6. 未来 7 天复习计划
+        "upcoming_reviews": get_upcoming_reviews(7),
+        # 7. 系统健康摘要
+        "health": get_system_health(),
+    }
+
+
+# ── System Health ──────────────────────────────────────────────────────────
+
+def get_upcoming_reviews(days: int = 7) -> list[dict]:
+    """未来 N 天的复习计划（不含已逾期的和今天的）。"""
+    from datetime import date
+    today = date.today().isoformat()
+    if _is_sqlite():
+        return _fetch_all("""
+            SELECT r.id AS review_id, r.session_id, r.review_date,
+                   r.status, s.title, s.score,
+                   (SELECT COUNT(*) FROM review_schedule rs2
+                    WHERE rs2.session_id = r.session_id
+                      AND rs2.status = 'completed') AS review_round
+            FROM review_schedule r
+            JOIN sessions s ON s.id = r.session_id
+            WHERE r.status = 'pending' AND r.review_date > :today
+              AND r.review_date <= date(:today, '+' || :days || ' days')
+            ORDER BY r.review_date ASC
+            LIMIT 20
+        """, {"today": today, "days": str(days)})
+    else:
+        return _fetch_all("""
+            SELECT r.id AS review_id, r.session_id, r.review_date,
+                   r.status, s.title, s.score,
+                   (SELECT COUNT(*) FROM review_schedule rs2
+                    WHERE rs2.session_id = r.session_id
+                      AND rs2.status = 'completed') AS review_round
+            FROM review_schedule r
+            JOIN sessions s ON s.id = r.session_id
+            WHERE r.status = 'pending' AND r.review_date > CAST(:today AS DATE)
+              AND r.review_date <= CAST(:today AS DATE) + CAST(:days AS INTEGER)
+            ORDER BY r.review_date ASC
+            LIMIT 20
+        """, {"today": today, "days": days})
+
+
+def get_system_health() -> dict:
+    """系统健康检查：stale preparing、error、无知识节点 session、低分 session。"""
+    # stale preparing
+    stale = get_stale_preparing_sessions(10)
+    
+    # error sessions
+    errors = _fetch_all("""
+        SELECT COUNT(*) AS n FROM sessions WHERE status = 'error'
+    """)
+    
+    # sessions without knowledge node (non-completed)
+    no_node = _fetch_all("""
+        SELECT COUNT(*) AS n FROM sessions
+        WHERE knowledge_node_id IS NULL AND status NOT IN ('completed', 'error')
+    """)
+    
+    # low-score completed sessions (<30)
+    low_score = _fetch_all("""
+        SELECT COUNT(*) AS n FROM sessions
+        WHERE status = 'completed' AND score > 0 AND score < 30
+    """)
+    
+    # parse failures in recent rounds
+    parse_fails = _fetch_all("""
+        SELECT COUNT(*) AS n FROM rounds
+        WHERE CAST(eval_json AS TEXT) LIKE '%parse_failed%'
+    """)
+    
+    return {
+        "stale_preparing": stale["count"],
+        "error_sessions": errors[0]["n"] if errors else 0,
+        "no_knowledge_node": no_node[0]["n"] if no_node else 0,
+        "low_score": low_score[0]["n"] if low_score else 0,
+        "parse_failures": parse_fails[0]["n"] if parse_fails else 0,
+        "ok": stale["count"] == 0,
     }
 
 
@@ -1114,6 +1393,168 @@ def get_knowledge_tree() -> list:
         return json.loads(KNOWLEDGE_TREE_PATH.read_text(encoding="utf-8"))
     except Exception:
         return []
+
+
+# ── Maintenance: State Machine Invariants ───────────────────────────────────────
+
+def check_invariants(stale_minutes: int = 10) -> dict:
+    """检查状态机一致性，返回所有违规项的列表。
+    
+    Returns: {
+        "ok": bool,
+        "issues": [{"type": str, "severity": "error"|"warn", "detail": str, "ids": [...]}]
+    }
+    """
+    issues = []
+    
+    # 1. pending feynman rounds but session status != 'feynman'
+    rows = _fetch_all("""
+        SELECT DISTINCT s.id, s.title, s.status, COUNT(r.id) AS pending_count
+        FROM sessions s
+        JOIN rounds r ON r.session_id = s.id
+        WHERE r.type = 'feynman' AND r.status = 'pending'
+          AND s.status != 'feynman'
+        GROUP BY s.id, s.title, s.status
+    """)
+    if rows:
+        issues.append({
+            "type": "pending_feynman_wrong_status",
+            "severity": "error",
+            "detail": f"{len(rows)} session(s) have pending feynman rounds but status != 'feynman'",
+            "ids": [r["id"] for r in rows],
+            "sessions": [{"id": r["id"], "title": r.get("title",""), "status": r["status"], "pending_count": r["pending_count"]} for r in rows],
+        })
+    
+    # 2. completed with feynman rounds but no review_report
+    rows = _fetch_all("""
+        SELECT DISTINCT s.id, s.title
+        FROM sessions s
+        JOIN rounds r ON r.session_id = s.id
+        WHERE r.type = 'feynman' AND r.status = 'completed'
+          AND s.status = 'completed'
+          AND (s.review_report IS NULL OR s.review_report::text = 'null')
+    """)
+    if rows:
+        issues.append({
+            "type": "completed_missing_review_report",
+            "severity": "warn",
+            "detail": f"{len(rows)} completed session(s) with feynman rounds but no review_report",
+            "ids": [r["id"] for r in rows],
+        })
+    
+    # 3. error sessions without error_msg
+    rows = _fetch_all("""
+        SELECT id, title FROM sessions
+        WHERE status = 'error' AND (error_msg IS NULL OR error_msg = '')
+    """)
+    if rows:
+        issues.append({
+            "type": "error_without_msg",
+            "severity": "warn",
+            "detail": f"{len(rows)} error session(s) without error_msg",
+            "ids": [r["id"] for r in rows],
+        })
+    
+    # 4. Multiple pending feynman groups per session
+    rows = _fetch_all("""
+        SELECT session_id, COUNT(DISTINCT group_id) AS n_groups
+        FROM rounds
+        WHERE type = 'feynman' AND status = 'pending' AND group_id IS NOT NULL
+        GROUP BY session_id
+        HAVING COUNT(DISTINCT group_id) > 1
+    """)
+    if rows:
+        issues.append({
+            "type": "multiple_pending_feynman_groups",
+            "severity": "error",
+            "detail": f"{len(rows)} session(s) have multiple pending feynman groups",
+            "ids": [r["session_id"] for r in rows],
+            "groups": [{"session_id": r["session_id"], "n_groups": r["n_groups"]} for r in rows],
+        })
+    
+    # 5. Multiple pending review schedules per session
+    rows = _fetch_all("""
+        SELECT session_id, COUNT(*) AS n
+        FROM review_schedule
+        WHERE status = 'pending'
+        GROUP BY session_id
+        HAVING COUNT(*) > 1
+    """)
+    if rows:
+        issues.append({
+            "type": "multiple_pending_review_schedules",
+            "severity": "warn",
+            "detail": f"{len(rows)} session(s) have multiple pending review schedules",
+            "ids": [r["session_id"] for r in rows],
+        })
+    
+    # 6. Stale preparing sessions
+    stale_data = get_stale_preparing_sessions(stale_minutes)
+    stale_rows = stale_data.get("stale", [])
+    if stale_rows:
+        issues.append({
+            "type": "stale_preparing",
+            "severity": "warn",
+            "detail": f"{len(stale_rows)} session(s) stuck in 'preparing' for >{stale_minutes}min",
+            "ids": [r["id"] for r in stale_rows],
+        })
+    
+    # 7. Completed with score=0 but no review report (suspicious manual complete)
+    rows = _fetch_all("""
+        SELECT id, title FROM sessions
+        WHERE status = 'completed' AND score = 0 AND (review_report IS NULL OR review_report::text = 'null')
+    """)
+    if rows:
+        issues.append({
+            "type": "completed_zero_score",
+            "severity": "warn",
+            "detail": f"{len(rows)} completed session(s) with score=0 (manually completed?)",
+            "ids": [r["id"] for r in rows],
+        })
+    
+    errors = [i for i in issues if i["severity"] == "error"]
+    return {
+        "ok": len(errors) == 0,
+        "total_issues": len(issues),
+        "error_count": len(errors),
+        "warn_count": len(issues) - len(errors),
+        "issues": issues,
+    }
+
+
+def repair_invariants(dry_run: bool = True) -> dict:
+    """修复常见的状态机不一致问题。
+    
+    - pending feynman rounds + status != feynman → 修正 status 为 'feynman'
+    """
+    repairs = []
+    
+    # Fix: pending feynman but status != feynman
+    with _tx() as conn:
+        rows = conn.execute(text("""
+            SELECT DISTINCT s.id AS session_id, s.status AS current_status
+            FROM sessions s
+            JOIN rounds r ON r.session_id = s.id
+            WHERE r.type = 'feynman' AND r.status = 'pending'
+              AND s.status != 'feynman'
+        """)).fetchall()
+        
+        for row in rows:
+            sid = row._mapping["session_id"]
+            old_status = row._mapping["current_status"]
+            if not dry_run:
+                conn.execute(
+                    text("UPDATE sessions SET status = 'feynman', updated_at = :ts WHERE id = :sid"),
+                    {"sid": sid, "ts": _now_str()}
+                )
+            repairs.append({
+                "session_id": sid,
+                "old_status": old_status,
+                "new_status": "feynman",
+                "dry_run": dry_run,
+            })
+    
+    return {"dry_run": dry_run, "repairs": repairs, "count": len(repairs)}
 
 
 if __name__ == "__main__":

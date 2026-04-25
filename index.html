@@ -5,28 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AIterate</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="/assets/fonts.css">
-  <link rel="stylesheet" href="/assets/app.css">
-  <link rel="stylesheet" href="/assets/themes/night.css">
-  <link rel="stylesheet" href="/assets/themes/mono.css">
+  <link rel="stylesheet" href="/assets/fonts.css?v=027">
+  <link rel="stylesheet" href="/assets/app.css?v=027">
+  <link rel="stylesheet" href="/assets/themes/night.css?v=027">
+  <link rel="stylesheet" href="/assets/themes/mono.css?v=027">
+  <link rel="stylesheet" href="/assets/vendor/github.min.css" id="hljs-theme-light">
+  <link rel="stylesheet" href="/assets/vendor/github-dark.min.css" id="hljs-theme-dark" disabled>
   <script>
-    // 主题初始化（防闪烁）
     (function () {
       try {
         const t = localStorage.getItem('aiterate-theme') || 'night';
         document.documentElement.dataset.theme = t;
       } catch (_) {}
+      document.addEventListener('DOMContentLoaded', function () {
+        const t = document.documentElement.dataset.theme || 'night';
+        syncHljsTheme(t);
+      });
     })();
-    // Admin token（由服务端注入）
-    window.AITERATE_TOKEN = "%%AITERATE_TOKEN%%";
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" id="hljs-theme-light">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" id="hljs-theme-dark" disabled>
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/vendor/purify.min.js"></script>
+  <script src="/assets/vendor/highlight.min.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       if (window.marked && window.hljs) {
@@ -42,19 +41,20 @@
       document.getElementById('hljs-theme-light').disabled = (theme !== 'mono');
       document.getElementById('hljs-theme-dark').disabled  = (theme === 'mono');
     }
-    try { syncHljsTheme(localStorage.getItem('aiterate-theme') || 'night'); } catch (_) {}
   </script>
   <script type="importmap">
   {
     "imports": {
-      "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js",
-      "vue-router": "https://unpkg.com/vue-router@4/dist/vue-router.esm-browser.js"
+      "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js",
+      "vue-router": "https://unpkg.com/vue-router@4/dist/vue-router.esm-browser.js",
+      "@vue/devtools-api": "https://unpkg.com/@vue/devtools-api@6/lib/esm/index.js"
     }
   }
   </script>
 </head>
 <body>
-  <div id="app"></div>
-  <script type="module" src="/assets/js/vue/main.js?v=003"></script>
+  <div id="app"><!-- Vue mounts here, template matches original DOM exactly --></div>
+  <script>window.AITERATE_TOKEN="%%AITERATE_TOKEN%%";</script>
+  <script type="module" src="/assets/js/vue/main.js?v=027"></script>
 </body>
 </html>

@@ -242,14 +242,21 @@
 [data-theme="mono"] .modal-close  { color: var(--fg-1); }
 
 /* ── 14. Stage Badges ────────────────────────────────────────────────────── */
-[data-theme="mono"] .stage-idle       { background: var(--bg-2); color: var(--fg-1);   border-color: var(--border); }
-[data-theme="mono"] .stage-processing { background: var(--bg-2); color: var(--fg-0);   border-color: var(--border); }
-[data-theme="mono"] .stage-deepening  { background: var(--bg-2); color: var(--good);   border-color: var(--border); }
-[data-theme="mono"] .stage-revising   { background: var(--bg-2); color: var(--warn);   border-color: var(--border); }
-[data-theme="mono"] .stage-feynman    { background: var(--bg-2); color: var(--warn);   border-color: var(--border); }
-[data-theme="mono"] .stage-reviewing  { background: var(--bg-2); color: var(--warn);   border-color: var(--border); }
-[data-theme="mono"] .stage-completed  { background: var(--bg-2); color: var(--accent); border-color: var(--border); }
-[data-theme="mono"] .stage-failed     { background: var(--bg-2); color: var(--bad);    border-color: var(--border); }
+/*   idle=淡灰 · preparing=暖灰 · learning=蓝紫 · processing=深灰   */
+/*   deepening=翠绿 · revising=琥珀 · feynman=青蓝 · reviewing=紫罗兰  */
+/*   completed=绿 · failed=红                                        */
+/* 10色相完全区分：灰·石板·黄·天蓝·绿·橙·粉红·紫·青·红 */
+/* stage badge colors defined globally in app.css — no theme override needed */
+
+/* 亮色主题下加深文字 */
+[data-theme="mono"] .stage-idle       { color: #6b7280; border-color: #6b7280; }
+[data-theme="mono"] .stage-preparing  { color: #7c3aed; border-color: #7c3aed; }
+[data-theme="mono"] .stage-learning   { color: #2563eb; border-color: #2563eb; }
+[data-theme="mono"] .stage-deepening  { color: #059669; border-color: #059669; }
+[data-theme="mono"] .stage-revising   { color: #ea580c; border-color: #ea580c; }
+[data-theme="mono"] .stage-feynman    { color: #9333ea; border-color: #9333ea; }
+[data-theme="mono"] .stage-completed  { color: #16a34a; border-color: #16a34a; }
+[data-theme="mono"] .stage-failed     { color: #dc2626; border-color: #dc2626; }
 
 /* ── 15. Markdown & Code ─────────────────────────────────────────────────── */
 [data-theme="mono"] .md-body code {

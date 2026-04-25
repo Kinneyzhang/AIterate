@@ -261,7 +261,8 @@ AI的完整回答：
             "raw":            raw,
         }
     except Exception:
-        return {"score": 50, "understood_well": False, "praise": "", "gaps": [], "verdict": "评估解析失败", "raw": raw}
+        return {"score": 50, "understood_well": False, "praise": "", "gaps": [], "verdict": "评估解析失败",
+                "raw": raw, "parse_failed": True}
 
 
 # ── 阶段2b：回答用户追问 ───────────────────────────────
@@ -428,6 +429,61 @@ async def evaluate_review_answers(original_question: str, review_questions: list
             "raw":           raw,
         }
     except Exception:
-        return {"item_scores": [], "final_score": 50, "mastery_level": "理解", "strong_points": [], "weak_points": [], "final_summary": "评估解析失败", "raw": raw}
+        return {"item_scores": [], "final_score": 50, "mastery_level": "理解", "strong_points": [],
+                "weak_points": [], "final_summary": "评估解析失败", "raw": raw, "parse_failed": True}
+
+
+# ── Phase 4.2: Review Re-explanation Evaluation ─────────────
+
+REVIEW_RE_EXPLAIN_SYSTEM = """你是一位学习导师，正在评估学习者对已学知识的间隔复习效果。
+
+学习者之前学过某个主题，现在隔了一段时间重新用自己的话解释。
+请从以下维度评估：
+
+1. 概念的准确性（是否理解正确）
+2. 表达的完整性（是否涵盖核心要点）
+3. 理解的深度（是否停留在表面）
+
+请输出 JSON：
+{
+  "score": <0-100 整数，60以上=基本掌握，80以上=熟练掌握>,
+  "praise": "<做得好的方面，1-2句>",
+  "gap": "<需要加强的地方，1-2句>",
+  "verdict": "<一句话总结评价>"
+}"""
+
+
+async def evaluate_review_re_explanation(original_question: str, ai_material: str,
+                                          user_explanation: str) -> dict:
+    """Phase 4.2: Evaluate a user's re-explanation during spaced repetition review."""
+    prompt = f"""原始问题：
+{original_question}
+
+学习材料（AI 原始回答）：
+{ai_material[:2000]}
+
+学习者的重新解释：
+{user_explanation}
+
+请评估学习者在间隔复习中的表现。"""
+
+    messages = [
+        {"role": "system", "content": REVIEW_RE_EXPLAIN_SYSTEM},
+        {"role": "user", "content": prompt},
+    ]
+    raw = await _call_llm(messages, temperature=0.3, max_tokens=400, role="review")
+    try:
+        block = _extract_json_block(raw, "{", "}")
+        result = json.loads(block)
+        return {
+            "score": int(result.get("score", 50)),
+            "praise": result.get("praise", ""),
+            "gap": result.get("gap", ""),
+            "verdict": result.get("verdict", ""),
+            "raw": raw,
+        }
+    except Exception:
+        return {"score": 50, "praise": "", "gap": "", "verdict": "评估解析失败",
+                "raw": raw, "parse_failed": True}
 
 
