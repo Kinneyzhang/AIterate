@@ -4,6 +4,7 @@ Port: 7070
 """
 import asyncio
 import json
+import logging
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -17,6 +18,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 import aiterate_db as db
 import aiterate_ai as ai
+
+logger = logging.getLogger("aiterate")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 
 FRONTEND = Path(__file__).parent / "index.html"
 ASSETS_DIR = Path(__file__).parent / "assets"
@@ -570,33 +574,50 @@ async def deepen(session_id: int, body: DeepenRequest):
         raise HTTPException(400, "action_type must be 'take' or 'press'")
 
 
+# ── Global error handler ────────────────────────────────────────────────
+
+@app.exception_handler(500)
+async def internal_error_handler(request: Request, exc: Exception):
+    import traceback
+    logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
+    return JSONResponse(status_code=500, content={"detail": f"Internal error: {exc}"})
+
+# ── Feynman Phase ───────────────────────────────────────────────────────
+
 @app.post("/api/sessions/{session_id}/start-feynman", dependencies=[Depends(_require_admin)])
 async def start_feynman(session_id: int):
     """费曼阶段：AI生成检验题，每题一条 round"""
-    session = db.get_session(session_id)
-    if not session:
-        raise HTTPException(404, "Session not found")
-
-    rounds = db.get_rounds(session_id)
-    learning_history = " | ".join([r.get("output", "")[:100] for r in rounds])
-
-    # 注入知识节点上下文
-    knowledge_node = None
-    node_id = db.get_knowledge_node(session_id)
-    if node_id:
-        tree = db.get_knowledge_tree()
-        knowledge_node = db.find_node_by_id(tree, node_id)
-
-    result = await ai.generate_review_questions(
-        session["title"], session.get("material", ""), learning_history,
-        knowledge_node=knowledge_node,
-    )
-    questions = result["questions"]
     try:
-        group_id, round_ids = db.create_feynman_group(session_id, questions)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return {"group_id": group_id, "round_ids": round_ids, "questions": questions}
+        session = db.get_session(session_id)
+        if not session:
+            raise HTTPException(404, "Session not found")
+
+        rounds = db.get_rounds(session_id)
+        learning_history = " | ".join([r.get("output", "")[:100] for r in rounds])
+
+        # 注入知识节点上下文
+        knowledge_node = None
+        node_id = db.get_knowledge_node(session_id)
+        if node_id:
+            tree = db.get_knowledge_tree()
+            knowledge_node = db.find_node_by_id(tree, node_id)
+
+        result = await ai.generate_review_questions(
+            session["title"], session.get("material", ""), learning_history,
+            knowledge_node=knowledge_node,
+        )
+        questions = result["questions"]
+        try:
+            group_id, round_ids = db.create_feynman_group(session_id, questions)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"group_id": group_id, "round_ids": round_ids, "questions": questions}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"start_feynman({session_id}) Unhandled error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Internal error: {e}")
 
 
 class FeynmanAnswerRequest(BaseModel):
@@ -619,64 +640,71 @@ class FeynmanAnswerRequest(BaseModel):
 @app.post("/api/sessions/{session_id}/complete-feynman", dependencies=[Depends(_require_admin)])
 async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
     """Complete feynman phase: atomically evaluate and persist."""
-    session = db.get_session(session_id)
-    if not session:
-        raise HTTPException(404, "Session not found")
-
-    rounds = db.get_rounds(session_id)
-    feynman_rounds = sorted(
-        [r for r in rounds if r.get("group_id") == body.group_id],
-        key=lambda r: r["seq"]
-    )
-    if not feynman_rounds:
-        raise HTTPException(404, "Feynman group not found")
-
-    questions = [r["input"] for r in feynman_rounds]
-    eval_result = await ai.evaluate_review_answers(session["title"], questions, body.answers)
-    pass_score = db.get_settings().get("feynman_pass_score", 60)
-    passed = eval_result["final_score"] >= pass_score
-    new_status = "completed" if passed else "revising"
-
     try:
-        db.complete_feynman_group(
-            session_id=session_id,
-            group_id=body.group_id,
-            answers=body.answers,
-            item_scores=eval_result.get("item_scores", []),
-            final_score=eval_result["final_score"],
-            new_status=new_status,
+        session = db.get_session(session_id)
+        if not session:
+            raise HTTPException(404, "Session not found")
+
+        rounds = db.get_rounds(session_id)
+        feynman_rounds = sorted(
+            [r for r in rounds if r.get("group_id") == body.group_id],
+            key=lambda r: r["seq"]
         )
-    except ValueError as e:
-        if "already been submitted" in str(e):
-            raise HTTPException(409, str(e))
-        raise HTTPException(400, str(e))
+        if not feynman_rounds:
+            raise HTTPException(404, "Feynman group not found")
 
-    # 持久化完整费曼报告
-    report = {
-        "final_score":   eval_result["final_score"],
-        "mastery_level": eval_result["mastery_level"],
-        "strong_points": eval_result["strong_points"],
-        "weak_points":   eval_result["weak_points"],
-        "final_summary": eval_result["final_summary"],
-        "passed":        passed,
-        "pass_score":    pass_score,
-    }
-    db.save_review_report(session_id, report)
+        questions = [r["input"] for r in feynman_rounds]
+        eval_result = await ai.evaluate_review_answers(session["title"], questions, body.answers)
+        pass_score = db.get_settings().get("feynman_pass_score", 60)
+        passed = eval_result["final_score"] >= pass_score
+        new_status = "completed" if passed else "revising"
 
-    # 自动创建复习排期
-    db.schedule_review(session_id, eval_result["final_score"])
+        try:
+            db.complete_feynman_group(
+                session_id=session_id,
+                group_id=body.group_id,
+                answers=body.answers,
+                item_scores=eval_result.get("item_scores", []),
+                final_score=eval_result["final_score"],
+                new_status=new_status,
+            )
+        except ValueError as e:
+            if "already been submitted" in str(e):
+                raise HTTPException(409, str(e))
+            raise HTTPException(400, str(e))
 
-    return {
-        "item_scores":   eval_result.get("item_scores", []),
-        "final_score":   eval_result["final_score"],
-        "mastery_level": eval_result["mastery_level"],
-        "strong_points": eval_result["strong_points"],
-        "weak_points":   eval_result["weak_points"],
-        "final_summary": eval_result["final_summary"],
-        "passed":        passed,
-        "pass_score":    pass_score,
-        "new_status":    new_status,
-    }
+        # 持久化完整费曼报告
+        report = {
+            "final_score":   eval_result["final_score"],
+            "mastery_level": eval_result["mastery_level"],
+            "strong_points": eval_result["strong_points"],
+            "weak_points":   eval_result["weak_points"],
+            "final_summary": eval_result["final_summary"],
+            "passed":        passed,
+            "pass_score":    pass_score,
+        }
+        db.save_review_report(session_id, report)
+
+        # 自动创建复习排期
+        db.schedule_review(session_id, eval_result["final_score"])
+
+        return {
+            "item_scores":   eval_result.get("item_scores", []),
+            "final_score":   eval_result["final_score"],
+            "mastery_level": eval_result["mastery_level"],
+            "strong_points": eval_result["strong_points"],
+            "weak_points":   eval_result["weak_points"],
+            "final_summary": eval_result["final_summary"],
+            "passed":        passed,
+            "pass_score":    pass_score,
+            "new_status":    new_status,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"complete_feynman({session_id}) Unhandled error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Internal error: {e}")
 
 
 @app.post("/api/sessions/{session_id}/complete", dependencies=[Depends(_require_admin)])

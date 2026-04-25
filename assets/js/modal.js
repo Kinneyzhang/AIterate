@@ -2,6 +2,7 @@
 // 新建 session 的弹出模态框
 
 import { getReady, getKnowledgeTree } from './api.js';
+import { icon } from './utils.js';
 
 export function openNewSessionModal(onSubmit) {
   const existing = document.getElementById('newSessionModal');
@@ -19,8 +20,8 @@ export function openNewSessionModal(onSubmit) {
       <div class="modal-body">
         <div id="modalConfigWarning" class="modal-config-warning" style="display:none"></div>
         <div class="type-toggle" id="modalTypeToggle">
-          <button class="type-btn active" data-type="question">🔎 问题</button>
-          <button class="type-btn" data-type="viewpoint">💡 观点</button>
+          <button class="type-btn active" data-type="question">${icon('search')} 问题</button>
+          <button class="type-btn" data-type="viewpoint">${icon('bulb')} 观点</button>
         </div>
         <textarea id="modalContent"
           rows="7" class="modal-textarea"
@@ -30,11 +31,11 @@ export function openNewSessionModal(onSubmit) {
       </div>
       <div class="modal-footer">
         <div class="modal-footer-left">
-          <button class="btn btn-sm web-search-btn" id="modalWebSearch" title="联网搜索">🌐 联网</button>
+          <button class="btn btn-sm web-search-btn" id="modalWebSearch" title="联网搜索">${icon('globe')} 联网</button>
         </div>
         <div class="modal-footer-right">
           <button class="btn" id="modalCancelBtn">取消</button>
-          <button class="btn btn-primary" id="modalSubmitBtn" disabled>🚀 提交</button>
+          <button class="btn btn-primary" id="modalSubmitBtn" disabled>${icon('rocket')} 提交</button>
         </div>
       </div>
     </div>`;
@@ -56,7 +57,7 @@ export function openNewSessionModal(onSubmit) {
       submitBtn.disabled = true;
       submitBtn.title = '请先配置大模型';
       warningEl.style.display = 'flex';
-      warningEl.innerHTML = `⚠️ 尚未配置大模型，<a class="modal-config-link" id="goToSettings">前往设置</a> 后再提交。`;
+      warningEl.innerHTML = `${icon('warn')} 尚未配置大模型，<a class="modal-config-link" id="goToSettings">前往设置</a> 后再提交。`;
       document.getElementById('goToSettings')?.addEventListener('click', () => {
         el.remove();
         window.app?.openSettings?.();
@@ -100,7 +101,7 @@ export function openNewSessionModal(onSubmit) {
       // 弹出内嵌提示，不 alert
       const hint = document.createElement('div');
       hint.className = 'modal-tavily-hint';
-      hint.innerHTML = `⚠️ 联网搜索需要 Tavily API Key，<a class="modal-config-link" id="goToTavily">前往设置</a> 填写。`;
+      hint.innerHTML = `${icon('warn')} 联网搜索需要 Tavily API Key，<a class="modal-config-link" id="goToTavily">前往设置</a> 填写。`;
       const existing = el.querySelector('.modal-tavily-hint');
       if (existing) existing.remove();
       webSearchBtn.parentElement.insertAdjacentElement('afterend', hint);
@@ -127,7 +128,7 @@ export function openNewSessionModal(onSubmit) {
   function renderNodeSuggestions(nodes) {
     if (!nodes?.length) { suggestEl.style.display = 'none'; return; }
     suggestEl.innerHTML = `
-      <div class="node-suggest-label">📂 推荐知识节点（可选）</div>
+      <div class="node-suggest-label">${icon('tag')} 推荐知识节点（可选）</div>
       <div class="node-suggest-list">
         ${nodes.slice(0, 4).map(n => `
           <button class="node-suggest-item ${n.id === selectedNodeId ? 'selected' : ''}"
@@ -190,13 +191,13 @@ export function openNewSessionModal(onSubmit) {
       return;
     }
     submitBtn.disabled = true;
-    submitBtn.textContent = '⏳ 提交中...';
+    submitBtn.innerHTML = `${icon('clock')} 提交中...`;
     try {
       await onSubmit('', content, selectedType, webSearch, selectedNodeId);
       close();
     } finally {
       submitBtn.disabled = false;
-      submitBtn.textContent = '🚀 提交';
+      submitBtn.innerHTML = `${icon('rocket')} 提交`;
       applyReadyState(); // 如果 LLM 未配置，恢复禁用
     }
   });

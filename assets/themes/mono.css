@@ -318,3 +318,54 @@
 [data-theme="mono"] .round-summary  .round-label { color: var(--good); }
 [data-theme="mono"] .round-question .round-label { color: var(--fg-1); }
 [data-theme="mono"] .round-review   .round-label { color: var(--warn); }
+
+/* ── 19. Command Center ──────────────────────────────────────────────────── */
+[data-theme="mono"] .cc-section-title {
+  color: var(--fg-1); opacity: 0.7;
+}
+[data-theme="mono"] .cmd-item {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+[data-theme="mono"] .cmd-link { color: inherit; text-decoration: none; }
+[data-theme="mono"] .cmd-link:hover { text-decoration: underline; opacity: 0.8; }
+[data-theme="mono"] .cmd-score { color: var(--fg-1); opacity: 0.6; }
+[data-theme="mono"] .cmd-node { background: var(--bg-2); color: var(--fg-1); opacity: 0.55; }
+[data-theme="mono"] .cmd-empty { color: var(--fg-1); opacity: 0.35; }
+[data-theme="mono"] .cmd-done-btn {
+  background: var(--bg-2); color: var(--fg-0);
+  border: 1px solid var(--border); border-radius: 4px;
+}
+[data-theme="mono"] .cmd-done-btn:hover { background: var(--accent-bg); }
+[data-theme="mono"] .cmd-overdue { color: #c92a2a; background: rgba(201,42,42,0.08); }
+
+/* ── 20. Knowledge Tree ──────────────────────────────────────────────────── */
+[data-theme="mono"] .kt-legend { color: var(--fg-1); opacity: 0.55; border-bottom-color: var(--border); }
+[data-theme="mono"] .kt-dot-untouched { border-color: rgba(0,0,0,0.12); }
+[data-theme="mono"] .kt-domain-card { background: var(--bg-1); border-color: var(--border); }
+[data-theme="mono"] .kt-domain-title { color: var(--fg-0); }
+[data-theme="mono"] .kt-domain-touched { color: var(--fg-1); opacity: 0.4; }
+[data-theme="mono"] .kt-child-title { color: var(--fg-0); }
+[data-theme="mono"] .kt-child-stats { color: var(--fg-1); opacity: 0.5; }
+[data-theme="mono"] .kt-child-row:hover { background: var(--bg-2); }
+[data-theme="mono"] .kt-child-empty { color: var(--fg-1); }
+
+/* ── 21. Review Report & Gaps ─────────────────────────────────────────────── */
+[data-theme="mono"] .review-report .report-label { color: var(--fg-1); opacity: 0.7; }
+[data-theme="mono"] .review-report .report-value { color: var(--fg-0); }
+[data-theme="mono"] .review-report .report-summary {
+  background: var(--bg-2); border: 1px solid var(--border);
+  color: var(--fg-0);
+}
+[data-theme="mono"] .report-list.good li { background: rgba(43,138,62,0.07); color: #2b8a3e; }
+[data-theme="mono"] .report-list.weak li { background: rgba(230,119,0,0.07); color: #e67700; }
+[data-theme="mono"] .gaps-banner {
+  background: rgba(230,119,0,0.05); border: 1px solid rgba(230,119,0,0.18);
+}
+[data-theme="mono"] .gaps-banner-title { color: #e67700; }
+[data-theme="mono"] .gaps-summary li { color: var(--fg-0); }
+[data-theme="mono"] .gaps-section {
+  background: rgba(201,42,42,0.05); border: 1px solid rgba(201,42,42,0.15);
+}
+[data-theme="mono"] .gaps-label { color: #c92a2a; }
+[data-theme="mono"] .gaps-list li { color: var(--fg-1); }

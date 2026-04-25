@@ -9,7 +9,14 @@ import json, time, sys, os
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
+# 自动读取 admin token，适配 Phase 0 安全加固
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from aiterate_db import get_settings
+
 BASE = "http://192.168.31.222:7070"
+ADMIN_TOKEN = get_settings().get("admin_token", "")
+if not ADMIN_TOKEN:
+    print("⚠️  admin_token 未配置！测试可能因 401 全部失败。")
 
 passed = 0
 failed = 0
@@ -22,6 +29,8 @@ def api(method, path, body=None, timeout=120):
     data = json.dumps(body).encode() if body else None
     req = Request(url, data=data, method=method)
     req.add_header("Content-Type", "application/json")
+    if ADMIN_TOKEN:
+        req.add_header("X-Admin-Token", ADMIN_TOKEN)
     try:
         with urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode()
@@ -87,7 +96,7 @@ def test_02_settings_read():
     """读取设置"""
     r = api("GET", "/api/settings")
     assert "llm" in r
-    assert "tavily_api_key" in r
+    assert ("tavily_api_key_masked" in r or "tavily_api_key" in r), f"missing tavily key, got keys={list(r.keys())}"
     assert "feynman_pass_score" in r
 
 def test_03_stats_baseline():
@@ -469,7 +478,7 @@ def test_edge_invalid_action_type():
         })
         raise AssertionError("should reject invalid action_type")
     except RuntimeError as e:
-        if "400" not in str(e):
+        if "400" not in str(e) and "422" not in str(e):
             raise
 
 def test_edge_invalid_theme():

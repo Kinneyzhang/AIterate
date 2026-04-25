@@ -567,7 +567,7 @@ def create_round_with_seq(session_id: int, type: str,
             text("SELECT COALESCE(MAX(seq), 0) AS m FROM rounds WHERE session_id = :sid"),
             {"sid": session_id}
         ).fetchone()
-        next_s = (row["m"] if row else 0) + 1
+        next_s = (row._mapping["m"] if row else 0) + 1
         result = conn.execute(
             text("""
                 INSERT INTO rounds (session_id, seq, type, input, output, score, status, eval_json)
@@ -577,7 +577,7 @@ def create_round_with_seq(session_id: int, type: str,
              "input": input, "output": output, "score": score, "status": status,
              "ejson": eval_str}
         )
-        rid = result.fetchone()["id"]
+        rid = result.fetchone()._mapping["id"]
     return rid
 
 
@@ -592,7 +592,7 @@ def create_feynman_group(session_id: int, questions: list[str]) -> tuple[int, li
             text("SELECT COALESCE(MAX(seq), 0) AS m FROM rounds WHERE session_id = :sid"),
             {"sid": session_id}
         ).fetchone()
-        seq_start = (row["m"] if row else 0) + 1
+        seq_start = (row._mapping["m"] if row else 0) + 1
 
         round_ids = []
         first_id = None
@@ -604,7 +604,7 @@ def create_feynman_group(session_id: int, questions: list[str]) -> tuple[int, li
                 """),
                 {"sid": session_id, "seq": seq_start + i, "input": q}
             )
-            rid = result.fetchone()["id"]
+            rid = result.fetchone()._mapping["id"]
             if first_id is None:
                 first_id = rid
             round_ids.append(rid)
@@ -645,7 +645,7 @@ def complete_feynman_group(session_id: int, group_id: int,
         if not rows:
             raise ValueError("Feynman group not found")
         
-        completed_count = sum(1 for r in rows if r["status"] == "completed")
+        completed_count = sum(1 for r in rows if r._mapping["status"] == "completed")
         if completed_count > 0:
             raise ValueError("This feynman group has already been submitted")
         
@@ -662,7 +662,7 @@ def complete_feynman_group(session_id: int, group_id: int,
                     SET output = :out, score = :sc, score_comment = :cm, status = 'completed'
                     WHERE id = :rid
                 """),
-                {"out": ans, "sc": ev.get("score"), "cm": ev.get("comment", ""), "rid": r["id"]}
+                {"out": ans, "sc": ev.get("score"), "cm": ev.get("comment", ""), "rid": r._mapping["id"]}
             )
 
         # Update session

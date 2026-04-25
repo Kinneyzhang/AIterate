@@ -1,7 +1,7 @@
 // ── workspace.js ─────────────────────────────────────────────────────────────
 // 三 panel tab 布局：学习 / 深化 / 费曼
 
-import { escapeHtml, renderMarkdown, formatDate, getStageMeta } from './utils.js';
+import { escapeHtml, renderMarkdown, formatDate, getStageMeta, icon } from './utils.js';
 
 // ── 当前激活 tab ───────────────────────────────────────────────────────────────
 let _activeTab = 'learn'; // 'learn' | 'deepen' | 'review'
@@ -88,7 +88,7 @@ function buildLearnPanel() {
   const kn = _payload?.knowledge_node;
   const knHtml = kn ? `
     <div class="knowledge-node-bar">
-      <span class="kn-label">📂 知识节点</span>
+      <span class="kn-label">${icon('tag')} 知识节点</span>
       <span class="kn-path">${escapeHtml(kn.title)}</span>
       ${kn.keywords?.length ? `<span class="kn-keywords">${kn.keywords.slice(0, 3).map(k => '#' + escapeHtml(k)).join(' ')}</span>` : ''}
     </div>` : '';
@@ -122,7 +122,7 @@ function buildDeepenPanel() {
   const allGaps = _payload?.unresolved_gaps || [];
   const gapsBanner = allGaps.length > 0 ? `
     <div class="gaps-banner">
-      <div class="gaps-banner-title">📋 待解决薄弱点（${allGaps.length}）</div>
+      <div class="gaps-banner-title">${icon('clip')} 待解决薄弱点（${allGaps.length}）</div>
       <ul class="gaps-summary">${allGaps.slice(0, 8).map(g => `<li>${escapeHtml(g.gap)} <span class="muted small">→ 第${g.seq}轮</span></li>`).join('')}</ul>
     </div>` : '';
 
@@ -138,14 +138,14 @@ function buildDeepenPanel() {
   const inputArea = canAct ? `
     <div class="deepen-inputs">
       <div class="deepen-col">
-        <div class="col-label muted small">🔎 提追问</div>
+        <div class="col-label muted small">${icon('search')} 提追问</div>
         <textarea id="questionInput" rows="4"
           placeholder="追问某个细节、反例、边界条件…"></textarea>
         <button class="btn btn-primary btn-block mt8" id="submitQuestionBtn"
           onclick="window.app.submitDeepAction('press')">提交追问</button>
       </div>
       <div class="deepen-col">
-        <div class="col-label muted small">✍️ 写理解</div>
+        <div class="col-label muted small">${icon('edit')} 写理解</div>
         <textarea id="takeInput" rows="4"
           placeholder="用自己的话说说你对 AI 回答的理解，有没有偏差 AI 会告诉你…"></textarea>
         <button class="btn btn-primary btn-block mt8" id="submitTakeBtn"
@@ -153,7 +153,7 @@ function buildDeepenPanel() {
       </div>
     </div>
     <button class="btn btn-success btn-block mt12" id="startFeynmanBtn"
-      onclick="window.app.startFeynman()">✅ 差不多了，开始费曼检验</button>` : '';
+      onclick="window.app.startFeynman()">${icon('check')} 差不多了，开始费曼检验</button>` : '';
 
   const noHistory = !historyHtml && !canAct
     ? `<div class="panel-empty muted">暂无深化记录</div>` : '';
@@ -172,13 +172,13 @@ function buildDeepenRoundCard(round) {
     if (evalData?.gaps?.length) {
       gapsHtml = `
         <div class="gaps-section">
-          <div class="gaps-label">⚠️ 薄弱点</div>
+          <div class="gaps-label">${icon('warn')} 薄弱点</div>
           <ul class="gaps-list">${evalData.gaps.map(g => `<li>${escapeHtml(g)}</li>`).join('')}</ul>
         </div>`;
     }
     return `
       <div class="round-card round-take">
-        <div class="round-user-wrap"><span class="round-label">💡 理解</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
+        <div class="round-user-wrap"><span class="round-label">${icon('bulb')} 理解</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
         <div class="round-ai md-body">
           <div class="ps-label">AI 评价</div>
           ${renderMarkdown(round.output || '')}
@@ -190,7 +190,7 @@ function buildDeepenRoundCard(round) {
   if (round.type === 'press') {
     return `
       <div class="round-card round-press">
-        <div class="round-user-wrap"><span class="round-label">🔎 追问</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
+        <div class="round-user-wrap"><span class="round-label">${icon('search')} 追问</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
         <div class="round-ai md-body">
           <div class="ps-label">AI 回答</div>
           ${renderMarkdown(round.output || '')}
@@ -208,7 +208,7 @@ function buildReviewPanel() {
   // 当前待答题组
   const pendingHtml = currentGroup.length > 0 && status === 'feynman' ? `
     <div class="panel-section">
-      <div class="ps-label">🧪 费曼检验</div>
+      <div class="ps-label">${icon('flask')} 费曼检验</div>
       <div class="ps-hint muted small mb12">用自己的话回答，AI 会评估你的掌握程度。</div>
       ${currentGroup.map((r, i) => `
         <div class="review-q">
@@ -217,7 +217,7 @@ function buildReviewPanel() {
             placeholder="用自己的话回答…">${escapeHtml(r.output || '')}</textarea>
         </div>`).join('')}
       <button class="btn btn-primary btn-block mt8" id="submitFeynmanBtn"
-        onclick="window.app.submitFeynman()">📊 提交答案</button>
+        onclick="window.app.submitFeynman()">${icon('chart')} 提交答案</button>
     </div>` : '';
 
   // 已完成费曼历史（按 group_id 聚合）
@@ -234,7 +234,7 @@ function buildReviewPanel() {
     const avgScore = Math.round(groupScore / sorted.length);
     return `
       <div class="round-card round-review">
-        <div class="round-label">🧪 费曼记录 · ${avgScore}/100</div>
+        <div class="round-label">${icon('flask')} 费曼记录 · ${avgScore}/100</div>
         <div class="qa-list">
           ${sorted.map((r, i) => {
             const scoreTag = r.score != null
@@ -266,12 +266,12 @@ function buildReviewPanel() {
           ${reviewReport.final_summary ? `<div class="report-summary md-body">${renderMarkdown(reviewReport.final_summary)}</div>` : ''}
           ${reviewReport.strong_points?.length ? `
             <div class="report-section">
-              <div class="report-label">✅ 理解到位的点</div>
+              <div class="report-label">${icon('check')} 理解到位的点</div>
               <ul class="report-list good">${reviewReport.strong_points.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
             </div>` : ''}
           ${reviewReport.weak_points?.length ? `
             <div class="report-section">
-              <div class="report-label">📝 还需加强</div>
+              <div class="report-label">${icon('edit')} 还需加强</div>
               <ul class="report-list weak">${reviewReport.weak_points.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
             </div>` : ''}
         </div>` : ''}
@@ -310,7 +310,7 @@ export function renderEmpty(msg) {
   if (!panel) return;
   panel.innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon">💡</div>
+      <div class="empty-icon">${icon('bulb', 'empty-icon-svg')}</div>
       <h3>${escapeHtml(msg || '从左侧选一个 session，或点 ＋ 新建')}</h3>
       <p>每个问题 / 观点都是独立迭代单元，经过三个阶段走向完成。</p>
     </div>`;
@@ -342,9 +342,9 @@ export function renderWorkspace(payload, reviewRoundId) {
 
   panel.innerHTML = `
     <div class="ws-tabs">
-      <button class="ws-tab" id="tab-learn"   onclick="window.app.switchTab('learn')">📖 学习</button>
-      <button class="ws-tab" id="tab-deepen"  onclick="window.app.switchTab('deepen')">🔁 深化</button>
-      <button class="ws-tab" id="tab-review"  onclick="window.app.switchTab('review')">🧪 费曼</button>
+      <button class="ws-tab" id="tab-learn"   onclick="window.app.switchTab('learn')">${icon('book')} 学习</button>
+      <button class="ws-tab" id="tab-deepen"  onclick="window.app.switchTab('deepen')">${icon('refresh')} 深化</button>
+      <button class="ws-tab" id="tab-review"  onclick="window.app.switchTab('review')">${icon('flask')} 费曼</button>
     </div>
     <div class="panel-content" id="panelContent"></div>`;
 

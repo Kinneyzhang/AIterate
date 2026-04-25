@@ -2,6 +2,7 @@
 // 设置页面 modal
 
 import { getSettings, saveSettings } from './api.js';
+import { icon } from './utils.js';
 
 const PROVIDER_PRESETS = {
   openai: {
@@ -221,7 +222,7 @@ export function openSettings() {
   el.innerHTML = `
     <div class="modal-box modal-box-lg" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <div class="modal-header">
-        <div class="modal-title" id="settingsTitle">⚙️ 设置</div>
+        <div class="modal-title" id="settingsTitle">${icon('gear')} 设置</div>
         <button class="modal-close" aria-label="关闭" id="settingsCloseBtn">✕</button>
       </div>
       <div class="settings-tabs" id="settingsTabs">
@@ -328,7 +329,7 @@ export function openSettings() {
               <input type="password" class="settings-input" id="settingsDbOraclePassword" placeholder="（留空则不修改）">
             </div>
           </div>
-          <p class="settings-hint">⚠️ 修改后将立即重新连接数据库，请确认新库已初始化。</p>
+          <p class="settings-hint">${icon('warn')} 修改后将立即重新连接数据库，请确认新库已初始化。</p>
         </div>
 
         <div class="settings-panel" id="settings-panel-learn">
@@ -356,7 +357,7 @@ export function openSettings() {
         <div class="modal-footer-left"></div>
         <div class="modal-footer-right">
           <button class="btn" id="settingsCancelBtn">取消</button>
-          <button class="btn btn-primary" id="settingsSaveBtn">💾 保存</button>
+          <button class="btn btn-primary" id="settingsSaveBtn">${icon('save')} 保存</button>
         </div>
       </div>
     </div>`;
@@ -528,7 +529,7 @@ export function openSettings() {
   document.getElementById('settingsSaveBtn').addEventListener('click', async () => {
     const saveBtn = document.getElementById('settingsSaveBtn');
     saveBtn.disabled = true;
-    saveBtn.textContent = '⏳ 保存中...';
+    saveBtn.innerHTML = `${icon('clock')} 保存中...`;
 
     const rolesPayload = {};
     ROLES.forEach(r => {
@@ -595,7 +596,7 @@ export function openSettings() {
       alert(`保存失败：${err.message}`);
     } finally {
       saveBtn.disabled = false;
-      saveBtn.textContent = '💾 保存';
+      saveBtn.innerHTML = `${icon('save')} 保存`;
     }
   });
 }
