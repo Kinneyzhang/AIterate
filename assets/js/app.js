@@ -358,6 +358,114 @@ window.app = {
       }
     });
   },
+  showCommandCenter: async () => {
+    import('./api.js').then(async ({ request }) => {
+      try {
+        const data = await request('/api/command-center');
+
+        // 渲染辅助函数
+        const sessionLink = (s) => `<a class="cmd-link" onclick="window.app.selectSession(${s.id});document.getElementById('commandCenterModal').remove()">${s.title || '未命名'}</a>`;
+        const scoreBadge = (s) => s.score ? ` <span class="cmd-score">${s.score}分</span>` : '';
+        const nodeTag = (s) => s.knowledge_node_id ? ` <span class="cmd-node">${s.knowledge_node_id.split('.').pop()}</span>` : '';
+
+        // 1. 费曼未完成
+        const feynmanHtml = data.feynman_pending?.length
+          ? data.feynman_pending.map(s => `<div class="cmd-item">⚡ ${sessionLink(s)}${scoreBadge(s)}${nodeTag(s)}</div>`).join('')
+          : '<div class="cmd-empty">没有未完成的费曼检验 ✅</div>';
+
+        // 2. 今日复习
+        const reviewHtml = data.review_due?.length
+          ? data.review_due.map(r => {
+              const overdue = r.review_date < new Date().toISOString().split('T')[0] ? ' 🔴逾期' : '';
+              const round = r.review_round > 0 ? `第${r.review_round+1}次` : '首次';
+              return `<div class="cmd-item">📅 ${round}${overdue} — ${sessionLink(r)}${scoreBadge(r)}${nodeTag(r)}
+                <button class="btn btn-sm cmd-done-btn" data-rid="${r.review_id}">✓完成</button></div>`;
+            }).join('')
+          : '<div class="cmd-empty">今天没有到期的复习 📭</div>';
+
+        // 3. 失败/待修正
+        const failedHtml = data.failed_sessions?.length
+          ? data.failed_sessions.map(s => `<div class="cmd-item">🔄 ${sessionLink(s)}${scoreBadge(s)}${nodeTag(s)}</div>`).join('')
+          : '<div class="cmd-empty">没有失败的 session ✅</div>';
+
+        // 4. 学习中
+        const activeHtml = data.active_sessions?.length
+          ? data.active_sessions.map(s => `<div class="cmd-item">📖 ${sessionLink(s)}${scoreBadge(s)}${nodeTag(s)}</div>`).join('')
+          : '<div class="cmd-empty">没有进行中的 session</div>';
+
+        // 5. 推荐节点
+        const nodeHtml = data.suggested_nodes?.length
+          ? data.suggested_nodes.map(n => {
+              const progress = n.total ? `${n.done}/${n.total} 完成` : '';
+              const name = n.knowledge_node_id ? n.knowledge_node_id.split('.').pop() : '未绑定';
+              return `<div class="cmd-item">🧭 ${name} <span class="cmd-node">${n.knowledge_node_id}</span> ${progress ? `<span class="cmd-progress">${progress}</span>` : ''}</div>`;
+            }).join('')
+          : '<div class="cmd-empty">暂无推荐</div>';
+
+        const existing = document.getElementById('commandCenterModal');
+        if (existing) existing.remove();
+        const el = document.createElement('div');
+        el.id = 'commandCenterModal';
+        el.className = 'modal-overlay';
+        el.innerHTML = `
+          <div class="modal-box command-center-modal" role="dialog" style="max-width:560px; max-height:85vh;">
+            <div class="modal-header">
+              <div class="modal-title">🎯 指挥中心</div>
+              <button class="modal-close" id="ccCloseBtn">✕</button>
+            </div>
+            <div class="modal-body cc-body">
+              <div class="cc-section">
+                <div class="cc-section-title">⚡ 待完成费曼</div>
+                ${feynmanHtml}
+              </div>
+              <div class="cc-section">
+                <div class="cc-section-title">📅 今日复习</div>
+                ${reviewHtml}
+              </div>
+              <div class="cc-section">
+                <div class="cc-section-title">🔄 待修正</div>
+                ${failedHtml}
+              </div>
+              <div class="cc-section">
+                <div class="cc-section-title">📖 进行中</div>
+                ${activeHtml}
+              </div>
+              <div class="cc-section">
+                <div class="cc-section-title">🧭 推荐继续</div>
+                ${nodeHtml}
+              </div>
+            </div>
+          </div>`;
+        document.body.appendChild(el);
+        document.getElementById('ccCloseBtn').addEventListener('click', () => el.remove());
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+        document.addEventListener('keydown', function esc(e) {
+          if (e.key === 'Escape') { el.remove(); document.removeEventListener('keydown', esc); }
+        });
+
+        // "完成"按钮事件
+        el.querySelectorAll('.cmd-done-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const rid = btn.dataset.rid;
+            btn.disabled = true;
+            btn.textContent = '…';
+            try {
+              await request(`/api/review/${rid}/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+              btn.textContent = '✓已标记';
+              btn.classList.add('cmd-done');
+            } catch (err) {
+              btn.textContent = '失败';
+              btn.disabled = false;
+              console.error('complete review error', err);
+            }
+          });
+        });
+      } catch (err) {
+        console.error('command center error', err);
+      }
+    });
+  },
 };
 
 boot();

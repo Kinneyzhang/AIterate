@@ -317,10 +317,35 @@ def init_db():
                 "INSERT INTO profile (id) VALUES ('default') ON CONFLICT (id) DO NOTHING"
             ))
 
+        # review_schedule — 复习排期
+        if sqlite:
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS review_schedule (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id      INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                review_date     TEXT    NOT NULL,
+                status          TEXT    NOT NULL DEFAULT 'pending',
+                created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+                updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+            )"""))
+        else:
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS review_schedule (
+                id         SERIAL PRIMARY KEY,
+                session_id INTEGER  NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                review_date DATE    NOT NULL,
+                status     TEXT     NOT NULL DEFAULT 'pending',
+                created_at {ts}     NOT NULL DEFAULT NOW(),
+                updated_at {ts}     NOT NULL DEFAULT NOW()
+            )"""))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_review_schedule_date ON review_schedule(review_date)"
+            ))
+
     # 迁移旧格式 settings（幂等）
     _migrate_settings()
 
-    print(f"[DB] aiterate ready — {cfg.get('type','postgresql')} — sessions / rounds / profile")
+    print(f"[DB] aiterate ready — {cfg.get('type','postgresql')} — sessions / rounds / profile / review_schedule")
 
 
 _LLM_ROLES = ["title", "answer", "evaluate", "review", "deepen"]
@@ -887,6 +912,190 @@ def get_knowledge_tree_progress() -> list[dict]:
         })
     return result
 
+
+# ── Review Schedule ────────────────────────────────────────────────────────
+
+# 艾宾浩斯遗忘曲线间隔（天）：第 n 次复习距第 n-1 次的天数
+_EBBINGHAUS_INTERVALS = [1, 2, 6, 31, 90]  # R1, R2, R3, R4, R5
+
+
+def schedule_review(session_id: int, score: int | None) -> int | None:
+    """创建复习排期（艾宾浩斯遗忘曲线）。
+
+    根据已完成复习次数确定间隔：
+    - 第 1 次复习：1 天后
+    - 第 2 次复习：2 天后
+    - 第 3 次复习：6 天后
+    - 第 4 次复习：31 天后
+    - 第 5 次复习：90 天后
+
+    分数调制：score < 40 时降一档（最少 1 天）。
+    已有 pending 排期时跳过，返回 None。
+    """
+    from datetime import date, timedelta
+
+    # 检查是否已有 pending 排期
+    existing = _fetch_one(
+        "SELECT id FROM review_schedule WHERE session_id = :sid AND status = 'pending'",
+        {"sid": session_id}
+    )
+    if existing:
+        return None
+
+    # 统计已完成复习次数 → 决定下一轮间隔
+    completed = _fetch_one(
+        "SELECT COUNT(*) AS n FROM review_schedule WHERE session_id = :sid AND status = 'completed'",
+        {"sid": session_id}
+    )
+    review_round = (completed["n"] if completed else 0)  # 0 = 首次复习
+
+    # 选择间隔
+    if review_round >= len(_EBBINGHAUS_INTERVALS):
+        days = _EBBINGHAUS_INTERVALS[-1]  # 超过曲线范围用最后一档
+    else:
+        days = _EBBINGHAUS_INTERVALS[review_round]
+
+    # 分数调制：低分提前复习（降一档，最低 1 天）
+    if score is not None and score < 40:
+        if review_round > 0:
+            days = max(1, _EBBINGHAUS_INTERVALS[review_round - 1])
+        else:
+            days = 1
+
+    review_date = (date.today() + timedelta(days=days)).isoformat()
+
+    if _is_sqlite():
+        return _insert_returning_id("""
+        INSERT INTO review_schedule (session_id, review_date) 
+        VALUES (:sid, :rd) RETURNING id
+        """, {"sid": session_id, "rd": review_date})
+    else:
+        return _insert_returning_id("""
+        INSERT INTO review_schedule (session_id, review_date) 
+        VALUES (:sid, :rd) RETURNING id
+        """, {"sid": session_id, "rd": review_date})
+
+
+def get_today_reviews(limit: int = 20) -> list[dict]:
+    """获取今日到期的复习任务（含 overdue），按 review_date 升序。
+    返回结果附带 review_round 字段（第几次复习，0-based）。
+    """
+    from datetime import date
+    today = date.today().isoformat()
+    return _fetch_all("""
+        SELECT rs.id AS review_id, rs.review_date, rs.status AS review_status,
+               s.id AS session_id, s.title, s.score, s.knowledge_node_id,
+               s.status AS session_status,
+               (SELECT COUNT(*) FROM review_schedule rs2 
+                WHERE rs2.session_id = rs.session_id 
+                  AND rs2.status = 'completed') AS review_round
+        FROM review_schedule rs
+        JOIN sessions s ON s.id = rs.session_id
+        WHERE rs.review_date <= :today AND rs.status = 'pending'
+        ORDER BY rs.review_date ASC
+        LIMIT :lim
+    """, {"today": today, "lim": limit})
+
+
+def get_due_reviews(limit: int = 20) -> list[dict]:
+    """获取直到今天为止的待复习条目（包括 overdue）。"""
+    return get_today_reviews(limit)
+
+
+def mark_review_complete(review_id: int, score: int | None = None):
+    """标记一次复习完成，并自动排期下一轮复习（艾宾浩斯曲线）。"""
+    # 获取关联的 session_id
+    row = _fetch_one(
+        "SELECT session_id FROM review_schedule WHERE id = :rid",
+        {"rid": review_id}
+    )
+    if not row:
+        return
+
+    # 标记当前为完成
+    if _is_sqlite():
+        _exec("""
+            UPDATE review_schedule SET status = 'completed', updated_at = :ts 
+            WHERE id = :rid
+        """, {"rid": review_id, "ts": _now_str()})
+    else:
+        _exec("""
+            UPDATE review_schedule SET status = 'completed', updated_at = NOW() 
+            WHERE id = :rid
+        """, {"rid": review_id})
+
+    # 自动排期下一轮（不限轮数，超过曲线范围用最后一档）
+    schedule_review(row["session_id"], score)
+
+
+def get_command_center_data() -> dict:
+    """聚合 Command Center 需要的所有数据。"""
+    # 1. 费曼未完成的 session
+    feynman_pending = _fetch_all("""
+        SELECT id, title, score, knowledge_node_id, updated_at
+        FROM sessions
+        WHERE status = 'feynman'
+        ORDER BY updated_at DESC
+        LIMIT 5
+    """)
+
+    # 2. 今日到期的复习
+    review_due = get_today_reviews(10)
+
+    # 3. 失败/revising 的 session（尚未通过的）
+    failed_sessions = _fetch_all("""
+        SELECT id, title, score, knowledge_node_id, updated_at
+        FROM sessions
+        WHERE status IN ('revising', 'error')
+        ORDER BY updated_at DESC
+        LIMIT 5
+    """)
+
+    # 4. 学习中的 session
+    active_sessions = _fetch_all("""
+        SELECT id, title, score, knowledge_node_id, status, updated_at
+        FROM sessions
+        WHERE status NOT IN ('completed', 'error', 'feynman')
+        ORDER BY updated_at DESC
+        LIMIT 5
+    """)
+
+    # 5. 推荐下一个知识节点：取有 session 但还没完成的节点
+    if _is_sqlite():
+        next_node_rows = _fetch_all("""
+            SELECT s.knowledge_node_id, 
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END) AS done
+            FROM sessions s
+            WHERE s.knowledge_node_id IS NOT NULL
+            GROUP BY s.knowledge_node_id
+            HAVING done < total
+            ORDER BY RANDOM()
+            LIMIT 3
+        """)
+    else:
+        next_node_rows = _fetch_all("""
+            SELECT s.knowledge_node_id, 
+                   COUNT(*) AS total,
+                   COUNT(*) FILTER (WHERE s.status = 'completed') AS done
+            FROM sessions s
+            WHERE s.knowledge_node_id IS NOT NULL
+            GROUP BY s.knowledge_node_id
+            HAVING COUNT(*) FILTER (WHERE s.status = 'completed') < COUNT(*)
+            ORDER BY RANDOM()
+            LIMIT 3
+        """)
+
+    return {
+        "feynman_pending": feynman_pending,
+        "review_due": review_due,
+        "failed_sessions": failed_sessions,
+        "active_sessions": active_sessions,
+        "suggested_nodes": next_node_rows,
+    }
+
+
+# ── Knowledge Tree (end of section) ───────────────────────────────────────
 
 def get_sessions_by_node(node_id: str, limit: int = 50) -> list[dict]:
     """Get sessions bound to a specific knowledge node."""

@@ -663,6 +663,9 @@ async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
     }
     db.save_review_report(session_id, report)
 
+    # 自动创建复习排期
+    db.schedule_review(session_id, eval_result["final_score"])
+
     return {
         "item_scores":   eval_result.get("item_scores", []),
         "final_score":   eval_result["final_score"],
@@ -683,6 +686,10 @@ async def complete_session(session_id: int):
     if not session:
         raise HTTPException(404, "Session not found")
     db.update_session(session_id, status="completed")
+
+    # 自动创建复习排期（如果有分数）
+    db.schedule_review(session_id, session.get("score"))
+
     return {"ok": True}
 
 
@@ -802,6 +809,32 @@ async def recover_all_stale(timeout_minutes: int = 5):
     """Mark all stale preparing sessions as error."""
     db.mark_stale_preparing_as_error(timeout_minutes)
     return db.get_stale_preparing_sessions(timeout_minutes)
+
+
+# ── Review Schedule APIs ──────────────────────────────────────────────────
+
+class ReviewCompleteRequest(BaseModel):
+    score: int | None = None  # 可选，用于排期下一轮复习
+
+
+@app.get("/api/review/today", dependencies=[Depends(_require_admin)])
+async def get_today_reviews():
+    """今日到期 + overdue 的复习任务列表。"""
+    reviews = db.get_today_reviews(50)
+    return {"reviews": reviews, "count": len(reviews)}
+
+
+@app.post("/api/review/{review_id}/complete", dependencies=[Depends(_require_admin)])
+async def complete_review(review_id: int, body: ReviewCompleteRequest = ReviewCompleteRequest()):
+    """标记一次复习完成，自动排期下一轮（艾宾浩斯曲线）。"""
+    db.mark_review_complete(review_id, body.score)
+    return {"ok": True}
+
+
+@app.get("/api/command-center", dependencies=[Depends(_require_admin)])
+async def command_center():
+    """聚合仪表盘：待办费曼 + 今日复习 + 失败项 + 学习中 + 推荐节点。"""
+    return db.get_command_center_data()
 
 
 if __name__ == "__main__":
