@@ -667,6 +667,9 @@ async def deepen(session_id: int, body: DeepenRequest):
         # Phase 5: persist gaps to learning_gaps table (with status tracking)
         new_gaps = db.create_gaps_from_take(session_id, rid, eval_json)
 
+        # Phase 5.2: auto-detect if user's take resolved previous gaps
+        resolved_before = db.try_resolve_gaps_by_content(session_id, body.content, rid)
+
         # 基于 gaps 生成追问建议（非阻塞）
         suggestions = []
         if eval_result.get("gaps"):
@@ -700,10 +703,15 @@ async def deepen(session_id: int, body: DeepenRequest):
             score=None, status="deepening",
         )
         db.update_session(session_id, status="deepening")
+
+        # Phase 5.2: auto-detect gap resolution from user press
+        resolved = db.try_resolve_gaps_by_content(session_id, body.content, rid)
+
         return {
             "round_id": rid,
             "type": "press",
             "answer": answer_result["answer"],
+            "gaps_resolved": resolved,
         }
 
     else:

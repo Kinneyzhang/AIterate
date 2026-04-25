@@ -24,7 +24,6 @@ export default defineComponent({
     });
     
     async function completeReview(rid, btn) {
-      // Phase 5: Direct review completion is deprecated. Use start-review flow instead.
       btn.textContent = '已停用';
       btn.disabled = true;
     }
@@ -77,7 +76,7 @@ export default defineComponent({
             <div v-else class="cmd-empty">全部完成 <span v-html="icon('check')"></span></div>
           </div>
 
-          <!-- 📖 推进中：活跃 session + 今日到期复习 -->
+          <!-- 📖 推进中 -->
           <div class="cc-section">
             <div class="cc-section-title" v-html="icon('book') + ' 推进中'"></div>
             <template v-if="(data.active_sessions?.length || 0) + (data.review_due?.filter(r => r.review_date >= today).length || 0) > 0">
@@ -94,6 +93,18 @@ export default defineComponent({
               </div>
             </template>
             <div v-else class="cmd-empty">暂无进行中的任务</div>
+          </div>
+
+          <!-- 🎯 Phase 5: 薄弱点 -->
+          <div class="cc-section" v-if="data.top_gaps?.length">
+            <div class="cc-section-title cc-urgent" v-html="icon('clip') + ' 薄弱点'"></div>
+            <template v-for="g in data.top_gaps" :key="'gap-'+g.id">
+              <div class="cmd-item cmd-item-urgent">
+                <span class="cmd-badge" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid #ef4444;">{{ g.severity || 'medium' }}</span>
+                <a class="cmd-link" href="#" @click.prevent="gotoSession(g.session_id, 'deepen')">{{ g.text }}</a>
+                <span style="font-size:11px;opacity:0.5;margin-left:6px;">{{ g.session_title }}</span>
+              </div>
+            </template>
           </div>
 
           <!-- 📅 未来复习 -->

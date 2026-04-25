@@ -1162,6 +1162,66 @@ def get_gap_stats(session_id: int = None) -> dict:
     return stats
 
 
+# ── Phase 5: Gap Dashboard & Auto-resolution ──────────────────────────────
+
+def get_top_gaps(limit: int = 5) -> list[dict]:
+    """跨 session 的全局薄弱点 Top N（按最近创建 + 高复发排序）。"""
+    return _fetch_all("""
+        SELECT lg.id, lg.session_id, lg.text, lg.severity, lg.status,
+               lg.recurrence_count, lg.created_at,
+               s.title AS session_title, s.knowledge_node_id
+        FROM learning_gaps lg
+        JOIN sessions s ON s.id = lg.session_id
+        WHERE lg.status IN ('open', 'reappeared')
+        ORDER BY lg.created_at DESC
+        LIMIT :lim
+    """, {"lim": limit})
+
+
+def try_resolve_gaps_by_content(session_id: int, user_text: str, round_id: int = None) -> int:
+    """Phase 5.2: 检查用户输入是否可能解决了某个 open gap。
+    
+    用模糊匹配：如果用户文本中包含 open gap 文本的关键词，
+    则标记该 gap 为 resolved。
+    
+    Returns: 成功解决的 gap 数量
+    """
+    if not user_text or len(user_text) < 10:
+        return 0
+
+    open_gaps = _fetch_all(
+        "SELECT id, text FROM learning_gaps WHERE session_id = :sid AND status = 'open'",
+        {"sid": session_id}
+    )
+    if not open_gaps:
+        return 0
+
+    user_lower = user_text.lower()
+    resolved_count = 0
+    
+    for gap in open_gaps:
+        gap_text = gap["text"]
+        gap_lower = gap_text.lower()
+        
+        # 简单关键词匹配: gap 文本中的关键词（取长度 > 3 的词）是否出现在用户输入中
+        # 或 gap 文本本身是用户输入的子串
+        if gap_lower in user_lower or user_lower in gap_lower:
+            resolve_gap(gap["id"], resolved_by_round_id=round_id)
+            resolved_count += 1
+            continue
+        
+        # 关键词级别匹配: 取 gap 文本中长度 > 3 的独特词
+        import re
+        keywords = [w for w in re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]+', gap_lower) if len(w) > 3]
+        if keywords:
+            match_count = sum(1 for kw in keywords if kw in user_lower)
+            if match_count >= min(2, len(keywords)):  # 至少匹配 2 个，或全部
+                resolve_gap(gap["id"], resolved_by_round_id=round_id)
+                resolved_count += 1
+
+    return resolved_count
+
+
 # ── Review Report ──────────────────────────────────────────────────────────
 
 def save_review_report(session_id: int, report: dict):
@@ -1946,15 +2006,19 @@ def get_command_center_data() -> dict:
     # 5. 推荐下一个知识节点：Phase 5 智能推荐
     next_node_rows = get_recommended_nodes(3)
 
+    # 6. Phase 5: 全局薄弱点 Top N
+    top_gaps = get_top_gaps(5)
+
     return {
         "feynman_pending": feynman_pending,
         "review_due": review_due,
         "failed_sessions": failed_sessions,
         "active_sessions": active_sessions,
         "suggested_nodes": next_node_rows,
-        # 6. 未来 7 天复习计划
+        "top_gaps": top_gaps,
+        # 未来 7 天复习计划
         "upcoming_reviews": get_upcoming_reviews(7),
-        # 7. 系统健康摘要
+        # 系统健康摘要
         "health": get_system_health(),
     }
 
