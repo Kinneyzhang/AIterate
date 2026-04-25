@@ -555,6 +555,42 @@ select {
 .final-score-row { display: flex; align-items: center; gap: 12px; }
 .final-score-num { font-size: 28px; font-weight: 800; color: var(--accent, #4f8ef7); }
 
+/* ── review report (费曼完成报告) ─────────────────────────────────────────────── */
+.review-report { margin-top: 14px; }
+.review-report .report-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0;
+}
+.review-report .report-label { font-weight: 600; font-size: 13px; opacity: 0.7; }
+.review-report .report-value { font-weight: 700; font-size: 14px; }
+.review-report .report-summary {
+  margin-top: 8px; padding: 8px 10px; border-radius: 6px;
+  background: var(--bg-hover, rgba(255,255,255,0.04)); font-size: 13px; line-height: 1.6;
+}
+.review-report .report-section { margin-top: 10px; }
+.report-list { list-style: none; padding: 0; margin: 6px 0 0; }
+.report-list li {
+  padding: 5px 10px; margin-bottom: 4px; border-radius: 4px; font-size: 13px;
+}
+.report-list.good li { background: rgba(72,199,116,0.08); color: #48c774; }
+.report-list.weak li { background: rgba(255,170,50,0.08); color: #ffaa32; }
+
+/* ── gaps (薄弱点) ───────────────────────────────────────────────────────────── */
+.gaps-banner {
+  padding: 10px 14px; border-radius: 8px; margin-bottom: 14px;
+  background: rgba(255,170,50,0.06); border: 1px solid rgba(255,170,50,0.15);
+}
+.gaps-banner-title { font-weight: 700; font-size: 13px; color: #ffaa32; margin-bottom: 6px; }
+.gaps-summary { list-style: none; padding: 0; margin: 0; }
+.gaps-summary li { padding: 3px 0; font-size: 13px; line-height: 1.5; }
+
+.gaps-section {
+  margin-top: 8px; padding: 8px 10px; border-radius: 6px;
+  background: rgba(255,90,90,0.06); border: 1px solid rgba(255,90,90,0.12);
+}
+.gaps-label { font-weight: 700; font-size: 12px; color: #ff7070; margin-bottom: 4px; }
+.gaps-list { list-style: disc; padding-left: 18px; margin: 0; }
+.gaps-list li { padding: 2px 0; font-size: 13px; color: #ffaa88; }
+
 /* ── panel-empty ────────────────────────────────────────────────────────────── */
 .panel-empty { padding: 40px 0; text-align: center; font-size: 14px; }
 
@@ -562,6 +598,16 @@ select {
 .muted  { opacity: 0.6; }
 .small  { font-size: 12px; }
 .mb12   { margin-bottom: 12px; }
+
+/* ── knowledge node bar ─────────────────────────────────────────────────────── */
+.knowledge-node-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; margin-bottom: 10px; border-radius: 6px;
+  background: var(--bg-hover, rgba(255,255,255,0.04)); font-size: 12px;
+}
+.kn-label { font-weight: 600; opacity: 0.6; }
+.kn-path { font-weight: 700; color: var(--accent, #4f8ef7); }
+.kn-keywords { opacity: 0.5; font-size: 11px; }
 
 /* ── original-question (学习 panel 顶部原始问题) ────────────────────────────── */
 .original-question {

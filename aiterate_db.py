@@ -44,6 +44,20 @@ def save_db_config(cfg: dict):
     merged = {**load_db_config(), **cfg}
     DB_CONFIG_PATH.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
 
+
+def test_db_config(updates: dict) -> dict:
+    """Test a candidate DB config without saving. Returns {"ok": True} or {"ok": False, "error": str}."""
+    try:
+        candidate = {**load_db_config(), **updates}
+        url = _build_url(candidate)
+        test_engine = create_engine(url)
+        with test_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        test_engine.dispose()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 # ── Engine factory ─────────────────────────────────────────────────────────────
 
 def _build_url(cfg: dict) -> str:
@@ -123,10 +137,33 @@ def _jsonb() -> str:
 def _now_str() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+def _ensure_column(conn, table: str, column: str, col_type: str):
+    """SQLite only: add column if it doesn't exist (idempotent)."""
+    rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
+    existing = {r[1] for r in rows}
+    if column not in existing:
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+
+from contextlib import contextmanager
+
+
 def _exec(sql: str, params=None):
-    """执行不返回结果的 SQL"""
+    """Execute non-returning SQL in a transaction."""
     with get_engine().begin() as conn:
         conn.execute(text(sql), params or {})
+
+
+@contextmanager
+def _tx():
+    """Provide a connection in a transaction. Commits on success, rolls back on error.
+    
+    Usage:
+        with _tx() as conn:
+            conn.execute(text(...))
+            conn.execute(text(...))
+    """
+    with get_engine().begin() as conn:
+        yield conn
 
 def _fetch_one(sql: str, params=None) -> dict | None:
     with get_engine().connect() as conn:
@@ -174,16 +211,18 @@ def init_db():
         if sqlite:
             conn.execute(text(f"""
             CREATE TABLE IF NOT EXISTS sessions (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                title      TEXT        NOT NULL,
-                content    TEXT,
-                type       TEXT        NOT NULL DEFAULT 'question',
-                status     TEXT        NOT NULL DEFAULT 'preparing',
-                material   TEXT,
-                score      INTEGER,
-                error_msg  TEXT,
-                created_at TEXT        NOT NULL DEFAULT (datetime('now')),
-                updated_at TEXT        NOT NULL DEFAULT (datetime('now'))
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                title           TEXT        NOT NULL,
+                content         TEXT,
+                type            TEXT        NOT NULL DEFAULT 'question',
+                status          TEXT        NOT NULL DEFAULT 'preparing',
+                material        TEXT,
+                score           INTEGER,
+                review_report   TEXT,
+                knowledge_node_id TEXT,
+                error_msg       TEXT,
+                created_at      TEXT        NOT NULL DEFAULT (datetime('now')),
+                updated_at      TEXT        NOT NULL DEFAULT (datetime('now'))
             )"""))
         else:
             conn.execute(text(f"""
@@ -195,6 +234,8 @@ def init_db():
                 status     TEXT        NOT NULL DEFAULT 'preparing',
                 material   TEXT,
                 score      SMALLINT,
+                review_report {jb},
+                knowledge_node_id TEXT,
                 error_msg  TEXT,
                 created_at {ts} NOT NULL DEFAULT NOW(),
                 updated_at {ts} NOT NULL DEFAULT NOW()
@@ -202,6 +243,12 @@ def init_db():
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at DESC)"
             ))
+
+        # ── 迁移：为已有 SQLite 表添加缺失列 ──
+        if sqlite:
+            _ensure_column(conn, "sessions", "review_report", "TEXT")
+            _ensure_column(conn, "sessions", "knowledge_node_id", "TEXT")
+            _ensure_column(conn, "rounds", "eval_json", "TEXT")
 
         # rounds
         if sqlite:
@@ -213,6 +260,7 @@ def init_db():
                 type          TEXT    NOT NULL,
                 input         TEXT,
                 output        TEXT,
+                eval_json     TEXT,
                 score_comment TEXT,
                 group_id      INTEGER,
                 score         INTEGER,
@@ -327,6 +375,29 @@ def get_profile() -> dict:
 def get_settings() -> dict:
     return get_profile().get("settings") or {}
 
+
+def get_or_create_admin_token() -> str:
+    """Return admin token. Auto-generate UUID on first call and persist."""
+    import uuid
+    settings = get_settings()
+    token = settings.get("admin_token", "")
+    if not token:
+        token = uuid.uuid4().hex
+        upsert_profile(**{"settings__admin_token": token})
+    return token
+
+
+def check_admin_token(token: str | None) -> bool:
+    """Verify admin token using constant-time comparison."""
+    if not token:
+        return False
+    expected = get_settings().get("admin_token", "")
+    if not expected:
+        return False
+    import secrets
+    return secrets.compare_digest(token, expected)
+
+
 def upsert_profile(**kwargs) -> dict:
     cur      = get_profile()
     settings = dict(cur.get("settings") or {})
@@ -438,11 +509,13 @@ def get_stats() -> dict:
 # ── Rounds ─────────────────────────────────────────────────────────────────────
 
 def next_seq(session_id: int) -> int:
+    """Get next seq number for a session. Use create_round_with_seq() for atomicity."""
     row = _fetch_one(
         "SELECT COALESCE(MAX(seq), 0) AS m FROM rounds WHERE session_id = :sid",
         {"sid": session_id}
     )
     return (row["m"] if row else 0) + 1
+
 
 def create_round(session_id: int, seq: int, type: str,
                  input: str | None = None,
@@ -454,6 +527,139 @@ def create_round(session_id: int, seq: int, type: str,
     VALUES (:sid, :seq, :type, :input, :output, :score, :status) RETURNING id
     """, {"sid": session_id, "seq": seq, "type": type,
           "input": input, "output": output, "score": score, "status": status})
+
+
+def create_round_with_seq(session_id: int, type: str,
+                          input: str | None = None,
+                          output: str | None = None,
+                          score: int | None = None,
+                          status: str = "pending",
+                          eval_json: dict | None = None) -> int:
+    """Atomically compute next seq and create a round. Prevents seq conflicts."""
+    eval_str = json.dumps(eval_json, ensure_ascii=False) if eval_json else None
+    with _tx() as conn:
+        row = conn.execute(
+            text("SELECT COALESCE(MAX(seq), 0) AS m FROM rounds WHERE session_id = :sid"),
+            {"sid": session_id}
+        ).fetchone()
+        next_s = (row["m"] if row else 0) + 1
+        result = conn.execute(
+            text("""
+                INSERT INTO rounds (session_id, seq, type, input, output, score, status, eval_json)
+                VALUES (:sid, :seq, :type, :input, :output, :score, :status, :ejson) RETURNING id
+            """),
+            {"sid": session_id, "seq": next_s, "type": type,
+             "input": input, "output": output, "score": score, "status": status,
+             "ejson": eval_str}
+        )
+        rid = result.fetchone()["id"]
+    return rid
+
+
+def create_feynman_group(session_id: int, questions: list[str]) -> tuple[int, list[int]]:
+    """Create a group of feynman rounds atomically.
+    
+    Returns (group_id, [round_ids]). All-or-nothing: either all rounds are
+    created with correct group_id and seq, or nothing is.
+    """
+    with _tx() as conn:
+        row = conn.execute(
+            text("SELECT COALESCE(MAX(seq), 0) AS m FROM rounds WHERE session_id = :sid"),
+            {"sid": session_id}
+        ).fetchone()
+        seq_start = (row["m"] if row else 0) + 1
+
+        round_ids = []
+        first_id = None
+        for i, q in enumerate(questions):
+            result = conn.execute(
+                text("""
+                    INSERT INTO rounds (session_id, seq, type, input, output, score, status, group_id)
+                    VALUES (:sid, :seq, 'feynman', :input, NULL, NULL, 'pending', 0) RETURNING id
+                """),
+                {"sid": session_id, "seq": seq_start + i, "input": q}
+            )
+            rid = result.fetchone()["id"]
+            if first_id is None:
+                first_id = rid
+            round_ids.append(rid)
+
+        # Set group_id for all rounds in this batch
+        for rid in round_ids:
+            conn.execute(
+                text("UPDATE rounds SET group_id = :gid WHERE id = :rid"),
+                {"gid": first_id, "rid": rid}
+            )
+
+        # Update session status
+        conn.execute(
+            text("UPDATE sessions SET status = 'feynman', updated_at = :ts WHERE id = :sid"),
+            {"sid": session_id, "ts": _now_str()}
+        )
+
+    return first_id, round_ids
+
+
+def complete_feynman_group(session_id: int, group_id: int,
+                           answers: list[str],
+                           item_scores: list[dict],
+                           final_score: int,
+                           new_status: str) -> dict:
+    """Complete a feynman group atomically.
+    
+    Returns the eval result dict. Raises ValueError if group already completed
+    (double-submit protection).
+    """
+    with _tx() as conn:
+        # Check that rounds are still pending
+        rows = conn.execute(
+            text("SELECT id, status FROM rounds WHERE group_id = :gid AND type = 'feynman' ORDER BY seq"),
+            {"gid": group_id}
+        ).fetchall()
+        
+        if not rows:
+            raise ValueError("Feynman group not found")
+        
+        completed_count = sum(1 for r in rows if r["status"] == "completed")
+        if completed_count > 0:
+            raise ValueError("This feynman group has already been submitted")
+        
+        if len(rows) != len(answers):
+            raise ValueError(f"Expected {len(rows)} answers, got {len(answers)}")
+
+        # Update each round
+        for i, r in enumerate(rows):
+            ev = item_scores[i] if i < len(item_scores) else {}
+            ans = answers[i] if i < len(answers) else ""
+            conn.execute(
+                text("""
+                    UPDATE rounds
+                    SET output = :out, score = :sc, score_comment = :cm, status = 'completed'
+                    WHERE id = :rid
+                """),
+                {"out": ans, "sc": ev.get("score"), "cm": ev.get("comment", ""), "rid": r["id"]}
+            )
+
+        # Update session
+        if _is_sqlite():
+            conn.execute(
+                text("UPDATE sessions SET score = :sc, status = :st, updated_at = :ts WHERE id = :sid"),
+                {"sc": final_score, "st": new_status, "ts": _now_str(), "sid": session_id}
+            )
+        else:
+            conn.execute(
+                text("UPDATE sessions SET score = :sc, status = :st, updated_at = NOW() WHERE id = :sid"),
+                {"sc": final_score, "st": new_status, "sid": session_id}
+            )
+
+    # Build return value
+    return {
+        "final_score": final_score,
+        "passed": new_status == "completed",
+        "new_status": new_status,
+        "group_id": group_id,
+    }
+
 
 def get_rounds(session_id: int) -> list[dict]:
     return _fetch_all(
@@ -475,6 +681,171 @@ def update_round(round_id: int, **kwargs):
     parts  = [f"{k} = :{k}" for k in kwargs]
     params = {**kwargs, "__id": round_id}
     _exec(f"UPDATE rounds SET {', '.join(parts)} WHERE id = :__id", params)
+
+
+# ── Maintenance ────────────────────────────────────────────────────────────
+
+def get_stale_preparing_sessions(timeout_minutes: int = 5) -> dict:
+    """Return sessions stuck in preparing for too long."""
+    if _is_sqlite():
+        rows = _fetch_all(
+            "SELECT id, title, content, created_at FROM sessions WHERE status = 'preparing' "
+            "AND created_at < datetime('now', '-' || :tm || ' minutes') ORDER BY created_at DESC",
+            {"tm": str(timeout_minutes)}
+        )
+    else:
+        rows = _fetch_all(
+            "SELECT id, title, content, created_at FROM sessions WHERE status = 'preparing' "
+            "AND created_at < NOW() - (:tm || ' minutes')::INTERVAL ORDER BY created_at DESC",
+            {"tm": str(timeout_minutes)}
+        )
+    return {"stale": rows, "count": len(rows)}
+
+
+def mark_stale_preparing_as_error(timeout_minutes: int = 5):
+    """Mark stale preparing sessions as error."""
+    if _is_sqlite():
+        _exec(
+            "UPDATE sessions SET status = 'error', error_msg = :msg, updated_at = :ts "
+            "WHERE status = 'preparing' AND created_at < datetime('now', '-' || :tm || ' minutes')",
+            {"msg": "Background task lost (server restart)", "ts": _now_str(), "tm": str(timeout_minutes)}
+        )
+    else:
+        _exec(
+            "UPDATE sessions SET status = 'error', error_msg = :msg, updated_at = NOW() "
+            "WHERE status = 'preparing' AND created_at < NOW() - (:tm || ' minutes')::INTERVAL",
+            {"msg": "Background task lost (server restart)", "tm": str(timeout_minutes)}
+        )
+
+
+# ── Gaps ───────────────────────────────────────────────────────────────────
+
+def get_unresolved_gaps(session_id: int) -> list[dict]:
+    """Get all unresolved gaps from take rounds for a session."""
+    rows = _fetch_all("""
+        SELECT id, seq, eval_json, created_at FROM rounds
+        WHERE session_id = :sid AND type = 'take'
+        ORDER BY seq DESC
+    """, {"sid": session_id})
+    gaps = []
+    for r in rows:
+        ev = _jload(r.get("eval_json")) if r.get("eval_json") else {}
+        for g in (ev.get("gaps") or []):
+            gaps.append({
+                "round_id": r["id"],
+                "seq": r["seq"],
+                "gap": g,
+                "praise": ev.get("praise", ""),
+                "created_at": r.get("created_at"),
+            })
+    return gaps
+
+
+# ── Review Report ──────────────────────────────────────────────────────────
+
+def save_review_report(session_id: int, report: dict):
+    """Persist feynman review report to the session."""
+    r_json = json.dumps(report, ensure_ascii=False)
+    if _is_sqlite():
+        _exec("""
+            UPDATE sessions SET review_report = :rpt, updated_at = :ts WHERE id = :sid
+        """, {"sid": session_id, "rpt": r_json, "ts": _now_str()})
+    else:
+        _exec("""
+            UPDATE sessions SET review_report = CAST(:rpt AS jsonb), updated_at = NOW() WHERE id = :sid
+        """, {"sid": session_id, "rpt": r_json})
+
+
+def get_review_report(session_id: int) -> dict | None:
+    """Retrieve feynman review report for a session."""
+    r = _fetch_one("SELECT review_report FROM sessions WHERE id = :sid", {"sid": session_id})
+    if not r or not r.get("review_report"):
+        return None
+    return _jload(r["review_report"])
+
+
+# ── Knowledge Node ─────────────────────────────────────────────────────────
+
+def set_knowledge_node(session_id: int, node_id: str | None):
+    """Bind or unbind a knowledge node to a session."""
+    params = {"sid": session_id, "nid": node_id}
+    if _is_sqlite():
+        _exec("""
+            UPDATE sessions SET knowledge_node_id = :nid, updated_at = :ts WHERE id = :sid
+        """, {**params, "ts": _now_str()})
+    else:
+        _exec("""
+            UPDATE sessions SET knowledge_node_id = :nid, updated_at = NOW() WHERE id = :sid
+        """, params)
+
+
+def get_knowledge_node(session_id: int) -> str | None:
+    """Get the knowledge node ID for a session."""
+    r = _fetch_one("SELECT knowledge_node_id FROM sessions WHERE id = :sid", {"sid": session_id})
+    return r.get("knowledge_node_id") if r else None
+
+
+def find_node_by_id(tree: list, node_id: str) -> dict | None:
+    """Recursively find a node in the knowledge tree by ID."""
+    for node in tree:
+        if node.get("id") == node_id:
+            return node
+        children = node.get("children", [])
+        if children:
+            found = find_node_by_id(children, node_id)
+            if found:
+                return found
+    return None
+
+
+def suggest_knowledge_nodes(tree: list, query: str, limit: int = 3) -> list[dict]:
+    """Simple keyword-matching recommendation from knowledge tree.
+    
+    Matches query against node titles, keywords, and prompt_fragments.
+    Returns top-N matches sorted by relevance.
+    """
+    query_lower = query.lower()
+    scored = []
+
+    def _walk(nodes, path=""):
+        for node in nodes:
+            score = 0
+            title = node.get("title", "")
+            keywords = node.get("keywords", [])
+            fragments = node.get("prompt_fragments", [])
+
+            # Title match (weight 3)
+            if any(w in title.lower() for w in query_lower.split()):
+                score += 3
+            if query_lower in title.lower():
+                score += 5
+
+            # Keyword match (weight 2 each)
+            for kw in keywords:
+                if kw.lower() in query_lower or query_lower in kw.lower():
+                    score += 2
+
+            # Fragment match (weight 1)
+            for f in fragments:
+                if any(w in f.lower() for w in query_lower.split()):
+                    score += 1
+
+            if score > 0:
+                node_path = f"{path}/{title}".strip("/") if path else title
+                scored.append({
+                    "id": node.get("id"),
+                    "title": title,
+                    "path": node_path,
+                    "score": score,
+                    "keywords": keywords,
+                    "prompt_fragments": fragments,
+                })
+
+            _walk(node.get("children", []), f"{path}/{title}" if path else title)
+
+    _walk(tree)
+    scored.sort(key=lambda x: (-x["score"], x["path"]))
+    return scored[:limit]
 
 
 # ── Knowledge tree (file-based) ────────────────────────────────────────────────

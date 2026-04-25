@@ -316,6 +316,45 @@ async def generate_review_questions(original_question: str, ai_answer: str, lear
         return {"questions": ["用自己的话解释这个概念的核心是什么？"]}
 
 
+# ── 阶段2c：推荐深化追问 ─────────────────────────────
+
+SUGGEST_DEEPEN_SYSTEM = """你是一位学习引导专家。根据学习者当前暴露的薄弱点，生成2-3个具体的追问建议。
+
+要求：
+- 每个建议要直击薄弱点的核心
+- 追问应该是学习者可以深度思考的开放式问题
+- 例子：「举一个反例说明这个概念在什么情况下不适用」「用真实项目的场景套一下这个概念」
+- 每个建议不超过25字
+
+输出JSON：
+{
+  "suggestions": ["<建议1>", "<建议2>", "<建议3>"]
+}"""
+
+async def suggest_deepen_prompts(original_question: str, gaps: list[str]) -> dict:
+    if not gaps:
+        return {"suggestions": []}
+
+    prompt = f"""主题：{original_question}
+
+学习者暴露的薄弱点：
+{chr(10).join(f'- {g}' for g in gaps)}
+
+请针对这些薄弱点，给出2-3个具体的追问建议。"""
+
+    messages = [
+        {"role": "system", "content": SUGGEST_DEEPEN_SYSTEM},
+        {"role": "user",   "content": prompt},
+    ]
+    raw = await _call_llm(messages, temperature=0.5, max_tokens=300, role="deepen")
+    try:
+        block  = _extract_json_block(raw, "{", "}")
+        result = json.loads(block)
+        return {"suggestions": result.get("suggestions", [])[:3]}
+    except Exception:
+        return {"suggestions": []}
+
+
 # ── 阶段3：评估费曼回答 ───────────────────────────────
 
 REVIEW_EVAL_SYSTEM = """你是一位考官，正在评估学习者的费曼检验回答质量，给出逐题评价和整体评分。

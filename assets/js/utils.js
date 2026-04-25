@@ -10,8 +10,39 @@ export function escapeHtml(text) {
     .replace(/'/g, '&#39;');
 }
 
+const DOMPURIFY_ALLOWED = [
+  // 块级
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'p', 'br', 'hr', 'pre', 'blockquote',
+  // 内联
+  'strong', 'em', 'b', 'i', 'u', 's', 'del', 'ins',
+  'a', 'code', 'img', 'span', 'div',
+  // 列表
+  'ul', 'ol', 'li',
+  // 表格
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
+  // 上标/下标
+  'sup', 'sub',
+];
+
+const DOMPURIFY_ATTRS = [
+  // 链接
+  'href', 'title', 'target', 'rel',
+  // 图片
+  'src', 'alt', 'width', 'height',
+  // 代码高亮标记
+  'class',
+];
+
 export function renderMarkdown(text) {
-  return window.marked ? marked.parse(String(text || '')) : escapeHtml(text);
+  if (!window.marked) return escapeHtml(text);
+  const raw = marked.parse(String(text || ''));
+  if (!window.DOMPurify) return raw;
+  return DOMPurify.sanitize(raw, {
+    ALLOWED_TAGS: DOMPURIFY_ALLOWED,
+    ALLOWED_ATTR: DOMPURIFY_ATTRS,
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+  });
 }
 
 export function formatDate(value) {

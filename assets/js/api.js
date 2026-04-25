@@ -1,8 +1,15 @@
 // ── api.js ───────────────────────────────────────────────────────────────────
 // 所有后端 fetch 调用封装
 
+const AITERATE_TOKEN = window.AITERATE_TOKEN || '';
+
 async function request(url, options = {}) {
-  const resp = await fetch(url, options);
+  // 自动附加 admin token
+  const headers = { ...(options.headers || {}) };
+  if (AITERATE_TOKEN) {
+    headers['X-Admin-Token'] = AITERATE_TOKEN;
+  }
+  const resp = await fetch(url, { ...options, headers });
   if (!resp.ok) {
     const raw = await resp.text();
     let msg;
@@ -67,4 +74,26 @@ export async function saveSettings(data) {
 
 export async function getReady() {
   return request('/api/ready');
+}
+
+export async function getSessionGaps(sessionId) {
+  return request(`/api/sessions/${sessionId}/gaps`);
+}
+
+export async function setKnowledgeNode(sessionId, nodeId) {
+  return request(`/api/sessions/${sessionId}/knowledge-node`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ knowledge_node_id: nodeId }),
+  });
+}
+
+export async function suggestKnowledgeNodes(sessionId) {
+  return request(`/api/sessions/${sessionId}/suggest-knowledge-nodes`, {
+    method: 'POST',
+  });
+}
+
+export async function getKnowledgeTree() {
+  return request('/api/knowledge-tree');
 }

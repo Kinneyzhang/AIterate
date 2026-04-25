@@ -418,9 +418,16 @@ export function openSettings() {
       const llm = cfg.llm || {};
       if (llm.provider) providerSel.value = llm.provider;
       if (llm.base_url) baseUrlInput.value = llm.base_url;
-      if (llm.api_key)  document.getElementById('settingsApiKey').value = llm.api_key;
-      if (llm.model)    modelInput.value = llm.model;
-      if (cfg.tavily_api_key) document.getElementById('settingsTavilyKey').value = cfg.tavily_api_key;
+      // API Key: 不再填充明文，根据 has_api_key 设置 placeholder
+      const akEl = document.getElementById('settingsApiKey');
+      akEl.value = '';
+      akEl.placeholder = llm.has_api_key ? '已配置 (留空不修改)' : 'sk-...';
+      if (llm.model) modelInput.value = llm.model;
+
+      const tvEl = document.getElementById('settingsTavilyKey');
+      tvEl.value = '';
+      tvEl.placeholder = cfg.has_tavily_api_key ? '已配置 (留空不修改)' : 'tvly-...';
+
       const passScore = cfg.feynman_pass_score ?? 60;
       const sliderEl = document.getElementById('settingsFeynmanPassScore');
       const displayEl = document.getElementById('feynmanPassDisplay');
@@ -440,8 +447,12 @@ export function openSettings() {
         const akInput = acc.querySelector('.role-api-key');
         const mInput  = acc.querySelector('.role-model');
         if (rd.base_url && buInput) buInput.value = rd.base_url;
-        if (rd.api_key  && akInput) akInput.value = rd.api_key;
-        if (rd.model    && mInput)  mInput.value  = rd.model;
+        // Role API Key: 不填值，根据 has_api_key 设 placeholder
+        if (akInput) {
+          akInput.value = '';
+          akInput.placeholder = rd.has_api_key ? '已配置 (留空不修改)' : '继承基础配置';
+        }
+        if (rd.model && mInput) mInput.value = rd.model;
       });
     } catch (err) {
       console.warn('Failed to load settings:', err);
@@ -489,7 +500,9 @@ export function openSettings() {
   // ── Load DB config ──
   (async () => {
     try {
-      const resp = await fetch('/api/db-config');
+      const resp = await fetch('/api/db-config', {
+        headers: { 'X-Admin-Token': window.AITERATE_TOKEN || '' }
+      });
       const cfg  = await resp.json();
       const t    = cfg.type || 'postgresql';
       dbTypeSel.value = t;
@@ -566,7 +579,10 @@ export function openSettings() {
       }
       const dbResp = await fetch('/api/db-config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(window.AITERATE_TOKEN ? { 'X-Admin-Token': window.AITERATE_TOKEN } : {}),
+        },
         body: JSON.stringify(dbPayload),
       });
       if (!dbResp.ok) {

@@ -84,6 +84,15 @@ function buildLearnPanel() {
   const questionHtml = rawQuestion
     ? `<div class="original-question">${escapeHtml(rawQuestion)}</div>` : '';
 
+  // 知识节点
+  const kn = _payload?.knowledge_node;
+  const knHtml = kn ? `
+    <div class="knowledge-node-bar">
+      <span class="kn-label">📂 知识节点</span>
+      <span class="kn-path">${escapeHtml(kn.title)}</span>
+      ${kn.keywords?.length ? `<span class="kn-keywords">${kn.keywords.slice(0, 3).map(k => '#' + escapeHtml(k)).join(' ')}</span>` : ''}
+    </div>` : '';
+
   return `
     <div class="panel-header">
       <div class="ph-title">${escapeHtml(session.title || '未命名')}</div>
@@ -95,6 +104,7 @@ function buildLearnPanel() {
       </div>
     </div>
     ${questionHtml}
+    ${knHtml}
     ${answerHtml}`;
 }
 
@@ -107,6 +117,14 @@ function buildDeepenPanel() {
 
   // 历史轮次
   const historyHtml = rounds.length ? rounds.map(r => buildDeepenRoundCard(r)).join('') : '';
+
+  // 汇总全部未解决薄弱点
+  const allGaps = _payload?.unresolved_gaps || [];
+  const gapsBanner = allGaps.length > 0 ? `
+    <div class="gaps-banner">
+      <div class="gaps-banner-title">📋 待解决薄弱点（${allGaps.length}）</div>
+      <ul class="gaps-summary">${allGaps.slice(0, 8).map(g => `<li>${escapeHtml(g.gap)} <span class="muted small">→ 第${g.seq}轮</span></li>`).join('')}</ul>
+    </div>` : '';
 
   // 如果上一轮费曼没过，显示提示
   const reviewResult = _payload?.latest_review_result;
@@ -141,6 +159,7 @@ function buildDeepenPanel() {
     ? `<div class="panel-empty muted">暂无深化记录</div>` : '';
 
   return `
+    ${gapsBanner}
     ${resultBanner}
     ${historyHtml ? `<div class="deepen-history">${historyHtml}</div>` : noHistory}
     ${inputArea}`;
@@ -148,6 +167,15 @@ function buildDeepenPanel() {
 
 function buildDeepenRoundCard(round) {
   if (round.type === 'take') {
+    let gapsHtml = '';
+    const evalData = _payload?.take_evaluations?.find(e => e.id === round.id)?.eval;
+    if (evalData?.gaps?.length) {
+      gapsHtml = `
+        <div class="gaps-section">
+          <div class="gaps-label">⚠️ 薄弱点</div>
+          <ul class="gaps-list">${evalData.gaps.map(g => `<li>${escapeHtml(g)}</li>`).join('')}</ul>
+        </div>`;
+    }
     return `
       <div class="round-card round-take">
         <div class="round-user-wrap"><span class="round-label">💡 理解</span><span class="round-user">${escapeHtml(round.input || '')}</span></div>
@@ -155,6 +183,7 @@ function buildDeepenRoundCard(round) {
           <div class="ps-label">AI 评价</div>
           ${renderMarkdown(round.output || '')}
         </div>
+        ${gapsHtml}
         ${round.score ? `<div class="round-score">评分 ${round.score}/100</div>` : ''}
       </div>`;
   }
@@ -223,14 +252,29 @@ function buildReviewPanel() {
       </div>`;
   }).join('');
 
-  // 已完成总结
-  const finalResult = _payload?.latest_review_result;
-  const completedHtml = status === 'completed' && finalResult ? `
+  // 已完成总结（含完整费曼报告）
+  const reviewReport = _payload?.review_report;
+  const completedHtml = status === 'completed' ? `
     <div class="panel-section completed-summary">
       <div class="final-score-row">
         <span class="final-score-num">${session.score || 0}/100</span>
         <span class="stage-badge stage-completed">已完成</span>
       </div>
+      ${reviewReport ? `
+        <div class="review-report">
+          <div class="report-row"><span class="report-label">掌握度</span><span class="report-value">${escapeHtml(reviewReport.mastery_level || '—')}</span></div>
+          ${reviewReport.final_summary ? `<div class="report-summary md-body">${renderMarkdown(reviewReport.final_summary)}</div>` : ''}
+          ${reviewReport.strong_points?.length ? `
+            <div class="report-section">
+              <div class="report-label">✅ 理解到位的点</div>
+              <ul class="report-list good">${reviewReport.strong_points.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
+            </div>` : ''}
+          ${reviewReport.weak_points?.length ? `
+            <div class="report-section">
+              <div class="report-label">📝 还需加强</div>
+              <ul class="report-list weak">${reviewReport.weak_points.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
+            </div>` : ''}
+        </div>` : ''}
     </div>` : '';
 
   const noReview = !pendingHtml && !historyHtml && !completedHtml
