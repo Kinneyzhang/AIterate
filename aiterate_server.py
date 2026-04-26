@@ -293,6 +293,16 @@ async def startup():
     print("[AIIterate] DB ready + job worker started")
 
 
+@app.on_event("shutdown")
+async def shutdown():
+    """Cleanup connections on shutdown."""
+    try:
+        await ai.close_http_session()
+        print("[AIIterate] HTTP session closed")
+    except Exception as e:
+        print(f"[AIIterate] Shutdown cleanup error (non-fatal): {e}")
+
+
 @app.get("/")
 async def serve_frontend():
     token = db.get_or_create_admin_token()

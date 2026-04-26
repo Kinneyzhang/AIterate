@@ -13,3 +13,5 @@ config/db.json
 dist/
 node_modules/
 package-lock.json
+aiterate.db-shm
+aiterate.db-wal

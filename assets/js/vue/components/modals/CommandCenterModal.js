@@ -64,7 +64,7 @@ export default defineComponent({
               <div v-for="r in data.review_due?.filter(r => r.review_date < today)" :key="'urgent-'+r.review_id" class="cmd-item cmd-item-urgent">
                 <span class="cmd-badge cmd-badge-overdue">逾期复习</span>
                 <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'learn')">{{ r.title || '未命名' }}</a>
-                <span v-if="r.score" class="cmd-score">{{ r.score }}分</span>
+                <span v-if="r.display_score > 0" class="cmd-score">{{ r.display_score }}分</span>
                 <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'review')">开始复习 →</a>
               </div>
               <div v-for="s in data.feynman_pending" :key="'feyn-'+s.id" class="cmd-item cmd-item-urgent">
@@ -83,7 +83,7 @@ export default defineComponent({
               <div v-for="r in data.review_due?.filter(r => r.review_date >= today)" :key="'today-'+r.review_id" class="cmd-item">
                 <span class="cmd-badge cmd-badge-review">{{ r.review_round > 0 ? '第'+(r.review_round+1)+'轮' : '复习' }}</span>
                 <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'learn')">{{ r.title || '未命名' }}</a>
-                <span v-if="r.score" class="cmd-score">{{ r.score }}分</span>
+                <span v-if="r.display_score > 0" class="cmd-score">{{ r.display_score }}分</span>
                 <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'review')">开始复习 →</a>
               </div>
               <div v-for="s in data.active_sessions" :key="'active-'+s.id" class="cmd-item">

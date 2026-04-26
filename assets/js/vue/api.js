@@ -20,12 +20,13 @@ async function request(path, opts = {}) {
 }
 
 export const api = {
-  // Auth
-  login: (token) => request('/api/auth/login', { method: 'POST', body: JSON.stringify({ token }) }),
-  logout: () => request('/api/auth/logout', { method: 'POST' }),
-  checkAuth: () => request('/api/auth/status'),
+    // Auth
+    login: (token) => request('/api/auth/login', { method: 'POST', body: JSON.stringify({ token }) }),
+    logout: () => request('/api/auth/logout', { method: 'POST' }),
+    checkAuth: () => request('/api/auth/status'),
+    getStats: () => request('/api/stats'),
 
-  // Sessions
+    // Sessions
   getSessions: () => request('/api/sessions'),
   createSession: (title, content, entryType, webSearch, nodeId) =>
     request('/api/sessions', { method: 'POST', body: JSON.stringify({ title, content, type: entryType, web_search: webSearch, knowledge_node_id: nodeId }) }),

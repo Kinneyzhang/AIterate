@@ -7,13 +7,45 @@ from pathlib import Path
 
 import aiohttp
 
+# Module-level HTTP session for connection reuse
+_http_session: aiohttp.ClientSession | None = None
 
-def _extract_json_block(raw: str, open_char: str, close_char: str) -> str | None:
-    start = raw.find(open_char)
-    end   = raw.rfind(close_char)
-    if start == -1 or end == -1 or end <= start:
-        return None
-    return raw[start:end + 1]
+
+async def _get_session() -> aiohttp.ClientSession:
+    """Get or create a reusable aiohttp session."""
+    global _http_session
+    if _http_session is None or _http_session.closed:
+        _http_session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=90)
+        )
+    return _http_session
+
+
+async def close_http_session():
+    """Close the module-level HTTP session (call on shutdown)."""
+    global _http_session
+    if _http_session and not _http_session.closed:
+        await _http_session.close()
+        _http_session = None
+
+
+def _extract_json_block(raw: str) -> dict | None:
+    """从 AI 原始输出中提取第一个完整 JSON 对象（balance 括号匹配，处理嵌套）。"""
+    depth = 0
+    start = -1
+    for i, ch in enumerate(raw):
+        if ch == '{':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0 and start >= 0:
+                try:
+                    return json.loads(raw[start:i+1])
+                except json.JSONDecodeError:
+                    return None
+    return None
 
 
 # ── Dynamic LLM router ────────────────────────────────────
@@ -87,16 +119,16 @@ async def _call_llm(messages: list, temperature: float = 0.7, max_tokens: int = 
             "Content-Type":      "application/json",
         }
         url = f"{base_url}/messages"
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(url, headers=headers, json=payload) as resp:
-                raw_text = await resp.text()
-                if resp.status >= 400:
-                    raise RuntimeError(f"Anthropic API {resp.status}: {raw_text[:800]}")
-                try:
-                    data = json.loads(raw_text)
-                    return data["content"][0]["text"]
-                except Exception as exc:
-                    raise RuntimeError(f"Unexpected Anthropic response: {raw_text[:800]}") from exc
+        session = await _get_session()
+        async with session.post(url, headers=headers, json=payload) as resp:
+            raw_text = await resp.text()
+            if resp.status >= 400:
+                raise RuntimeError(f"Anthropic API {resp.status}: {raw_text[:800]}")
+            try:
+                data = json.loads(raw_text)
+                return data["content"][0]["text"]
+            except Exception as exc:
+                raise RuntimeError(f"Unexpected Anthropic response: {raw_text[:800]}") from exc
 
     # ── OpenAI-compatible (deepseek / openai / gemini / openrouter / custom) ──
     payload = {
@@ -110,16 +142,16 @@ async def _call_llm(messages: list, temperature: float = 0.7, max_tokens: int = 
         "Content-Type":  "application/json",
     }
     url = f"{base_url}/chat/completions"
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url, headers=headers, json=payload) as resp:
-            raw_text = await resp.text()
-            if resp.status >= 400:
-                raise RuntimeError(f"LLM API {resp.status}: {raw_text[:800]}")
-            try:
-                data = json.loads(raw_text)
-                return data["choices"][0]["message"]["content"]
-            except Exception as exc:
-                raise RuntimeError(f"Unexpected LLM response: {raw_text[:800]}") from exc
+    session = await _get_session()
+    async with session.post(url, headers=headers, json=payload) as resp:
+        raw_text = await resp.text()
+        if resp.status >= 400:
+            raise RuntimeError(f"LLM API {resp.status}: {raw_text[:800]}")
+        try:
+            data = json.loads(raw_text)
+            return data["choices"][0]["message"]["content"]
+        except Exception as exc:
+            raise RuntimeError(f"Unexpected LLM response: {raw_text[:800]}") from exc
 
 
 # ── Tavily web search ─────────────────────────────────────
@@ -153,15 +185,15 @@ async def tavily_search(query: str) -> str:
         "max_results":  5,
     }
     timeout = aiohttp.ClientTimeout(total=30)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post("https://api.tavily.com/search", json=payload) as resp:
-            raw_text = await resp.text()
-            if resp.status >= 400:
-                raise RuntimeError(f"Tavily API {resp.status}: {raw_text[:400]}")
-            data = json.loads(raw_text)
-            results = data.get("results", [])
-            snippets = [r.get("content", "") for r in results if r.get("content")]
-            return "\n\n".join(snippets[:5])
+    session = await _get_session()
+    async with session.post("https://api.tavily.com/search", json=payload) as resp:
+        raw_text = await resp.text()
+        if resp.status >= 400:
+            raise RuntimeError(f"Tavily API {resp.status}: {raw_text[:400]}")
+        data = json.loads(raw_text)
+        results = data.get("results", [])
+        snippets = [r.get("content", "") for r in results if r.get("content")]
+        return "\n\n".join(snippets[:5])
 
 
 # ── 阶段1：生成初始完整答案 ────────────────────────────
@@ -265,8 +297,9 @@ AI的完整回答：
     ]
     raw = await _call_llm(messages, temperature=0.3, max_tokens=600, role="evaluate")
     try:
-        block  = _extract_json_block(raw, "{", "}")
-        result = json.loads(block)
+        result = _extract_json_block(raw)
+        if result is None:
+            raise ValueError("parse failed")
         return {
             "score":          int(result.get("score", 50)),
             "understood_well": bool(result.get("understood_well", False)),
@@ -365,11 +398,12 @@ async def generate_review_questions(original_question: str, ai_answer: str, lear
     ]
     raw = await _call_llm(messages, temperature=0.5, max_tokens=400, role="review")
     try:
-        block  = _extract_json_block(raw, "{", "}")
-        result = json.loads(block)
+        result = _extract_json_block(raw)
+        if result is None:
+            raise ValueError("parse failed")
         return {"questions": result.get("questions", []) or []}
     except Exception:
-        return {"questions": ["用自己的话解释这个概念的核心是什么？"]}
+        return {"questions": ["用自己的话解释这个概念的核心是什么？"], "parse_failed": True}
 
 
 # ── 阶段2c：推荐深化追问 ─────────────────────────────
@@ -404,8 +438,9 @@ async def suggest_deepen_prompts(original_question: str, gaps: list[str]) -> dic
     ]
     raw = await _call_llm(messages, temperature=0.5, max_tokens=300, role="deepen")
     try:
-        block  = _extract_json_block(raw, "{", "}")
-        result = json.loads(block)
+        result = _extract_json_block(raw)
+        if result is None:
+            raise ValueError("parse failed")
         return {"suggestions": result.get("suggestions", [])[:3]}
     except Exception:
         return {"suggestions": []}
@@ -461,8 +496,9 @@ async def evaluate_review_answers(original_question: str, review_questions: list
     ]
     raw = await _call_llm(messages, temperature=0.3, max_tokens=600, role="review")
     try:
-        block  = _extract_json_block(raw, "{", "}")
-        result = json.loads(block)
+        result = _extract_json_block(raw)
+        if result is None:
+            raise ValueError("parse failed")
         return {
             "item_scores":   result.get("item_scores", []),
             "final_score":   int(result.get("final_score", 50)),

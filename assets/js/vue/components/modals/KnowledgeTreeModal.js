@@ -3,7 +3,7 @@
 import { defineComponent, ref, onMounted } from 'vue';
 import { api } from '../../api.js';
 import { icon } from '../../icons.js';
-import { escapeHtml } from '../../utils.js';
+import { escapeHtml } from '../../../utils.js';
 
 const domainIcons = {
   '计算机': 'monitor',

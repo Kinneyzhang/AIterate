@@ -2,6 +2,7 @@
 
 import { defineComponent, computed, ref, onMounted } from 'vue';
 import { store, getStageMeta, formatDate } from '../store.js';
+import { api } from '../api.js';
 
 export default defineComponent({
   props: { sessions: Array, selectedId: Number, expanded: Boolean },
@@ -35,8 +36,7 @@ export default defineComponent({
 
     async function loadGlobalStats() {
       try {
-        const resp = await fetch('/api/stats');
-        globalStats.value = await resp.json();
+        globalStats.value = await api.getStats();
       } catch (_) { /* fallback to list stats */ }
     }
 

@@ -202,6 +202,10 @@ export default defineComponent({
       clip: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>',
     };
 
+    function openKnowledgeTree() {
+      router.push({ name: 'knowledge-tree' });
+    }
+
     return {
       activeTab, takeInput, questionInput, feynmanAnswers, submitting,
       canDeepen, canReview, currentSession, currentRounds, feynmanGroup,
@@ -209,6 +213,7 @@ export default defineComponent({
       submitDeepAction, startFeynman, submitFeynman, switchTab,
       reviewSchedule, completeReviewDirect,
       reviewContents, reviewSubmitting, reviewResults, submitReviewReExplain,
+      openKnowledgeTree,
       getStageMeta, escapeHtml, renderMarkdown, formatDate, icons, router, route,
     };
   },
@@ -249,6 +254,7 @@ export default defineComponent({
               <template v-for="k in knowledgeNode.keywords.slice(0,3)">#{{ k }} </template>
             </span>
           </div>
+          <div v-else class="knowledge-node-bar" style="opacity:0.65; cursor:pointer;" @click="openKnowledgeTree" v-html="icons.tag + ' 未绑定知识节点 — 点击关联'\"></div>
           <div v-if="currentSession.material" class="panel-section">
             <div class="ps-label">AI 回答</div>
             <div class="ps-body md-body" v-html="renderMarkdown(currentSession.material)"></div>

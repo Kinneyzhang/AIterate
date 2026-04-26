@@ -388,6 +388,11 @@ def init_db():
                 except Exception:
                     pass  # SQLite 不支持 IF NOT EXISTS in ALTER TABLE
 
+        # review_schedule performance index
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_review_schedule_status_date ON review_schedule(status, review_date)"
+        ))
+
         # learning_gaps — Phase 5: independent gap entity with status tracking
         if sqlite:
             conn.execute(text(f"""
@@ -1878,15 +1883,20 @@ def schedule_review(session_id: int, score: int | None) -> int | None:
         """, {"sid": session_id, "rd": review_date})
 
 
-def get_today_reviews(limit: int = 20) -> list[dict]:
+def get_today_reviews(limit: int = 50) -> list[dict]:
     """获取今日到期的复习任务（含 overdue），按 review_date 升序。
-    返回结果附带 review_round 字段（第几次复习，0-based）。
+    返回结果附带 review_round 字段（第几次复习，0-based）和 display_score。
     """
     from datetime import date
     today = date.today().isoformat()
     return _fetch_all("""
         SELECT rs.id AS review_id, rs.review_date, rs.status AS review_status,
-               s.id AS session_id, s.title, s.score, s.knowledge_node_id,
+               s.id AS session_id, s.title, 
+               COALESCE(s.score, 
+                 (SELECT r.score FROM rounds r WHERE r.session_id = rs.session_id
+                  AND r.type = 'feynman' AND r.status = 'completed'
+                  ORDER BY r.seq DESC LIMIT 1), 0) AS display_score,
+               s.knowledge_node_id,
                s.status AS session_status,
                (SELECT COUNT(*) FROM review_schedule rs2 
                 WHERE rs2.session_id = rs.session_id 
@@ -2249,6 +2259,7 @@ def repair_invariants(dry_run: bool = True) -> dict:
     """修复常见的状态机不一致问题。
     
     - pending feynman rounds + status != feynman → 修正 status 为 'feynman'
+    - completed session with feynman rounds but no review_report → 从 rounds 重建
     """
     repairs = []
     
@@ -2274,6 +2285,49 @@ def repair_invariants(dry_run: bool = True) -> dict:
                 "session_id": sid,
                 "old_status": old_status,
                 "new_status": "feynman",
+                "issue": "pending_feynman_wrong_status",
+                "dry_run": dry_run,
+            })
+    
+    # Fix: completed missing review_report — rebuild from feynman rounds
+    with _tx() as conn:
+        rows = conn.execute(text("""
+            SELECT DISTINCT s.id, s.score
+            FROM sessions s
+            JOIN rounds r ON r.session_id = s.id
+            WHERE s.status = 'completed'
+              AND r.type = 'feynman' AND r.status = 'completed'
+              AND s.review_report IS NULL
+        """)).fetchall()
+        
+        for row in rows:
+            sid = row._mapping["id"]
+            session_score = row._mapping["score"]
+            if not dry_run:
+                # Build a minimal review_report from the rounds
+                feynman_rounds = _fetch_all(
+                    """SELECT * FROM rounds WHERE session_id = :sid 
+                       AND type = 'feynman' AND status = 'completed' 
+                       ORDER BY seq ASC""",
+                    {"sid": sid}
+                )
+                final_score = session_score or (feynman_rounds[-1].get("score", 0) if feynman_rounds else 0)
+                report = {
+                    "final_score": final_score,
+                    "mastery_level": "理解",
+                    "strong_points": [],
+                    "weak_points": [],
+                    "final_summary": f"Auto-repaired from {len(feynman_rounds)} completed feynman rounds",
+                    "passed": True,
+                    "pass_score": 60,
+                    "parse_failed": False,
+                    "repaired": True,
+                }
+                save_review_report(sid, report)
+            repairs.append({
+                "session_id": sid,
+                "issue": "completed_missing_review_report",
+                "action": "rebuilt from rounds",
                 "dry_run": dry_run,
             })
     
