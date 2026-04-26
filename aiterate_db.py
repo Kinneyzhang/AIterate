@@ -254,6 +254,7 @@ def init_db():
                 review_report   TEXT,
                 knowledge_node_id TEXT,
                 web_search      INTEGER     NOT NULL DEFAULT 0,
+                pinned_at       TEXT,
                 error_msg       TEXT,
                 created_at      TEXT        NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT        NOT NULL DEFAULT (datetime('now'))
@@ -271,6 +272,7 @@ def init_db():
                 review_report {jb},
                 knowledge_node_id TEXT,
                 web_search      SMALLINT    NOT NULL DEFAULT 0,
+                pinned_at  {ts},
                 error_msg  TEXT,
                 created_at {ts} NOT NULL DEFAULT NOW(),
                 updated_at {ts} NOT NULL DEFAULT NOW()
@@ -283,6 +285,7 @@ def init_db():
         _ensure_column(conn, "sessions", "review_report", _jsonb())
         _ensure_column(conn, "sessions", "knowledge_node_id", "TEXT")
         _ensure_column(conn, "sessions", "web_search", "SMALLINT", "0")
+        _ensure_column(conn, "sessions", "pinned_at", _timestamptz())
 
         # rounds
         if sqlite:
@@ -713,14 +716,22 @@ def get_session(session_id: int) -> dict | None:
 
 def get_recent_sessions(limit: int = 20) -> list[dict]:
     return _fetch_all(
-        "SELECT * FROM sessions ORDER BY created_at DESC LIMIT :lim",
+        """
+        SELECT * FROM sessions
+        ORDER BY
+          CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END,
+          pinned_at DESC,
+          updated_at DESC,
+          created_at DESC
+        LIMIT :lim
+        """,
         {"lim": limit}
     )
 
 def update_session(session_id: int, **kwargs):
     allowed = {
         "title", "content", "type", "status", "material", "score", "review_report",
-        "knowledge_node_id", "web_search", "error_msg",
+        "knowledge_node_id", "web_search", "pinned_at", "error_msg",
     }
     unknown = set(kwargs) - allowed
     if unknown:
@@ -738,6 +749,82 @@ def update_session(session_id: int, **kwargs):
         parts.append("updated_at = NOW()")
     params["__id"] = session_id
     _exec(f"UPDATE sessions SET {', '.join(parts)} WHERE id = :__id", params)
+
+def set_session_pinned(session_id: int, pinned: bool) -> dict | None:
+    if not get_session(session_id):
+        return None
+    # 置顶是列表排序元数据，不应刷新 updated_at；否则取消置顶后会因为
+    # updated_at 变成最新而仍停在列表最前，用户会误以为还在置顶。
+    pinned_at = (_now_str() if _is_sqlite() else datetime.now(timezone.utc).isoformat()) if pinned else None
+    _exec("UPDATE sessions SET pinned_at = :pinned_at WHERE id = :id", {"pinned_at": pinned_at, "id": session_id})
+    return get_session(session_id)
+
+def delete_session(session_id: int) -> bool:
+    if not get_session(session_id):
+        return False
+    with _tx() as conn:
+        # Manual cleanup keeps SQLite tests correct even if foreign_keys is not enabled.
+        for table in ("review_schedule", "learning_gaps", "rounds"):
+            conn.execute(text(f"DELETE FROM {table} WHERE session_id = :sid"), {"sid": session_id})
+        # Jobs store session_id in JSON payload; keep this best-effort and dialect-safe.
+        if _is_sqlite():
+            conn.execute(text("DELETE FROM jobs WHERE CAST(payload AS TEXT) LIKE :pat"), {"pat": f'%"session_id": {session_id}%'})
+        else:
+            conn.execute(text("DELETE FROM jobs WHERE CAST(payload AS TEXT) LIKE :pat"), {"pat": f'%"session_id": {session_id}%'})
+        conn.execute(text("DELETE FROM sessions WHERE id = :sid"), {"sid": session_id})
+    return True
+
+def build_session_share_summary(session_id: int) -> dict | None:
+    session = get_session(session_id)
+    if not session:
+        return None
+    rounds = get_rounds(session_id)
+    deepen_rounds = []
+    feynman_by_group: dict[int, list[dict]] = {}
+    for r in rounds:
+        if r.get("type") in ("take", "press"):
+            deepen_rounds.append({
+                "id": r.get("id"),
+                "type": r.get("type"),
+                "user": r.get("input") or "",
+                "ai": r.get("output") or "",
+                "score": r.get("score"),
+                "eval": _jload(r.get("eval_json")) if r.get("eval_json") is not None else None,
+                "created_at": r.get("created_at"),
+            })
+        elif r.get("type") == "feynman":
+            gid = r.get("group_id") or r.get("id")
+            feynman_by_group.setdefault(gid, []).append(r)
+
+    feynman_groups = []
+    for gid, items in feynman_by_group.items():
+        ordered = sorted(items, key=lambda x: x.get("seq") or 0)
+        scores = [x.get("score") for x in ordered if x.get("score") is not None]
+        feynman_groups.append({
+            "group_id": gid,
+            "status": ordered[-1].get("status") if ordered else None,
+            "average_score": round(sum(scores) / len(scores), 1) if scores else None,
+            "items": [{
+                "id": x.get("id"),
+                "question": x.get("input") or "",
+                "answer": x.get("output") or "",
+                "score": x.get("score"),
+                "comment": x.get("score_comment") or "",
+            } for x in ordered],
+        })
+    feynman_groups.sort(key=lambda g: g["group_id"])
+
+    return {
+        "session": session,
+        "learn": {
+            "question": session.get("content") or session.get("title") or "",
+            "material": session.get("material") or "",
+        },
+        "deepen_rounds": deepen_rounds,
+        "feynman_groups": feynman_groups,
+        "review_report": _jload(session.get("review_report")) if session.get("review_report") is not None else None,
+        "generated_at": _now_str(),
+    }
 
 def get_stats() -> dict:
     total     = (_fetch_one("SELECT COUNT(*) AS n FROM sessions") or {}).get("n", 0)

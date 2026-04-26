@@ -214,7 +214,7 @@
 [data-theme="night"] .csel-option.selected { color: var(--fg-0); font-weight: 600; }
 
 /* ── 11. Buttons ─────────────────────────────────────────────────────────── */
-[data-theme="night"] button:not(.btn):not(.ws-tab):not(.settings-tab):not(.modal-close):not(.type-btn):not(.sidebar-toggle) {
+[data-theme="night"] button:not(.btn):not(.ws-tab):not(.settings-tab):not(.modal-close):not(.type-btn):not(.sidebar-toggle):not(.session-menu-trigger):not(.session-menu-action) {
   border-radius: 7px;
   font-size: 13px;
   font-weight: 500;

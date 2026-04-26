@@ -11,16 +11,18 @@ import NewSessionModal from './modals/NewSessionModal.js';
 import SettingsModal from './modals/SettingsModal.js';
 import KnowledgeTreeModal from './modals/KnowledgeTreeModal.js';
 import CommandCenterModal from './modals/CommandCenterModal.js';
+import SessionShareModal from './modals/SessionShareModal.js';
 import LoginModal from './modals/LoginModal.js';
 
 export default defineComponent({
-  components: { TopBar, SideBar, Workspace, NewSessionModal, SettingsModal, KnowledgeTreeModal, CommandCenterModal, LoginModal },
+  components: { TopBar, SideBar, Workspace, NewSessionModal, SettingsModal, KnowledgeTreeModal, CommandCenterModal, SessionShareModal, LoginModal },
 
   setup() {
     const router = useRouter();
     const route  = useRoute();
     const authenticated = ref(false);
     const checking = ref(true);
+    const shareSessionId = ref(null);
 
     // ── overlay 页面判断 ───────────────────────────────────────────
     const OVERLAY_ROUTES = ['new-session', 'knowledge-tree', 'command-center', 'settings-basic', 'settings-roles', 'settings-tavily', 'settings-database', 'settings-learn'];
@@ -29,6 +31,7 @@ export default defineComponent({
     const lastNonOverlayRoute = ref(null);
     let pollBusy = false;
     let workspaceLoadSeq = 0;
+    const pendingSessionOps = new Map();
 
     function routeNameForStatus(status) {
       if (status === 'feynman' || status === 'completed') return 'session-review';
@@ -55,9 +58,8 @@ export default defineComponent({
     async function loadSessionsAfterAuth() {
       try {
         const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
-        store.sessions = sessions;
         if (stats) store.stats = stats;
-        warmCaches(sessions);
+        setSessionsFromServer(sessions);
         if (hasPreparingSessions()) startBackgroundRefresh();
       } catch (err) {
         console.error('Failed to load sessions', err);
@@ -145,11 +147,14 @@ export default defineComponent({
     // ── Background auto-refresh ───────────────────────────────────────
     async function refreshRuntime() {
       const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
-      store.sessions = sessions;
       if (stats) store.stats = stats;
-      warmCaches(sessions);
+      setSessionsFromServer(sessions);
       if (store.selectedSessionId) {
         store.workspace = await api.getWorkspace(store.selectedSessionId, { force: true });
+        const pending = pendingSessionOps.get(Number(store.selectedSessionId));
+        if (pending?.patch && store.workspace?.session) {
+          store.workspace.session = { ...store.workspace.session, ...pending.patch };
+        }
         updateCurrentFeynmanGroup();
       }
     }
@@ -218,9 +223,8 @@ export default defineComponent({
     async function handleSessionCreated(payload) {
       try {
         const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
-        store.sessions = sessions;
         if (stats) store.stats = stats;
-        warmCaches(sessions);
+        setSessionsFromServer(sessions);
         // 只刷新侧栏与统计，不切换当前 selectedSession/workspace。
         // 新建 modal 是 overlay；提交后背景应继续停留在用户原来的 session/panel。
         startBackgroundRefresh();
@@ -230,12 +234,142 @@ export default defineComponent({
       }
     }
 
+    function applyPendingSessionOps(sessions) {
+      return (sessions || []).reduce((acc, session) => {
+        const op = pendingSessionOps.get(Number(session.id));
+        if (op?.type === 'delete') return acc;
+        acc.push(op?.patch ? { ...session, ...op.patch } : session);
+        return acc;
+      }, []);
+    }
+
+    function setSessionsFromServer(sessions) {
+      store.sessions = applyPendingSessionOps(sessions);
+      syncStatsFromSessions();
+      warmCaches(store.sessions);
+    }
+
+    function syncStatsFromSessions() {
+      const sessions = store.sessions || [];
+      const completed = sessions.filter(s => s.status === 'completed').length;
+      store.stats = {
+        ...(store.stats || {}),
+        total_sessions: sessions.length,
+        completed_sessions: completed,
+        active_sessions: sessions.length - completed,
+      };
+    }
+
+    function removeSessionLocal(id) {
+      const sid = Number(id);
+      const nextSessions = (store.sessions || []).filter(s => Number(s.id) !== sid);
+      store.sessions.splice(0, store.sessions.length, ...nextSessions);
+      syncStatsFromSessions();
+    }
+
+    function replaceSessionLocal(id, patchOrSession) {
+      const sid = Number(id);
+      store.sessions = (store.sessions || []).map(s => Number(s.id) === sid ? { ...s, ...patchOrSession } : s);
+      if (Number(store.selectedSessionId) === sid && store.workspace?.session) {
+        store.workspace.session = { ...store.workspace.session, ...patchOrSession };
+      }
+    }
+
+    async function handleShareSession(session) {
+      store.sidebarExpanded = false;
+      shareSessionId.value = Number(session.id);
+    }
+
+    function handleRenameSession(payload) {
+      const session = payload.session;
+      const title = payload.title.trim();
+      const previousTitle = payload.previousTitle ?? session.title ?? '';
+      if (!title) {
+        setNotice('标题不能为空。', 'error');
+        return;
+      }
+
+      pendingSessionOps.set(Number(session.id), { type: 'rename', patch: { title } });
+      replaceSessionLocal(session.id, { title });
+      api.renameSession(session.id, title)
+        .then(result => {
+          pendingSessionOps.delete(Number(session.id));
+          if (result?.session) replaceSessionLocal(session.id, result.session);
+        })
+        .catch(err => {
+          pendingSessionOps.delete(Number(session.id));
+          replaceSessionLocal(session.id, { title: previousTitle });
+          setNotice(`重命名失败：${err.message}`, 'error');
+        });
+    }
+
+    function handlePinSession(session) {
+      const sid = Number(session.id);
+      const previousPinnedAt = session.pinned_at || null;
+      const previousUpdatedAt = session.updated_at || null;
+      const nextPinned = !previousPinnedAt;
+      const optimisticPinnedAt = nextPinned ? new Date().toISOString() : null;
+      const optimisticPatch = { pinned_at: optimisticPinnedAt, updated_at: previousUpdatedAt };
+
+      pendingSessionOps.set(sid, { type: 'pin', patch: optimisticPatch });
+      replaceSessionLocal(sid, optimisticPatch);
+      api.pinSession(sid, nextPinned)
+        .then(result => {
+          pendingSessionOps.delete(sid);
+          if (result?.session) replaceSessionLocal(sid, result.session);
+        })
+        .catch(err => {
+          pendingSessionOps.delete(sid);
+          replaceSessionLocal(sid, { pinned_at: previousPinnedAt, updated_at: previousUpdatedAt });
+          setNotice(`${nextPinned ? '置顶' : '取消置顶'}失败：${err.message}`, 'error');
+        });
+    }
+
+    function handleDeleteSession(session) {
+      if (!window.confirm(`删除「${session.title || '未命名'}」？此操作会删除该 session 的学习、深化和费曼记录。`)) return;
+
+      const sid = Number(session.id);
+      const previousSessions = [...(store.sessions || [])];
+      const previousStats = { ...(store.stats || {}) };
+      const wasSelected = Number(store.selectedSessionId) === sid;
+      const previousWorkspace = wasSelected ? store.workspace : null;
+
+      pendingSessionOps.set(sid, { type: 'delete' });
+      removeSessionLocal(sid);
+      if (wasSelected) {
+        workspaceLoadSeq++;
+        store.selectedSessionId = null;
+        store.workspace = null;
+        store.currentFeynmanGroupId = null;
+        router.push({ name: 'home' });
+      }
+
+      api.deleteSession(sid)
+        .then(() => {
+          pendingSessionOps.delete(sid);
+          removeSessionLocal(sid);
+        })
+        .catch(err => {
+          pendingSessionOps.delete(sid);
+          store.sessions = previousSessions;
+          store.stats = previousStats;
+          if (wasSelected) {
+            store.selectedSessionId = sid;
+            store.workspace = previousWorkspace;
+            updateCurrentFeynmanGroup();
+            router.push({ name: routeNameForStatus(previousWorkspace?.session?.status), params: { id: sid } });
+          }
+          setNotice(`删除失败：${err.message}`, 'error');
+        });
+    }
+
     async function handleAuthenticated() {
       authenticated.value = true;
       await loadSessionsAfterAuth();
     }
 
-    return { store, route, router, refreshAll, selectSession, closeOverlay, closeOverlayAndRefresh, handleSessionCreated, isOverlay,
+    return { store, route, router, refreshAll, selectSession, closeOverlay, closeOverlayAndRefresh, handleSessionCreated,
+      handleShareSession, handleRenameSession, handlePinSession, handleDeleteSession, shareSessionId, isOverlay,
       authenticated, checking, handleAuthenticated };
   },
 
@@ -320,7 +454,11 @@ export default defineComponent({
       <SideBar :sessions="store.sessions"
                :selected-id="store.selectedSessionId"
                :expanded="store.sidebarExpanded"
-               @select="selectSession" />
+               @select="selectSession"
+               @share="handleShareSession"
+               @rename="handleRenameSession"
+               @pin="handlePinSession"
+               @delete="handleDeleteSession" />
       <main class="main-pane">
         <div id="noticeBar"
              :class="['notice-bar', store.notice.text ? 'visible' : '', store.notice.type === 'error' ? 'notice-error' : '']">
@@ -348,6 +486,11 @@ export default defineComponent({
       v-if="route.name === 'command-center'"
       @close="closeOverlay"
       @select-session="id => { router.push({ name: 'session-learn', params: { id } }); }" />
+
+    <SessionShareModal
+      v-if="shareSessionId"
+      :session-id="shareSessionId"
+      @close="shareSessionId = null" />
     </template>
   `,
 });

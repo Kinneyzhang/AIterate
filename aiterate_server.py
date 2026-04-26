@@ -555,6 +555,24 @@ class SessionCreate(BaseModel):
         return v
 
 
+class SessionTitleUpdate(BaseModel):
+    title: str
+
+    @field_validator("title")
+    @classmethod
+    def title_valid(cls, v):
+        if not v or not v.strip():
+            raise ValueError("标题不能为空")
+        v = v.strip()
+        if len(v) > 120:
+            raise ValueError("标题过长，最多 120 字符")
+        return v
+
+
+class SessionPinUpdate(BaseModel):
+    pinned: bool = True
+
+
 @app.post("/api/sessions", dependencies=[Depends(_require_admin)])
 async def create_session_and_answer(body: SessionCreate):
     """阶段1：创建 session，通过 DB job queue 后台异步生成标题+初始回答"""
@@ -596,6 +614,38 @@ async def get_session(session_id: int):
     if not s:
         raise HTTPException(404, "Session not found")
     return s
+
+
+@app.patch("/api/sessions/{session_id}/title", dependencies=[Depends(_require_admin)])
+async def rename_session(session_id: int, body: SessionTitleUpdate):
+    s = db.get_session(session_id)
+    if not s:
+        raise HTTPException(404, "Session not found")
+    db.update_session(session_id, title=body.title)
+    return {"ok": True, "session": db.get_session(session_id)}
+
+
+@app.post("/api/sessions/{session_id}/pin", dependencies=[Depends(_require_admin)])
+async def pin_session(session_id: int, body: SessionPinUpdate):
+    s = db.set_session_pinned(session_id, body.pinned)
+    if not s:
+        raise HTTPException(404, "Session not found")
+    return {"ok": True, "session": s}
+
+
+@app.delete("/api/sessions/{session_id}", dependencies=[Depends(_require_admin)])
+async def delete_session(session_id: int):
+    if not db.delete_session(session_id):
+        raise HTTPException(404, "Session not found")
+    return {"ok": True, "deleted_id": session_id}
+
+
+@app.get("/api/sessions/{session_id}/share", dependencies=[Depends(_require_admin)])
+async def get_session_share(session_id: int):
+    data = db.build_session_share_summary(session_id)
+    if not data:
+        raise HTTPException(404, "Session not found")
+    return data
 
 
 @app.get("/api/sessions/{session_id}/rounds", dependencies=[Depends(_require_admin)])

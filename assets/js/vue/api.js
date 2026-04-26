@@ -171,6 +171,22 @@ export const api = {
     invalidateDerived();
     return request('/api/sessions', { method: 'POST', body: JSON.stringify({ title, content, type: entryType, web_search: webSearch, knowledge_node_id: nodeId }) });
   },
+  renameSession: async (id, title) => {
+    invalidateWorkspace(id);
+    invalidateDerived();
+    return request(`/api/sessions/${id}/title`, { method: 'PATCH', body: JSON.stringify({ title }) });
+  },
+  pinSession: async (id, pinned) => {
+    invalidateWorkspace(id);
+    invalidateDerived();
+    return request(`/api/sessions/${id}/pin`, { method: 'POST', body: JSON.stringify({ pinned }) });
+  },
+  deleteSession: async (id) => {
+    invalidateWorkspace(id);
+    invalidateDerived();
+    return request(`/api/sessions/${id}`, { method: 'DELETE' });
+  },
+  getSessionShare: (id) => request(`/api/sessions/${id}/share`),
   getWorkspace: getWorkspaceCached,
   prefetchWorkspace,
   prefetchWorkspaces,
