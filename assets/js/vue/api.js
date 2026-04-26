@@ -63,6 +63,7 @@ export const api = {
   getKnowledgeMastery: () => request('/api/knowledge-tree/mastery'),
   getRecommendedNodes: () => request('/api/knowledge-tree/recommend'),
   getCommandCenter: () => request('/api/command-center'),
+  getJobsStatus: () => request('/api/jobs/status'),
   getDbConfig: () => request('/api/db-config'),
   completeReview: (rid) => request(`/api/review/${rid}/complete`, { method: 'POST', body: '{}' }),
   skipReview: (rid) => request(`/api/review/${rid}/skip`, { method: 'POST' }),

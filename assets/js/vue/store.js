@@ -5,6 +5,7 @@ import { reactive, computed } from 'vue';
 export const store = reactive({
   // sessions
   sessions: [],
+  stats: { total_sessions: 0, completed_sessions: 0, active_sessions: 0 },
   selectedSessionId: null,
   
   // workspace

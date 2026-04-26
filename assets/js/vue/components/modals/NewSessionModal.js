@@ -64,9 +64,12 @@ export default defineComponent({
       if (!c) return;
       submitting.value = true;
       try {
-        await api.createSession('', c, selectedType.value, webSearch.value, selectedNodeId.value);
-        emit('created');
-        emit('close');
+        const data = await api.createSession('', c, selectedType.value, webSearch.value, selectedNodeId.value);
+        emit('created', data);
+        content.value = '';
+        selectedNodeId.value = null;
+        suggestions.value = [];
+        setNotice('已入队，AI 会在后台回答。可以继续提下一个。');
       } catch (err) {
         setNotice(`创建失败：${err.message}`, 'error');
       } finally {

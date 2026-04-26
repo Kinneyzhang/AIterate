@@ -27,10 +27,23 @@ export default defineComponent({
     const isOverlayRouteName = name => OVERLAY_ROUTES.includes(name);
     const isOverlay = computed(() => isOverlayRouteName(route.name));
     const lastNonOverlayRoute = ref(null);
+    let pollBusy = false;
+
+    function updateCurrentFeynmanGroup() {
+      const g = store.workspace?.current_review_group;
+      store.currentFeynmanGroupId = (g?.length > 0) ? (g[0].group_id ?? g[0].id) : null;
+    }
+
+    function hasPreparingSessions() {
+      return (store.sessions || []).some(s => s.status === 'preparing');
+    }
 
     async function loadSessionsAfterAuth() {
       try {
-        store.sessions = await api.getSessions();
+        const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
+        store.sessions = sessions;
+        if (stats) store.stats = stats;
+        if (hasPreparingSessions()) startBackgroundRefresh();
       } catch (err) {
         console.error('Failed to load sessions', err);
         setNotice(`加载会话失败：${err.message}`, 'error');
@@ -54,6 +67,7 @@ export default defineComponent({
     function onUnauthorized() {
       authenticated.value = false;
       store.sessions = [];
+      store.stats = { total_sessions: 0, completed_sessions: 0, active_sessions: 0 };
       store.workspace = null;
       store.selectedSessionId = null;
       store.currentFeynmanGroupId = null;
@@ -100,9 +114,8 @@ export default defineComponent({
         store.sidebarExpanded = false;
         try {
           store.workspace = await api.getWorkspace(numId);
-          const g = store.workspace?.current_review_group;
-          store.currentFeynmanGroupId = (g?.length > 0) ? (g[0].group_id ?? g[0].id) : null;
-          if (store.workspace?.session?.status === 'preparing') startPolling(numId);
+          updateCurrentFeynmanGroup();
+          if (store.workspace?.session?.status === 'preparing' || hasPreparingSessions()) startBackgroundRefresh();
           else stopPolling();
         } catch (err) {
           setNotice(`加载失败：${err.message}`, 'error');
@@ -111,19 +124,37 @@ export default defineComponent({
       { immediate: true }
     );
 
-    // ── Polling ──────────────────────────────────────────────────────
-    function startPolling(sessionId) {
-      stopPolling();
-      store.pollTimer = setInterval(async () => {
-        if (store.selectedSessionId !== sessionId) { stopPolling(); return; }
-        try {
-          store.workspace = await api.getWorkspace(sessionId);
-          store.sessions  = await api.getSessions();
-          if (store.workspace?.session?.status !== 'preparing') stopPolling();
-        } catch (err) {
-          console.error('poll failed', err);
-        }
-      }, 3000);
+    // ── Background auto-refresh ───────────────────────────────────────
+    async function refreshRuntime() {
+      const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
+      store.sessions = sessions;
+      if (stats) store.stats = stats;
+      if (store.selectedSessionId) {
+        store.workspace = await api.getWorkspace(store.selectedSessionId);
+        updateCurrentFeynmanGroup();
+      }
+    }
+
+    async function pollBackgroundOnce() {
+      if (pollBusy) return;
+      pollBusy = true;
+      try {
+        const jobs = await api.getJobsStatus().catch(() => ({ pending: 0, running: 0 }));
+        await refreshRuntime();
+        const keepPolling = (jobs.pending || 0) > 0 || (jobs.running || 0) > 0 || hasPreparingSessions();
+        if (!keepPolling) stopPolling();
+      } catch (err) {
+        console.error('background refresh failed', err);
+      } finally {
+        pollBusy = false;
+      }
+    }
+
+    function startBackgroundRefresh() {
+      if (!store.pollTimer) {
+        store.pollTimer = setInterval(pollBackgroundOnce, 2000);
+      }
+      pollBackgroundOnce();
     }
 
     function stopPolling() {
@@ -132,12 +163,8 @@ export default defineComponent({
 
     // ── 刷新 ─────────────────────────────────────────────────────────
     async function refreshAll(showNotice) {
-      store.sessions = await api.getSessions();
-      if (store.selectedSessionId) {
-        store.workspace = await api.getWorkspace(store.selectedSessionId);
-        const g = store.workspace?.current_review_group;
-        store.currentFeynmanGroupId = (g?.length > 0) ? (g[0].group_id ?? g[0].id) : null;
-      }
+      await refreshRuntime();
+      if (hasPreparingSessions()) startBackgroundRefresh();
       if (showNotice) setNotice('已刷新。');
     }
 
@@ -168,12 +195,36 @@ export default defineComponent({
       }
     }
 
+    async function handleSessionCreated(payload) {
+      const sid = Number(payload?.session_id);
+      try {
+        const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
+        store.sessions = sessions;
+        if (stats) store.stats = stats;
+        if (sid) {
+          store.selectedSessionId = sid;
+          store.workspace = await api.getWorkspace(sid);
+          updateCurrentFeynmanGroup();
+          lastNonOverlayRoute.value = {
+            name: 'session-learn',
+            params: { id: String(sid) },
+            query: {},
+            hash: '',
+          };
+        }
+        startBackgroundRefresh();
+      } catch (err) {
+        console.error('created session refresh failed', err);
+        setNotice(`已提交，但刷新列表失败：${err.message}`, 'error');
+      }
+    }
+
     async function handleAuthenticated() {
       authenticated.value = true;
       await loadSessionsAfterAuth();
     }
 
-    return { store, route, router, refreshAll, selectSession, closeOverlay, closeOverlayAndRefresh, isOverlay,
+    return { store, route, router, refreshAll, selectSession, closeOverlay, closeOverlayAndRefresh, handleSessionCreated, isOverlay,
       authenticated, checking, handleAuthenticated };
   },
 
@@ -272,7 +323,7 @@ export default defineComponent({
     <NewSessionModal
       v-if="route.name === 'new-session'"
       @close="closeOverlay"
-      @created="closeOverlayAndRefresh" />
+      @created="handleSessionCreated" />
 
     <SettingsModal
       v-if="['settings-basic','settings-roles','settings-tavily','settings-database','settings-learn'].includes(route.name)"

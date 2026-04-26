@@ -1,23 +1,20 @@
 // ── SideBar.js ── 精确复刻原版 sidebar ───────────────────────────────────
 
-import { defineComponent, computed, ref, onMounted } from 'vue';
+import { defineComponent, computed } from 'vue';
 import { store, getStageMeta, formatDate } from '../store.js';
-import { api } from '../api.js';
 
 export default defineComponent({
   props: { sessions: Array, selectedId: Number, expanded: Boolean },
   emits: ['select'],
 
   setup(props, { emit }) {
-    const globalStats = ref({ total_sessions: 0, completed_sessions: 0, active_sessions: 0 });
-
     const stats = computed(() => {
-      // 优先用全局 stats（更准确），fallback 到列表统计
-      if (globalStats.value.total_sessions > 0) {
+      // 全局 stats 由 AppRoot 的自动刷新维护；fallback 到当前列表统计
+      if (store.stats?.total_sessions > 0) {
         return {
-          total: globalStats.value.total_sessions,
-          active: globalStats.value.total_sessions - (globalStats.value.completed_sessions || 0),
-          completed: globalStats.value.completed_sessions || 0,
+          total: store.stats.total_sessions,
+          active: store.stats.total_sessions - (store.stats.completed_sessions || 0),
+          completed: store.stats.completed_sessions || 0,
         };
       }
       const s = props.sessions || [];
@@ -33,14 +30,6 @@ export default defineComponent({
         return db.localeCompare(da);
       });
     });
-
-    async function loadGlobalStats() {
-      try {
-        globalStats.value = await api.getStats();
-      } catch (_) { /* fallback to list stats */ }
-    }
-
-    onMounted(loadGlobalStats);
 
     function onSelect(id) {
       emit('select', id);
