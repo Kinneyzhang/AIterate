@@ -143,7 +143,7 @@ aiterate/
 项目依赖写在 `requirements.txt`。在当前机器建议使用 Hermes venv：
 
 ```bash
-cd ~/.hermes/workspace/aiterate
+cd ~/vibe/aiterate
 ~/.hermes/venv/bin/python -m pip install -r requirements.txt
 ```
 
@@ -154,7 +154,7 @@ cd ~/.hermes/workspace/aiterate
 复制模板：
 
 ```bash
-cd ~/.hermes/workspace/aiterate
+cd ~/vibe/aiterate
 cp config/db.json.example config/db.json
 ```
 
@@ -185,7 +185,7 @@ cp config/db.json.example config/db.json
 ### 3. 启动后端
 
 ```bash
-cd ~/.hermes/workspace/aiterate
+cd ~/vibe/aiterate
 ~/.hermes/venv/bin/python -m uvicorn aiterate_server:app --host 0.0.0.0 --port 7070
 ```
 
@@ -281,7 +281,7 @@ docker compose up -d --build
 运行全量离线测试：
 
 ```bash
-cd ~/.hermes/workspace/aiterate
+cd ~/vibe/aiterate
 ~/.hermes/venv/bin/python -m pytest -q
 ```
 
@@ -303,7 +303,7 @@ cd ~/.hermes/workspace/aiterate
 Vite 8 需要 Node.js `>=20.19`。当前环境建议使用 Node 24：
 
 ```bash
-cd ~/.hermes/workspace/aiterate
+cd ~/vibe/aiterate
 export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm use 24
 npx vite build
 systemctl --user restart aiterate.service
@@ -387,7 +387,7 @@ error 可由后台 job 或 AI 调用失败进入
 常用健康检查：
 
 ```bash
-cd ~/.hermes/workspace/aiterate
+cd ~/vibe/aiterate
 ~/.hermes/venv/bin/python - <<'PY'
 import json
 import aiterate_db as db

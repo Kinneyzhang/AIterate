@@ -2,7 +2,7 @@
 """
 AIIterate 全流程回归测试
 覆盖所有状态转换、边界情况、配置变更影响
-用法: cd ~/.hermes/workspace/aiterate && python tests/test_full_flow.py
+用法: cd ~/vibe/aiterate && python tests/test_full_flow.py
 """
 
 import json, time, sys, os

@@ -170,7 +170,7 @@ assets/js/vue/
 构建约束：
 
 ```bash
-cd ~/.hermes/workspace/aiterate
+cd ~/vibe/aiterate
 export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm use 24
 npx vite build
 systemctl --user restart aiterate.service
@@ -524,7 +524,7 @@ LLM 输出可能包含解释文本、Markdown code fence、嵌套对象或坏 JS
 常用命令：
 
 ```bash
-cd ~/.hermes/workspace/aiterate
+cd ~/vibe/aiterate
 ~/.hermes/venv/bin/python -m pytest -q
 ~/.hermes/venv/bin/python -m pytest tests/test_full_flow_repeatable.py -q
 ~/.hermes/venv/bin/python -m pytest tests/test_api_contract.py tests/test_state_machine.py -q
@@ -563,7 +563,7 @@ curl -H "X-Admin-Token: $AITERATE_ADMIN_TOKEN" http://127.0.0.1:7070/api/ready
 ### 12.3 数据健康脚本
 
 ```bash
-cd ~/.hermes/workspace/aiterate
+cd ~/vibe/aiterate
 ~/.hermes/venv/bin/python - <<'PY'
 import json
 import aiterate_db as db
