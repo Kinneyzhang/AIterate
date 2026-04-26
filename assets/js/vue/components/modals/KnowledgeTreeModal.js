@@ -93,7 +93,7 @@ export default defineComponent({
   
   template: `
     <div class="modal-overlay" @click.self="$emit('close')">
-      <div class="modal-box knowledge-tree-modal" role="dialog" style="max-width:540px; max-height:85vh;">
+      <div class="modal-box knowledge-tree-modal" role="dialog">
         <div class="modal-header">
           <div class="modal-title" v-html="icon('compass') + ' 知识地图'"></div>
           <button class="modal-close" @click="$emit('close')">✕</button>

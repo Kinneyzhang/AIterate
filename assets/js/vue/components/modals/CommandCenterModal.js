@@ -75,7 +75,7 @@ export default defineComponent({
   
   template: `
     <div class="modal-overlay" @click.self="$emit('close')">
-      <div class="modal-box command-center-modal" role="dialog" style="max-width:560px; max-height:85vh;">
+      <div class="modal-box command-center-modal" role="dialog">
         <div class="modal-header">
           <div class="modal-title" v-html="icon('target') + ' 指挥中心'"></div>
           <button class="modal-close" @click="$emit('close')">✕</button>
