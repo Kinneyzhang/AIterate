@@ -1023,6 +1023,12 @@ select {
   background: var(--bg-input, rgba(255,255,255,0.06)); color: var(--fg-0);
   resize: vertical; min-height: 60px; line-height: 1.6;
 }
+.rs-date {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
 .rs-actions { display: flex; gap: 6px; margin-top: 6px; }
 .rs-feedback { margin-top: 6px; }
 .rs-score { font-size: 18px; font-weight: 700; }

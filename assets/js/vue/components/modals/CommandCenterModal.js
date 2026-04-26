@@ -55,6 +55,13 @@ export default defineComponent({
       feynman:    { text: '费曼中', cls: 'stage-feynman'   },
     };
     function statusLabel(status) { return STATUS_LABEL[status] || { text: status, cls: '' }; }
+    const SEVERITY_LABEL = {
+      high: '高',
+      medium: '中',
+      low: '低',
+      critical: '严重',
+    };
+    function severityLabel(severity) { return SEVERITY_LABEL[severity] || SEVERITY_LABEL[String(severity || '').toLowerCase()] || '中'; }
     function localDateKey(d = new Date()) {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -63,7 +70,7 @@ export default defineComponent({
     }
     const today = localDateKey();
 
-    return { data, health, loading, error, completeReview, icon, emit, gotoSession, statusLabel, today };
+    return { data, health, loading, error, completeReview, icon, emit, gotoSession, statusLabel, severityLabel, today };
   },
   
   template: `
@@ -121,7 +128,7 @@ export default defineComponent({
             <div class="cc-section-title cc-urgent" v-html="icon('clip') + ' 薄弱点'"></div>
             <template v-for="g in data.top_gaps" :key="'gap-'+g.id">
               <div class="cmd-item cmd-item-urgent">
-                <span class="cmd-badge cmd-badge-gap">{{ g.severity || 'medium' }}</span>
+                <span class="cmd-badge cmd-badge-gap">{{ severityLabel(g.severity) }}</span>
                 <a class="cmd-link" href="#" @click.prevent="gotoSession(g.session_id, 'deepen')">{{ g.text }}</a>
                 <span style="font-size:11px;opacity:0.5;margin-left:6px;">{{ g.session_title }}</span>
               </div>

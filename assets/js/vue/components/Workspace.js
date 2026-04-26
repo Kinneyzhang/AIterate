@@ -44,8 +44,8 @@ export default defineComponent({
       const isInit = !prevStatus || !sessionInitialized;
       if (status === prevStatus && !isInit) return;
       sessionInitialized = true;
-      // feynman/completed 必须在 review tab
-      if ((status === 'feynman' || status === 'completed') && activeTab.value !== 'review') {
+      // feynman/completed 默认进入费曼 tab，但不要阻止用户查看深化历史
+      if ((status === 'feynman' || status === 'completed') && activeTab.value !== 'review' && activeTab.value !== 'deepen') {
         router.replace({ name: 'session-review', params: { id } });
       }
       // deepening/revising：初始化时跳 deepen；运行时只从 learn 跳
@@ -58,10 +58,16 @@ export default defineComponent({
       }
     });
 
-    const canDeepen = computed(() => {
+    const canEditDeepen = computed(() => {
       const s = currentSession.value?.status;
       // Phase 5: whitelist — only allow deepen in these states
       return s && ['learning', 'deepening', 'revising'].includes(s);
+    });
+    const canDeepen = computed(() => {
+      const s = currentSession.value?.status;
+      return canEditDeepen.value
+        || ['feynman', 'completed'].includes(s)
+        || currentRounds.value.some(r => r.type === 'take' || r.type === 'press');
     });
     const canReview = computed(() => {
       const s = currentSession.value?.status;
@@ -208,7 +214,7 @@ export default defineComponent({
 
     return {
       activeTab, takeInput, questionInput, feynmanAnswers, submitting,
-      canDeepen, canReview, currentSession, currentRounds, feynmanGroup,
+      canDeepen, canEditDeepen, canReview, currentSession, currentRounds, feynmanGroup,
       unresolvedGaps, reviewReport, knowledgeNode, doneFeynmanGroups, takeEvals,
       submitDeepAction, startFeynman, submitFeynman, switchTab,
       reviewSchedule, completeReviewDirect,
@@ -302,7 +308,7 @@ export default defineComponent({
           </div>
 
           <!-- Inputs -->
-          <div v-if="canDeepen" class="deepen-inputs">
+          <div v-if="canEditDeepen" class="deepen-inputs">
             <div class="deepen-col">
               <div class="col-label muted small" v-html="icons.search + ' 提追问'"></div>
               <textarea id="questionInput" v-model="questionInput" rows="4" placeholder="追问某个细节、反例、边界条件…"></textarea>
@@ -314,7 +320,7 @@ export default defineComponent({
               <button class="btn btn-primary btn-block mt8" id="submitTakeBtn" :disabled="submitting" @click="submitDeepAction('take')">提交理解</button>
             </div>
           </div>
-          <button v-if="canDeepen" class="btn btn-success btn-block mt12" id="startFeynmanBtn" :disabled="submitting" @click="startFeynman" v-html="icons.check + ' 差不多了，开始费曼检验'"></button>
+          <button v-if="canEditDeepen" class="btn btn-success btn-block mt12" id="startFeynmanBtn" :disabled="submitting" @click="startFeynman" v-html="icons.check + ' 差不多了，开始费曼检验'"></button>
         </div>
 
         <!-- Review Panel -->

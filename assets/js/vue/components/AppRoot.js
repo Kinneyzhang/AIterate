@@ -181,6 +181,10 @@ export default defineComponent({
     this.initSidebarResize();
   },
 
+  updated() {
+    this.initSidebarResize();
+  },
+
   methods: {
     initSidebarResize() {
       const resizer = document.getElementById('sidebarResizer');
@@ -190,11 +194,15 @@ export default defineComponent({
       const MIN = 180, MAX = 520;
       const saved = localStorage.getItem('sidebar-width');
       if (saved) shell.style.setProperty('--sidebar-width', saved + 'px');
+      if (resizer.dataset.resizeBound === '1') return;
+      resizer.dataset.resizeBound = '1';
 
       resizer.addEventListener('mousedown', e => {
         e.preventDefault();
+        const sidebar = document.getElementById('sessionSidebar');
+        if (!sidebar) return;
         const startX = e.clientX;
-        const startW = document.getElementById('sessionSidebar').getBoundingClientRect().width;
+        const startW = sidebar.getBoundingClientRect().width;
         resizer.classList.add('dragging');
         document.body.style.cursor     = 'col-resize';
         document.body.style.userSelect = 'none';
@@ -207,8 +215,11 @@ export default defineComponent({
           resizer.classList.remove('dragging');
           document.body.style.cursor     = '';
           document.body.style.userSelect = '';
-          const w = document.getElementById('sessionSidebar').getBoundingClientRect().width;
-          localStorage.setItem('sidebar-width', Math.round(w));
+          const currentSidebar = document.getElementById('sessionSidebar');
+          if (currentSidebar) {
+            const w = currentSidebar.getBoundingClientRect().width;
+            localStorage.setItem('sidebar-width', Math.round(w));
+          }
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup',  onUp);
         };
@@ -234,7 +245,7 @@ export default defineComponent({
     <!-- ── Authenticated app ────────────────────────────────────────────── -->
     <template v-else>
     <!-- ── topbar ──────────────────────────────────────────────────────── -->
-    <TopBar @toggle-sidebar="toggleSidebar" @refresh="refreshAll(true)" />
+    <TopBar @toggle-sidebar="toggleSidebar" />
 
     <!-- ── sidebar overlay (mobile) ────────────────────────────────────── -->
     <div class="sidebar-overlay"

@@ -272,7 +272,7 @@
 [data-theme="night"] .stage-deepening  { color: #4ade80; border-color: #4ade80; }
 [data-theme="night"] .stage-revising   { color: #fb923c; border-color: #fb923c; }
 [data-theme="night"] .stage-feynman    { color: #c084fc; border-color: #c084fc; }
-[data-theme="night"] .stage-completed  { color: currentColor; border-color: currentColor; }
+[data-theme="night"] .stage-badge.stage-completed { color: inherit; border-color: currentColor; }
 [data-theme="night"] .stage-failed     { color: #f87171; border-color: #f87171; }
 [data-theme="night"] .stage-idle       { color: #6b7280; border-color: #6b7280; }
 

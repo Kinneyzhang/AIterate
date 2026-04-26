@@ -5,7 +5,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { store } from '../store.js';
 
 export default defineComponent({
-  emits: ['toggle-sidebar', 'refresh'],
+  emits: ['toggle-sidebar'],
 
   setup(props, { emit }) {
     const router = useRouter();
@@ -64,10 +64,6 @@ export default defineComponent({
                 :class="{ active: route.name === 'new-session' }"
                 title="新建问题/观点"
                 @click="router.push({ name: 'new-session' })">＋</button>
-        <!-- 刷新 -->
-        <button class="btn btn-sm" title="刷新" @click="$emit('refresh')">
-          <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-        </button>
         <!-- 主题切换 -->
         <button class="btn btn-sm" id="themeToggleBtn" @click="toggleTheme" title="切换主题" v-html="store.theme === 'mono' ? moonIcon : sunIcon"></button>
       </div>
