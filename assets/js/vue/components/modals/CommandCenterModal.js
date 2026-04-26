@@ -108,7 +108,7 @@ export default defineComponent({
                 <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'review')">开始复习 →</a>
               </div>
               <div v-for="s in data.active_sessions" :key="'active-'+s.id" class="cmd-item">
-                <span :class="['cmd-badge-stage', statusLabel(s.status).cls]">{{ statusLabel(s.status).text }}</span>
+                <span :class="['stage-badge', 'cmd-badge-stage', statusLabel(s.status).cls]">{{ statusLabel(s.status).text }}</span>
                 <a class="cmd-link" href="#" @click.prevent="gotoSession(s.id, s.status === 'deepening' || s.status === 'revising' ? 'deepen' : 'learn')">{{ s.title || '未命名' }}</a>
                 <span v-if="s.score" class="cmd-score">{{ s.score }}分</span>
               </div>
@@ -121,7 +121,7 @@ export default defineComponent({
             <div class="cc-section-title cc-urgent" v-html="icon('clip') + ' 薄弱点'"></div>
             <template v-for="g in data.top_gaps" :key="'gap-'+g.id">
               <div class="cmd-item cmd-item-urgent">
-                <span class="cmd-badge" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid #ef4444;">{{ g.severity || 'medium' }}</span>
+                <span class="cmd-badge cmd-badge-gap">{{ g.severity || 'medium' }}</span>
                 <a class="cmd-link" href="#" @click.prevent="gotoSession(g.session_id, 'deepen')">{{ g.text }}</a>
                 <span style="font-size:11px;opacity:0.5;margin-left:6px;">{{ g.session_title }}</span>
               </div>

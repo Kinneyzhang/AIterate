@@ -255,7 +255,7 @@
 [data-theme="mono"] .stage-deepening  { color: #059669; border-color: #059669; }
 [data-theme="mono"] .stage-revising   { color: #ea580c; border-color: #ea580c; }
 [data-theme="mono"] .stage-feynman    { color: #9333ea; border-color: #9333ea; }
-[data-theme="mono"] .stage-completed  { color: #16a34a; border-color: #16a34a; }
+[data-theme="mono"] .stage-completed  { color: currentColor; border-color: currentColor; }
 [data-theme="mono"] .stage-failed     { color: #dc2626; border-color: #dc2626; }
 
 /* ── 15. Markdown & Code ─────────────────────────────────────────────────── */
