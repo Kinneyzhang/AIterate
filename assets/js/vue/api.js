@@ -136,14 +136,19 @@ function prefetchCommandCenter() {
 }
 
 async function getKnowledgeMasteryCached(opts = {}) {
+  if (opts.force) invalidateDerived();
   if (!opts.force && isFresh(knowledgeMasteryCache)) return knowledgeMasteryCache.data;
   if (!opts.force && knowledgeMasteryInflight) return knowledgeMasteryInflight;
-  knowledgeMasteryInflight = request('/api/knowledge-tree/mastery')
+  const version = derivedCacheVersion;
+  const p = request('/api/knowledge-tree/mastery')
     .then(data => {
-      knowledgeMasteryCache = cacheEntry(data);
+      if (version === derivedCacheVersion) knowledgeMasteryCache = cacheEntry(data);
       return data;
     })
-    .finally(() => { knowledgeMasteryInflight = null; });
+    .finally(() => {
+      if (knowledgeMasteryInflight === p) knowledgeMasteryInflight = null;
+    });
+  knowledgeMasteryInflight = p;
   return knowledgeMasteryInflight;
 }
 
