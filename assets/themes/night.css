@@ -16,9 +16,9 @@
   --bg-input:    #0a0c12;
   --bg-sidebar:  #0f1018;
 
-  --fg-0:   #dde1ed;
-  --fg-1:   #6b7490;
-  --fg-2:   #3e4460;
+  --fg-0:   #e8ecf6;
+  --fg-1:   #aeb7cc;
+  --fg-2:   #7b849b;
 
   --border:   rgba(255,255,255,0.08);
   --border-2: rgba(255,255,255,0.04);
@@ -53,6 +53,17 @@
   border-bottom: 1px solid var(--border);
 }
 [data-theme="night"] .topbar-title { color: var(--fg-0); }
+[data-theme="night"] .topbar-actions .btn {
+  background: transparent;
+  border-color: transparent;
+  color: #fff;
+  opacity: 1;
+}
+[data-theme="night"] .topbar-actions .btn:hover {
+  background: var(--bg-2);
+  color: #fff;
+  opacity: 1;
+}
 
 /* ── 4. Sidebar ──────────────────────────────────────────────────────────── */
 [data-theme="night"] .sidebar {
@@ -63,9 +74,9 @@
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border);
 }
-[data-theme="night"] .sidebar-title { color: var(--fg-1); }
-[data-theme="night"] .sidebar-stat  { color: var(--fg-2); }
-[data-theme="night"] .session-item  { color: var(--fg-1); }
+[data-theme="night"] .sidebar-title { color: var(--fg-1); opacity: 1; }
+[data-theme="night"] .sidebar-stat  { color: #dbe3f4; opacity: 1; }
+[data-theme="night"] .session-item  { color: #dbe3f4; }
 [data-theme="night"] .session-item:hover {
   background: var(--bg-elevated);
   color: var(--fg-0);
@@ -84,7 +95,11 @@
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border);
 }
-[data-theme="night"] .ws-tab { color: var(--fg-1); }
+[data-theme="night"] .ws-tab {
+  color: #fff;
+  font-weight: 700;
+  background: rgba(255,255,255,0.06);
+}
 [data-theme="night"] .ws-tab:hover:not(:disabled) {
   color: var(--fg-0);
   background: var(--bg-elevated);
@@ -99,7 +114,7 @@
 [data-theme="night"] .panel-content { background: var(--bg-base); }
 [data-theme="night"] .panel { background: var(--bg-surface); }
 [data-theme="night"] .ph-title { color: var(--fg-0); }
-[data-theme="night"] .ph-meta  { color: var(--fg-1); }
+[data-theme="night"] .ph-meta  { color: var(--fg-1); opacity: 0.9; }
 
 /* ── 7. Content Blocks / Cards ───────────────────────────────────────────── */
 [data-theme="night"] .ws-header,
@@ -108,9 +123,9 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
-[data-theme="night"] .section-label { color: var(--fg-1); }
-[data-theme="night"] .block-hint     { color: var(--fg-1); }
-[data-theme="night"] .ps-label       { color: var(--fg-1); }
+[data-theme="night"] .section-label { color: #dbe3f4; opacity: 1; }
+[data-theme="night"] .block-hint     { color: #dbe3f4; opacity: 1; }
+[data-theme="night"] .ps-label       { color: #dbe3f4; opacity: 1; }
 [data-theme="night"] .ps-body,
 [data-theme="night"] .md-body        { color: var(--fg-0); }
 [data-theme="night"] .ps-hint        { color: var(--fg-1); }
@@ -272,7 +287,11 @@
 [data-theme="night"] .stage-deepening  { color: #4ade80; border-color: #4ade80; }
 [data-theme="night"] .stage-revising   { color: #fb923c; border-color: #fb923c; }
 [data-theme="night"] .stage-feynman    { color: #c084fc; border-color: #c084fc; }
-[data-theme="night"] .stage-badge.stage-completed { color: inherit; border-color: currentColor; }
+[data-theme="night"] .stage-badge.stage-completed {
+  background: #f1f5ff;
+  color: #0f1018;
+  border-color: #f1f5ff;
+}
 [data-theme="night"] .stage-failed     { color: #f87171; border-color: #f87171; }
 [data-theme="night"] .stage-idle       { color: #6b7280; border-color: #6b7280; }
 
@@ -348,7 +367,38 @@
 }
 [data-theme="night"] h2 { font-size: 16px; font-weight: 600; color: var(--fg-0); }
 
-/* ── 19. Round label colors ──────────────────────────────────────────────── */
+/* ── 19. Contrast fixes ──────────────────────────────────────────────────── */
+[data-theme="night"] .topbar .topbar-actions .btn:not(.btn-primary):not(.btn-success) {
+  background: transparent;
+  border-color: transparent;
+  color: #fff;
+  opacity: 1;
+}
+[data-theme="night"] .topbar .topbar-actions .btn:not(.btn-primary):not(.btn-success):hover {
+  background: var(--bg-2);
+  color: #fff;
+  opacity: 1;
+}
+[data-theme="night"] .ws-tab:disabled { opacity: 0.9 !important; }
+[data-theme="night"] .knowledge-node-bar {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #fff;
+  font-weight: 600;
+  opacity: 1 !important;
+}
+[data-theme="night"] .panel-empty,
+[data-theme="night"] .ps-hint,
+[data-theme="night"] .round-score,
+[data-theme="night"] .kn-label,
+[data-theme="night"] .kn-keywords,
+[data-theme="night"] .rs-label-small,
+[data-theme="night"] .rs-content-text {
+  color: var(--fg-1);
+  opacity: 0.9;
+}
+
+/* ── 20. Round label colors ──────────────────────────────────────────────── */
 [data-theme="night"] .round-summary  .round-label { color: var(--good); }
 [data-theme="night"] .round-question .round-label { color: var(--fg-1); }
 [data-theme="night"] .round-review   .round-label { color: var(--warn); }
