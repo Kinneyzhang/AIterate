@@ -1,6 +1,6 @@
 // ── AppRoot.js ── 根组件 ─────────────────────────────────────────────────
 
-import { defineComponent, watch, computed, ref, onMounted } from 'vue';
+import { defineComponent, watch, computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { store, setNotice } from '../store.js';
 import { api } from '../api.js';
@@ -22,11 +22,27 @@ export default defineComponent({
     const authenticated = ref(false);
     const checking = ref(true);
 
+    // ── overlay 页面判断 ───────────────────────────────────────────
+    const OVERLAY_ROUTES = ['new-session', 'knowledge-tree', 'command-center', 'settings-basic', 'settings-roles', 'settings-tavily', 'settings-database', 'settings-learn'];
+    const isOverlayRouteName = name => OVERLAY_ROUTES.includes(name);
+    const isOverlay = computed(() => isOverlayRouteName(route.name));
+    const lastNonOverlayRoute = ref(null);
+
+    async function loadSessionsAfterAuth() {
+      try {
+        store.sessions = await api.getSessions();
+      } catch (err) {
+        console.error('Failed to load sessions', err);
+        setNotice(`加载会话失败：${err.message}`, 'error');
+      }
+    }
+
     // ── Auth check on mount ─────────────────────────────────────────
     onMounted(async () => {
       try {
         const status = await api.checkAuth();
         authenticated.value = status.authenticated;
+        if (status.authenticated) await loadSessionsAfterAuth();
       } catch {
         authenticated.value = false;
       } finally {
@@ -37,11 +53,32 @@ export default defineComponent({
     // Listen for 401 from api.js
     function onUnauthorized() {
       authenticated.value = false;
+      store.sessions = [];
+      store.workspace = null;
+      store.selectedSessionId = null;
+      store.currentFeynmanGroupId = null;
+      stopPolling();
     }
     document.addEventListener('aiterate:unauthorized', onUnauthorized);
+    onUnmounted(() => {
+      document.removeEventListener('aiterate:unauthorized', onUnauthorized);
+      stopPolling();
+    });
 
-    // ── overlay 页面判断 ───────────────────────────────────────────
-    const isOverlay = computed(() => ['new-session', 'knowledge-tree', 'command-center', 'settings-basic', 'settings-roles', 'settings-tavily', 'settings-database', 'settings-learn'].includes(route.name));
+    watch(
+      () => route.fullPath,
+      () => {
+        if (route.name && !isOverlayRouteName(route.name)) {
+          lastNonOverlayRoute.value = {
+            name: route.name,
+            params: { ...route.params },
+            query: { ...route.query },
+            hash: route.hash,
+          };
+        }
+      },
+      { immediate: true }
+    );
 
     // ── 路由变化 → 加载 session 数据 ────────────────────────────────
     watch(
@@ -113,8 +150,9 @@ export default defineComponent({
 
     // ── 关闭 overlay ────────────────────────────────────────────────
     function closeOverlay() {
-      if (window.history.length > 1) {
-        router.back();
+      const target = lastNonOverlayRoute.value;
+      if (target?.name && !isOverlayRouteName(target.name)) {
+        router.push(target);
       } else if (store.selectedSessionId) {
         router.push({ name: 'session-learn', params: { id: store.selectedSessionId } });
       } else {
@@ -123,12 +161,20 @@ export default defineComponent({
     }
 
     async function closeOverlayAndRefresh() {
-      await refreshAll(false);
-      closeOverlay();
+      try {
+        await refreshAll(false);
+      } finally {
+        closeOverlay();
+      }
+    }
+
+    async function handleAuthenticated() {
+      authenticated.value = true;
+      await loadSessionsAfterAuth();
     }
 
     return { store, route, router, refreshAll, selectSession, closeOverlay, closeOverlayAndRefresh, isOverlay,
-      authenticated, checking };
+      authenticated, checking, handleAuthenticated };
   },
 
   mounted() {
@@ -182,7 +228,7 @@ export default defineComponent({
       <div v-if="checking" class="login-overlay" style="display:flex;align-items:center;justify-content:center">
         <div style="opacity:0.4;font-size:15px">加载中…</div>
       </div>
-      <LoginModal v-else @authenticated="authenticated = true" />
+      <LoginModal v-else @authenticated="handleAuthenticated" />
     </template>
 
     <!-- ── Authenticated app ────────────────────────────────────────────── -->

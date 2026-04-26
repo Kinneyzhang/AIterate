@@ -19,8 +19,6 @@ export default defineComponent({
       try {
         await api.login(t);
         emit('authenticated');
-        // Reload to pick up the cookie for all subsequent requests
-        window.location.reload();
       } catch (err) {
         error.value = err.message || '登录失败';
       } finally {

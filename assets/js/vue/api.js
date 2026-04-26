@@ -3,18 +3,37 @@
 const BASE = '';
 
 async function request(path, opts = {}) {
-  const headers = { 'Content-Type': 'application/json', ...opts.headers };
-  // Cookie handles auth now; header fallback removed
-  const resp = await fetch(BASE + path, { ...opts, headers });
+  const headers = { ...opts.headers };
+  if (opts.body !== undefined && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (window.AITERATE_TOKEN && !headers['X-Admin-Token']) {
+    headers['X-Admin-Token'] = window.AITERATE_TOKEN;
+  }
+  let resp;
+  try {
+    resp = await fetch(BASE + path, { ...opts, headers, credentials: 'same-origin' });
+  } catch (err) {
+    const e = new Error(`网络请求失败：${err.message || err}`);
+    e.cause = err;
+    throw e;
+  }
+
   const raw = await resp.text();
-  let data;
-  try { data = JSON.parse(raw); } catch { data = { detail: raw }; }
+  let data = {};
+  if (raw) {
+    try { data = JSON.parse(raw); } catch { data = { detail: raw }; }
+  }
   if (!resp.ok) {
     if (resp.status === 401 && path !== '/api/auth/status' && path !== '/api/auth/login') {
       // Redirect to login on 401
       document.dispatchEvent(new CustomEvent('aiterate:unauthorized'));
     }
-    throw new Error(data.detail || raw);
+    const msg = data.detail || raw || resp.statusText || `HTTP ${resp.status}`;
+    const e = new Error(msg);
+    e.status = resp.status;
+    e.detail = data.detail;
+    throw e;
   }
   return data;
 }
@@ -44,6 +63,7 @@ export const api = {
   getKnowledgeMastery: () => request('/api/knowledge-tree/mastery'),
   getRecommendedNodes: () => request('/api/knowledge-tree/recommend'),
   getCommandCenter: () => request('/api/command-center'),
+  getDbConfig: () => request('/api/db-config'),
   completeReview: (rid) => request(`/api/review/${rid}/complete`, { method: 'POST', body: '{}' }),
   skipReview: (rid) => request(`/api/review/${rid}/skip`, { method: 'POST' }),
   submitReview: (rid, content) => request(`/api/review/${rid}/submit`, { method: 'POST', body: JSON.stringify({ content }) }),

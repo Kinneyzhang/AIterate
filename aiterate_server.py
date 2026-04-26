@@ -307,7 +307,11 @@ async def shutdown():
 async def serve_frontend():
     token = db.get_or_create_admin_token()
     html = FRONTEND.read_text(encoding="utf-8")
-    html = html.replace('"%%AITERATE_TOKEN%%"', f'"{token}"')
+    if "%%AITERATE_TOKEN%%" in html:
+        html = html.replace("%%AITERATE_TOKEN%%", token)
+    else:
+        # Backward-compatible fallback for accidentally built empty-token shells.
+        html = html.replace('window.AITERATE_TOKEN=""', f"window.AITERATE_TOKEN={json.dumps(token)}")
     return HTMLResponse(content=html)
 
 
@@ -746,18 +750,9 @@ async def start_feynman(session_id: int):
         if not session:
             raise HTTPException(404, "Session not found")
 
-        # Phase 5: state transition guard — only allow feynman in deepening or revising
-        st = session.get("status", "")
-        if st not in ("deepening", "revising"):
-            raise HTTPException(409, f"Cannot start feynman in status '{st}'. Allowed: deepening, revising.")
-
-        # Phase 5: require at least one take round before feynman
-        rounds = db.get_rounds(session_id)
-        take_rounds = [r for r in rounds if r.get("type") == "take"]
-        if not take_rounds:
-            raise HTTPException(409, "Cannot start feynman: no take rounds yet. Write at least one understanding summary first.")
-
-        # Phase 5: idempotency — reuse existing pending feynman group
+        # Phase 5: idempotency — reuse existing pending feynman group first.
+        # A previous start call legitimately moves the session to `feynman`; retrying
+        # that call must be safe instead of failing the state guard below.
         existing = db.get_pending_feynman_group(session_id)
         if existing:
             group_id = existing[0]["group_id"]
@@ -768,7 +763,16 @@ async def start_feynman(session_id: int):
                 "reused": True,
             }
 
+        # Phase 5: state transition guard — only allow feynman in deepening or revising
+        st = session.get("status", "")
+        if st not in ("deepening", "revising"):
+            raise HTTPException(409, f"Cannot start feynman in status '{st}'. Allowed: deepening, revising.")
+
+        # Phase 5: require at least one take round before feynman
         rounds = db.get_rounds(session_id)
+        take_rounds = [r for r in rounds if r.get("type") == "take"]
+        if not take_rounds:
+            raise HTTPException(409, "Cannot start feynman: no take rounds yet. Write at least one understanding summary first.")
         learning_history = " | ".join([r.get("output", "")[:100] for r in rounds])
 
         # 注入知识节点上下文
@@ -828,11 +832,15 @@ async def complete_feynman(session_id: int, body: FeynmanAnswerRequest):
 
         rounds = db.get_rounds(session_id)
         feynman_rounds = sorted(
-            [r for r in rounds if r.get("group_id") == body.group_id],
+            [r for r in rounds if r.get("type") == "feynman" and r.get("group_id") == body.group_id],
             key=lambda r: r["seq"]
         )
         if not feynman_rounds:
             raise HTTPException(404, "Feynman group not found")
+        if any(r.get("status") != "pending" for r in feynman_rounds):
+            raise HTTPException(409, "This feynman group has already been submitted")
+        if len(body.answers) != len(feynman_rounds):
+            raise HTTPException(400, f"Expected {len(feynman_rounds)} answers, got {len(body.answers)}")
 
         questions = [r["input"] for r in feynman_rounds]
         eval_result = await ai.evaluate_review_answers(session["title"], questions, body.answers,
@@ -1194,11 +1202,8 @@ async def complete_review(review_id: int, body: ReviewCompleteRequest = ReviewCo
 @app.post("/api/review/{review_id}/skip", dependencies=[Depends(_require_admin)])
 async def skip_review(review_id: int):
     """跳过本次复习，状态标记为 'skipped'（不算完成，下一轮按原间隔提前）。"""
-    with db.get_engine().begin() as conn:
-        conn.execute(
-            db.text("UPDATE review_schedule SET status = 'skipped', updated_at = NOW() WHERE id = :rid"),
-            {"rid": review_id}
-        )
+    if not db.skip_review(review_id):
+        raise HTTPException(404, "Review schedule not found")
     return {"ok": True, "status": "skipped"}
 
 

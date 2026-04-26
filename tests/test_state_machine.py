@@ -1,120 +1,140 @@
-"""AIIterate state machine tests — verify invariants on live DB.
+"""AIIterate state-machine tests — isolated and repeatable."""
 
-Run:  ~/.hermes/venv/bin/python -m pytest tests/test_state_machine.py -q
-Requires: running aiterate.service on port 7070
-"""
-
-import json
-import re
-import pytest
-import httpx
-import subprocess
-
-BASE = "http://192.168.31.222:7070"
+from app_fixture import AUTH_HEADERS, create_learning_session, setup_isolated_app
 
 
-def _get_token():
-    r = subprocess.run(["curl", "-s", BASE + "/"], capture_output=True, text=True)
-    m = re.search(r'AITERATE_TOKEN="([^"]+)"', r.stdout)
-    assert m, "Could not extract admin token"
-    return m.group(1)
+def test_invalid_transitions_return_409(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch)
+    sid = create_learning_session(client, db, server)
+
+    # Cannot complete feynman before entering feynman state.
+    r = client.post(
+        f"/api/sessions/{sid}/complete-feynman",
+        headers=AUTH_HEADERS,
+        json={"group_id": 1, "answers": ["x"]},
+    )
+    assert r.status_code == 409
+
+    # Cannot reopen a normal learning session.
+    r = client.post(f"/api/sessions/{sid}/reopen", headers=AUTH_HEADERS)
+    assert r.status_code == 409
+
+    # Cannot start feynman before at least one take round.
+    r = client.post(f"/api/sessions/{sid}/start-feynman", headers=AUTH_HEADERS)
+    assert r.status_code == 409
 
 
-def api(path, method="GET", body=None):
-    headers = {"X-Admin-Token": _get_token()}
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-    r = httpx.request(method, BASE + path, headers=headers, json=body)
-    try:
-        return r.status_code, r.json()
-    except Exception:
-        return r.status_code, {"_raw": r.text[:500]}
+def test_feynman_pending_group_is_idempotent_and_requires_matching_answers(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch)
+    sid = create_learning_session(client, db, server)
+
+    take = client.post(
+        f"/api/sessions/{sid}/deepen",
+        headers=AUTH_HEADERS,
+        json={"action_type": "take", "content": "完整说明核心概念和工程边界。"},
+    )
+    assert take.status_code == 200, take.text
+
+    first = client.post(f"/api/sessions/{sid}/start-feynman", headers=AUTH_HEADERS)
+    assert first.status_code == 200, first.text
+    first_data = first.json()
+    assert first_data.get("reused") is not True
+
+    second = client.post(f"/api/sessions/{sid}/start-feynman", headers=AUTH_HEADERS)
+    assert second.status_code == 200, second.text
+    second_data = second.json()
+    assert second_data["group_id"] == first_data["group_id"]
+    assert second_data["round_ids"] == first_data["round_ids"]
+    assert second_data.get("reused") is True
+
+    bad = client.post(
+        f"/api/sessions/{sid}/complete-feynman",
+        headers=AUTH_HEADERS,
+        json={"group_id": first_data["group_id"], "answers": ["only one answer"]},
+    )
+    assert bad.status_code == 400
 
 
-class TestStateMachineInvariants:
-    """Verify DB state respects all invariants after Phase 1 fixes."""
+def test_feynman_pass_creates_review_and_rejects_double_submit(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch, review_scores=[88])
+    sid = create_learning_session(client, db, server)
+    client.post(
+        f"/api/sessions/{sid}/deepen",
+        headers=AUTH_HEADERS,
+        json={"action_type": "take", "content": "完整说明核心概念和工程边界。"},
+    )
+    start = client.post(f"/api/sessions/{sid}/start-feynman", headers=AUTH_HEADERS).json()
+    answers = ["完整回答核心概念、例子和边界。" for _ in start["questions"]]
 
-    def test_no_pending_feynman_without_feynman_status(self):
-        """All sessions with pending feynman rounds must have status='feynman'."""
-        status, data = api("/api/maintenance/check-invariants")
-        assert status == 200
-        err_types = [i["type"] for i in data["issues"] if i["severity"] == "error"]
-        assert "pending_feynman_wrong_status" not in err_types, \
-            f"Still have pending feynman with wrong status: {data}"
+    done = client.post(
+        f"/api/sessions/{sid}/complete-feynman",
+        headers=AUTH_HEADERS,
+        json={"group_id": start["group_id"], "answers": answers},
+    )
+    assert done.status_code == 200, done.text
+    assert done.json()["passed"] is True
+    assert done.json()["new_status"] == "completed"
 
-    def test_no_revising_in_failed_sessions(self):
-        """revising sessions should NOT appear in failed_sessions."""
-        status, data = api("/api/command-center")
-        assert status == 200
-        # The failed_sessions query now only looks at error status.
-        # We verify by checking there's no overlap with active_sessions
-        # (which includes revising).
-        active = {s["id"] for s in data["active_sessions"]}
-        failed = {s["id"] for s in data["failed_sessions"]}
-        assert not (active & failed), f"Overlap active∩failed: {active & failed}"
+    session = client.get(f"/api/sessions/{sid}", headers=AUTH_HEADERS).json()
+    assert session["status"] == "completed"
+    report = session["review_report"]
+    if isinstance(report, str):
+        import json
+        report = json.loads(report)
+    assert report["passed"] is True
+    assert db.get_session_review_schedule(sid)
 
-    def test_no_multiple_pending_feynman_groups(self):
-        """No session should have multiple pending feynman groups."""
-        status, data = api("/api/maintenance/check-invariants")
-        err_types = [i["type"] for i in data["issues"] if i["severity"] == "error"]
-        assert "multiple_pending_feynman_groups" not in err_types, \
-            f"Multiple pending feynman groups: {data}"
-
-    def test_no_error_without_error_msg(self):
-        """Error sessions must have error_msg set."""
-        status, data = api("/api/maintenance/check-invariants")
-        warn_types = [i["type"] for i in data["issues"] if i["severity"] == "warn"]
-        # This might have historical data, so only warn (not error)
-        # If there are error_without_msg, it should at least be a warn
-        pass  # Already covered by invariant check endpoint
-
-    def test_no_multiple_pending_review_schedules(self):
-        """No session should have multiple pending review schedules."""
-        status, data = api("/api/maintenance/check-invariants")
-        warn_types = [i["type"] for i in data["issues"] if i["severity"] == "warn"]
-        if "multiple_pending_review_schedules" in warn_types:
-            pytest.skip("Known: some sessions have multiple review schedules (pre-existing)")
-
-    def test_session_48_repaired(self):
-        """Session 48 should now be in feynman_pending, not missing."""
-        status, data = api("/api/command-center")
-        feynman_ids = {s["id"] for s in data["feynman_pending"]}
-        assert 48 in feynman_ids, \
-            f"Session 48 not found in feynman_pending after repair: {feynman_ids}"
+    again = client.post(
+        f"/api/sessions/{sid}/complete-feynman",
+        headers=AUTH_HEADERS,
+        json={"group_id": start["group_id"], "answers": answers},
+    )
+    assert again.status_code == 409
 
 
-class TestCommandCenterCorrectness:
-    """Verify command center shows correct data."""
+def test_feynman_fail_returns_to_revising_with_correction_plan(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch, review_scores=[35])
+    sid = create_learning_session(client, db, server)
+    client.post(
+        f"/api/sessions/{sid}/deepen",
+        headers=AUTH_HEADERS,
+        json={"action_type": "take", "content": "粗略理解。"},
+    )
+    start = client.post(f"/api/sessions/{sid}/start-feynman", headers=AUTH_HEADERS).json()
 
-    def test_active_sessions_have_correct_statuses(self):
-        """Active sessions should not include completed or error."""
-        status, data = api("/api/command-center")
-        # We can't check status directly from command center response
-        # (it doesn't include it), but we can verify structure
-        assert isinstance(data["active_sessions"], list)
-        assert len(data["active_sessions"]) > 0, "Should have active sessions"
-
-    def test_feynman_pending_includes_deepening_with_pending_rounds(self):
-        """Session 48 (was deepening, had pending feynman) should be in feynman_pending."""
-        status, data = api("/api/command-center")
-        feynman_ids = {s["id"] for s in data["feynman_pending"]}
-        # After repair, session 48 should be here
-        assert 48 in feynman_ids or len(data["feynman_pending"]) > 0, \
-            "Should have feynman pending items"
+    done = client.post(
+        f"/api/sessions/{sid}/complete-feynman",
+        headers=AUTH_HEADERS,
+        json={"group_id": start["group_id"], "answers": ["不完整" for _ in start["questions"]]},
+    )
+    assert done.status_code == 200, done.text
+    body = done.json()
+    assert body["passed"] is False
+    assert body["new_status"] == "revising"
+    assert body["correction_plan"]
+    assert client.get(f"/api/sessions/{sid}", headers=AUTH_HEADERS).json()["status"] == "revising"
 
 
-class TestSessionsEndpoint:
-    """Verify sessions endpoint returns correct counts."""
+def test_review_skip_requires_existing_pending_row(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch, review_scores=[90])
+    sid = create_learning_session(client, db, server)
+    client.post(
+        f"/api/sessions/{sid}/deepen",
+        headers=AUTH_HEADERS,
+        json={"action_type": "take", "content": "完整说明核心概念和工程边界。"},
+    )
+    start = client.post(f"/api/sessions/{sid}/start-feynman", headers=AUTH_HEADERS).json()
+    client.post(
+        f"/api/sessions/{sid}/complete-feynman",
+        headers=AUTH_HEADERS,
+        json={"group_id": start["group_id"], "answers": ["完整回答" for _ in start["questions"]]},
+    )
+    rid = db.get_session_review_schedule(sid)[0]["id"]
 
-    def test_more_than_20_sessions(self):
-        """Sessions endpoint should return all sessions, not just 20."""
-        status, data = api("/api/sessions")
-        assert status == 200
-        assert len(data) > 20, f"Only {len(data)} sessions returned"
+    missing = client.post("/api/review/999999/skip", headers=AUTH_HEADERS)
+    assert missing.status_code == 404
 
-    def test_stats_match_sessions(self):
-        """Stats total should match or exceed sessions count."""
-        _, stats = api("/api/stats")
-        _, sessions = api("/api/sessions")
-        assert stats["total_sessions"] >= len(sessions), \
-            f"Stats says {stats['total_sessions']} but only {len(sessions)} returned"
+    skipped = client.post(f"/api/review/{rid}/skip", headers=AUTH_HEADERS)
+    assert skipped.status_code == 200, skipped.text
+    assert skipped.json()["status"] == "skipped"
+    assert db.get_session_review_schedule(sid)[0]["status"] == "skipped"

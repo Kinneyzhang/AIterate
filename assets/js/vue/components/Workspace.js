@@ -254,7 +254,7 @@ export default defineComponent({
               <template v-for="k in knowledgeNode.keywords.slice(0,3)">#{{ k }} </template>
             </span>
           </div>
-          <div v-else class="knowledge-node-bar" style="opacity:0.65; cursor:pointer;" @click="openKnowledgeTree" v-html="icons.tag + ' 未绑定知识节点 — 点击关联'\"></div>
+          <div v-else class="knowledge-node-bar" style="opacity:0.65; cursor:pointer;" @click="openKnowledgeTree" v-html="icons.tag + ' 未绑定知识节点 — 点击关联'"></div>
           <div v-if="currentSession.material" class="panel-section">
             <div class="ps-label">AI 回答</div>
             <div class="ps-body md-body" v-html="renderMarkdown(currentSession.material)"></div>

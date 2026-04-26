@@ -12,7 +12,15 @@ export default defineComponent({
   setup(props, { emit }) {
     const router = useRouter();
     const data = ref({});
-    const health = ref({});
+    const health = ref({
+      stale_preparing: 0,
+      error_sessions: 0,
+      parse_failures: 0,
+      no_knowledge_node: 0,
+      low_score: 0,
+    });
+    const loading = ref(true);
+    const error = ref('');
     
     onMounted(async () => {
       try {
@@ -20,6 +28,10 @@ export default defineComponent({
         health.value = data.value.health || {};
       } catch (err) {
         console.error('command center error', err);
+        error.value = err.message || '指挥中心加载失败';
+        setNotice(`指挥中心加载失败：${error.value}`, 'error');
+      } finally {
+        loading.value = false;
       }
     });
     
@@ -43,9 +55,15 @@ export default defineComponent({
       feynman:    { text: '费曼中', cls: 'stage-feynman'   },
     };
     function statusLabel(status) { return STATUS_LABEL[status] || { text: status, cls: '' }; }
-    const today = new Date().toISOString().split('T')[0];
+    function localDateKey(d = new Date()) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+    const today = localDateKey();
 
-    return { data, health, completeReview, icon, emit, gotoSession, statusLabel, today };
+    return { data, health, loading, error, completeReview, icon, emit, gotoSession, statusLabel, today };
   },
   
   template: `
@@ -56,6 +74,9 @@ export default defineComponent({
           <button class="modal-close" @click="$emit('close')">✕</button>
         </div>
         <div class="modal-body cc-body">
+          <div v-if="loading" class="cmd-empty">加载中…</div>
+          <div v-else-if="error" class="cmd-empty notice-error">加载失败：{{ error }}</div>
+          <template v-else>
 
           <!-- 🔥 必须做：逾期复习 + 待费曼 -->
           <div class="cc-section">
@@ -132,6 +153,7 @@ export default defineComponent({
               <span v-if="health.stale_preparing + health.error_sessions + health.parse_failures === 0" style="color:var(--good)" v-html="icon('check') + ' 一切正常'"></span>
             </div>
           </div>
+          </template>
 
         </div>
       </div>

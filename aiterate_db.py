@@ -56,16 +56,19 @@ def save_db_config(cfg: dict):
 
 def test_db_config(updates: dict) -> dict:
     """Test a candidate DB config without saving. Returns {"ok": True} or {"ok": False, "error": str}."""
+    test_engine = None
     try:
         candidate = {**load_db_config(), **updates}
         url = _build_url(candidate)
         test_engine = create_engine(url)
         with test_engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        test_engine.dispose()
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+    finally:
+        if test_engine is not None:
+            test_engine.dispose()
 
 # ── Engine factory ─────────────────────────────────────────────────────────────
 
@@ -108,7 +111,10 @@ def init_engine(cfg: dict | None = None):
     if cfg.get("type", "postgresql") == "sqlite":
         # SQLite 需要同一线程连接共享
         kwargs["connect_args"] = {"check_same_thread": False}
+    old_engine = _engine
     _engine = create_engine(url, **kwargs)
+    if old_engine is not None:
+        old_engine.dispose()
 
 def get_engine() -> Engine:
     if _engine is None:
@@ -177,7 +183,7 @@ from contextlib import contextmanager
 def _exec(sql: str, params=None):
     """Execute non-returning SQL in a transaction."""
     with get_engine().begin() as conn:
-        conn.execute(text(sql), params or {})
+        return conn.execute(text(sql), params or {})
 
 
 @contextmanager
@@ -274,10 +280,9 @@ def init_db():
             ))
 
         # ── 迁移：为已有表添加缺失列（SQLite + PostgreSQL）──
-        _ensure_column(conn, "sessions", "review_report", "TEXT")
+        _ensure_column(conn, "sessions", "review_report", _jsonb())
         _ensure_column(conn, "sessions", "knowledge_node_id", "TEXT")
         _ensure_column(conn, "sessions", "web_search", "SMALLINT", "0")
-        _ensure_column(conn, "rounds", "eval_json", "TEXT")
 
         # rounds
         if sqlite:
@@ -317,6 +322,8 @@ def init_db():
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS idx_rounds_session ON rounds(session_id)"
             ))
+
+        _ensure_column(conn, "rounds", "eval_json", _jsonb())
 
         # profile
         if sqlite:
@@ -711,6 +718,13 @@ def get_recent_sessions(limit: int = 20) -> list[dict]:
     )
 
 def update_session(session_id: int, **kwargs):
+    allowed = {
+        "title", "content", "type", "status", "material", "score", "review_report",
+        "knowledge_node_id", "web_search", "error_msg",
+    }
+    unknown = set(kwargs) - allowed
+    if unknown:
+        raise ValueError(f"Unknown session columns: {sorted(unknown)}")
     parts = []
     params = {}
     for k, v in kwargs.items():
@@ -785,18 +799,24 @@ def create_round_with_seq(session_id: int, type: str,
                           status: str = "pending",
                           eval_json: dict | None = None) -> int:
     """Atomically compute next seq and create a round. Prevents seq conflicts."""
-    eval_str = json.dumps(eval_json, ensure_ascii=False) if eval_json else None
+    eval_str = json.dumps(eval_json, ensure_ascii=False) if eval_json is not None else None
     with _tx() as conn:
+        if not _is_sqlite():
+            conn.execute(text("SELECT id FROM sessions WHERE id = :sid FOR UPDATE"), {"sid": session_id})
         row = conn.execute(
             text("SELECT COALESCE(MAX(seq), 0) AS m FROM rounds WHERE session_id = :sid"),
             {"sid": session_id}
         ).fetchone()
         next_s = (row._mapping["m"] if row else 0) + 1
-        result = conn.execute(
-            text("""
+        insert_sql = """
                 INSERT INTO rounds (session_id, seq, type, input, output, score, status, eval_json)
                 VALUES (:sid, :seq, :type, :input, :output, :score, :status, :ejson) RETURNING id
-            """),
+            """ if _is_sqlite() else """
+                INSERT INTO rounds (session_id, seq, type, input, output, score, status, eval_json)
+                VALUES (:sid, :seq, :type, :input, :output, :score, :status, CAST(:ejson AS jsonb)) RETURNING id
+            """
+        result = conn.execute(
+            text(insert_sql),
             {"sid": session_id, "seq": next_s, "type": type,
              "input": input, "output": output, "score": score, "status": status,
              "ejson": eval_str}
@@ -812,6 +832,8 @@ def create_feynman_group(session_id: int, questions: list[str]) -> tuple[int, li
     created with correct group_id and seq, or nothing is.
     """
     with _tx() as conn:
+        if not _is_sqlite():
+            conn.execute(text("SELECT id FROM sessions WHERE id = :sid FOR UPDATE"), {"sid": session_id})
         row = conn.execute(
             text("SELECT COALESCE(MAX(seq), 0) AS m FROM rounds WHERE session_id = :sid"),
             {"sid": session_id}
@@ -861,16 +883,20 @@ def complete_feynman_group(session_id: int, group_id: int,
     """
     with _tx() as conn:
         # Check that rounds are still pending
+        lock_clause = "" if _is_sqlite() else " FOR UPDATE"
         rows = conn.execute(
-            text("SELECT id, status FROM rounds WHERE group_id = :gid AND type = 'feynman' ORDER BY seq"),
-            {"gid": group_id}
+            text(f"""
+                SELECT id, status FROM rounds
+                WHERE session_id = :sid AND group_id = :gid AND type = 'feynman'
+                ORDER BY seq{lock_clause}
+            """),
+            {"sid": session_id, "gid": group_id}
         ).fetchall()
         
         if not rows:
             raise ValueError("Feynman group not found")
         
-        completed_count = sum(1 for r in rows if r._mapping["status"] == "completed")
-        if completed_count > 0:
+        if any(r._mapping["status"] != "pending" for r in rows):
             raise ValueError("This feynman group has already been submitted")
         
         if len(rows) != len(answers):
@@ -924,6 +950,10 @@ def get_pending_feynman_group(session_id: int) -> list[dict]:
     """, {"sid": session_id})
 
 def update_round(round_id: int, **kwargs):
+    allowed = {"session_id", "seq", "type", "input", "output", "eval_json", "score_comment", "group_id", "score", "status"}
+    unknown = set(kwargs) - allowed
+    if unknown:
+        raise ValueError(f"Unknown round columns: {sorted(unknown)}")
     for key in ("input", "output"):
         if key in kwargs and isinstance(kwargs[key], list):
             kwargs[key] = json.dumps(kwargs[key], ensure_ascii=False)
@@ -1078,6 +1108,10 @@ def get_unresolved_gaps(session_id: int) -> list[dict]:
 
 def update_gap(gap_id: int, **kwargs) -> bool:
     """Update gap fields. Returns True if a row was updated."""
+    allowed = {"session_id", "source_round_id", "text", "concept_tags", "severity", "status", "resolved_by_round_id", "recurrence_count", "resolved_at"}
+    unknown = set(kwargs) - allowed
+    if unknown:
+        raise ValueError(f"Unknown gap columns: {sorted(unknown)}")
     if "concept_tags" in kwargs and isinstance(kwargs["concept_tags"], list):
         if _is_sqlite():
             kwargs["concept_tags"] = json.dumps(kwargs["concept_tags"], ensure_ascii=False)
@@ -1124,13 +1158,22 @@ def sync_gaps_from_weak_points(session_id: int, weak_points: list[str]) -> list[
             continue
         
         # Try fuzzy match: find gap containing this text or vice versa
-        existing = _fetch_one(
-            """SELECT id, status, recurrence_count FROM learning_gaps
-               WHERE session_id = :sid
-                 AND (text ILIKE :wp1 OR :wp2 ILIKE '%' || text || '%')
-               LIMIT 1""",
-            {"sid": session_id, "wp1": f"%{wp_text}%", "wp2": wp_text}
-        )
+        if _is_sqlite():
+            existing = _fetch_one(
+                """SELECT id, status, recurrence_count FROM learning_gaps
+                   WHERE session_id = :sid
+                     AND (lower(text) LIKE lower(:wp1) OR lower(:wp2) LIKE '%' || lower(text) || '%')
+                   LIMIT 1""",
+                {"sid": session_id, "wp1": f"%{wp_text}%", "wp2": wp_text}
+            )
+        else:
+            existing = _fetch_one(
+                """SELECT id, status, recurrence_count FROM learning_gaps
+                   WHERE session_id = :sid
+                     AND (text ILIKE :wp1 OR :wp2 ILIKE '%' || text || '%')
+                   LIMIT 1""",
+                {"sid": session_id, "wp1": f"%{wp_text}%", "wp2": wp_text}
+            )
         
         if existing and existing["status"] in ("resolved", "ignored"):
             reopen_gap(existing["id"])
@@ -1630,7 +1673,7 @@ def get_recommended_nodes(limit: int = 3) -> list[dict]:
 
 def create_job(job_type: str, payload: dict | None = None, max_retries: int = 3) -> int:
     """Create a pending job. Returns job id."""
-    p = json.dumps(payload) if payload else None
+    p = json.dumps(payload) if payload is not None else None
     if _is_sqlite():
         return _insert_returning_id(
             """INSERT INTO jobs (job_type, payload, max_retries, created_at)
@@ -1638,12 +1681,28 @@ def create_job(job_type: str, payload: dict | None = None, max_retries: int = 3)
             {"jt": job_type, "p": p, "mr": max_retries})
     return _insert_returning_id(
         """INSERT INTO jobs (job_type, payload, max_retries)
-           VALUES (:jt, :p ::jsonb, :mr) RETURNING id""",
+           VALUES (:jt, CAST(:p AS jsonb), :mr) RETURNING id""",
         {"jt": job_type, "p": p, "mr": max_retries})
 
 
 def claim_pending_job() -> dict | None:
     """Claim the oldest pending job (atomic). Returns job or None."""
+    if _is_sqlite():
+        with _tx() as conn:
+            row = conn.execute(text("""
+                SELECT id FROM jobs
+                WHERE status = 'pending'
+                ORDER BY created_at, id LIMIT 1
+            """)).mappings().fetchone()
+            if not row:
+                return None
+            conn.execute(text("""
+                UPDATE jobs
+                SET status = 'running', started_at = datetime('now'), claimed_at = datetime('now')
+                WHERE id = :id
+            """), {"id": row["id"]})
+            claimed = conn.execute(text("SELECT * FROM jobs WHERE id = :id"), {"id": row["id"]}).mappings().fetchone()
+            return dict(claimed) if claimed else None
     job = _fetch_one(
         """UPDATE jobs SET status = 'running', started_at = NOW(), claimed_at = NOW()
            WHERE id = (
@@ -1658,10 +1717,17 @@ def claim_pending_job() -> dict | None:
 
 def complete_job(job_id: int, result: dict | None = None):
     """Mark a job as completed."""
-    _exec(
-        """UPDATE jobs SET status = 'completed', result = :r, completed_at = NOW()
-           WHERE id = :id""",
-        {"r": json.dumps(result) if result else None, "id": job_id})
+    r = json.dumps(result) if result is not None else None
+    if _is_sqlite():
+        _exec(
+            """UPDATE jobs SET status = 'completed', result = :r, completed_at = datetime('now')
+               WHERE id = :id""",
+            {"r": r, "id": job_id})
+    else:
+        _exec(
+            """UPDATE jobs SET status = 'completed', result = CAST(:r AS jsonb), completed_at = NOW()
+               WHERE id = :id""",
+            {"r": r, "id": job_id})
 
 
 def fail_job(job_id: int, error_msg: str, rescind: bool = False):
@@ -1680,11 +1746,18 @@ def fail_job(job_id: int, error_msg: str, rescind: bool = False):
                WHERE id = :id""",
             {"r": current_retries, "e": error_msg, "id": job_id})
     else:
-        _exec(
-            """UPDATE jobs SET status = 'failed', error_msg = :e,
-               retries = :r, completed_at = NOW()
-               WHERE id = :id""",
-            {"e": error_msg, "r": current_retries, "id": job_id})
+        if _is_sqlite():
+            _exec(
+                """UPDATE jobs SET status = 'failed', error_msg = :e,
+                   retries = :r, completed_at = datetime('now')
+                   WHERE id = :id""",
+                {"e": error_msg, "r": current_retries, "id": job_id})
+        else:
+            _exec(
+                """UPDATE jobs SET status = 'failed', error_msg = :e,
+                   retries = :r, completed_at = NOW()
+                   WHERE id = :id""",
+                {"e": error_msg, "r": current_retries, "id": job_id})
 
 
 def get_pending_job_count() -> int:
@@ -1700,12 +1773,20 @@ def get_running_job_count() -> int:
 def recover_stale_jobs(timeout_minutes: int = 5):
     """Reset jobs stuck in 'running' back to 'pending' (server restart recovery)."""
     warn_sessions = []
-    # Recover running jobs
-    jobs = _fetch_all(
-        """SELECT id, job_type, payload FROM jobs
-           WHERE status = 'running'
-             AND started_at < NOW() - (:t || ' minutes')::interval""",
-        {"t": str(timeout_minutes)})
+    if _is_sqlite():
+        jobs = _fetch_all(
+            """SELECT id, job_type, payload FROM jobs
+               WHERE status = 'running'
+                 AND started_at < datetime('now', :delta)""",
+            {"delta": f"-{int(timeout_minutes)} minutes"},
+        )
+    else:
+        jobs = _fetch_all(
+            """SELECT id, job_type, payload FROM jobs
+               WHERE status = 'running'
+                 AND started_at < NOW() - (:t || ' minutes')::interval""",
+            {"t": str(timeout_minutes)},
+        )
     for j in jobs:
         _exec("UPDATE jobs SET status = 'pending', started_at = NULL, claimed_at = NULL WHERE id = :id",
               {"id": j["id"]})
@@ -1949,6 +2030,21 @@ def mark_review_complete(review_id: int, score: int | None = None):
     schedule_review(row["session_id"], score)
 
 
+def skip_review(review_id: int) -> bool:
+    """Mark one review schedule row as skipped. Returns True if updated."""
+    if _is_sqlite():
+        res = _exec("""
+            UPDATE review_schedule SET status = 'skipped', updated_at = datetime('now')
+            WHERE id = :rid
+        """, {"rid": review_id})
+    else:
+        res = _exec("""
+            UPDATE review_schedule SET status = 'skipped', updated_at = NOW()
+            WHERE id = :rid
+        """, {"rid": review_id})
+    return bool(getattr(res, "rowcount", 0))
+
+
 def submit_review_content(review_id: int, user_content: str, ai_feedback: str, review_score: int):
     """Phase 4.2: 提交复习内容（用户重新解释 + AI 评价），标记完成并排期下一轮。"""
     row = _fetch_one(
@@ -2091,11 +2187,18 @@ def get_system_health() -> dict:
         WHERE status = 'completed' AND score > 0 AND score < 30
     """)
     
-    # parse failures in recent rounds
-    parse_fails = _fetch_all("""
-        SELECT COUNT(*) AS n FROM rounds
-        WHERE CAST(eval_json AS TEXT) LIKE '%parse_failed%'
-    """)
+    # parse failures in recent rounds (parse_failed: true, not just field presence)
+    if _is_sqlite():
+        parse_fails = _fetch_all("""
+            SELECT COUNT(*) AS n FROM rounds
+            WHERE json_extract(eval_json, '$.parse_failed') = 1
+               OR json_extract(eval_json, '$.parse_failed') = 'true'
+        """)
+    else:
+        parse_fails = _fetch_all("""
+            SELECT COUNT(*) AS n FROM rounds
+            WHERE CAST(eval_json AS jsonb) ->> 'parse_failed' = 'true'
+        """)
     
     return {
         "stale_preparing": stale["count"],
@@ -2159,13 +2262,14 @@ def check_invariants(stale_minutes: int = 10) -> dict:
         })
     
     # 2. completed with feynman rounds but no review_report
-    rows = _fetch_all("""
+    review_report_null_expr = "s.review_report IS NULL OR s.review_report = 'null'" if _is_sqlite() else "s.review_report IS NULL OR s.review_report::text = 'null'"
+    rows = _fetch_all(f"""
         SELECT DISTINCT s.id, s.title
         FROM sessions s
         JOIN rounds r ON r.session_id = s.id
         WHERE r.type = 'feynman' AND r.status = 'completed'
           AND s.status = 'completed'
-          AND (s.review_report IS NULL OR s.review_report::text = 'null')
+          AND ({review_report_null_expr})
     """)
     if rows:
         issues.append({
@@ -2233,9 +2337,9 @@ def check_invariants(stale_minutes: int = 10) -> dict:
         })
     
     # 7. Completed with score=0 but no review report (suspicious manual complete)
-    rows = _fetch_all("""
-        SELECT id, title FROM sessions
-        WHERE status = 'completed' AND score = 0 AND (review_report IS NULL OR review_report::text = 'null')
+    rows = _fetch_all(f"""
+        SELECT s.id, s.title FROM sessions s
+        WHERE s.status = 'completed' AND s.score = 0 AND ({review_report_null_expr})
     """)
     if rows:
         issues.append({

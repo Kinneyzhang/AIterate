@@ -104,6 +104,7 @@ export default defineComponent({
     const dbServiceName = ref('');
     const dbOracleUser = ref('');
     const dbOraclePassword = ref('');
+    const originalDbPayload = ref(null);
 
     // Learning
     const feynmanPassScore = ref(60);
@@ -136,10 +137,7 @@ export default defineComponent({
 
         // Load DB config
         try {
-          const resp = await fetch('/api/db-config', {
-            headers: { 'X-Admin-Token': window.AITERATE_TOKEN || '' }
-          });
-          const cfg = await resp.json();
+          const cfg = await api.getDbConfig();
           const t = cfg.type || 'postgresql';
           dbType.value = t;
           if (t === 'oracle') {
@@ -155,8 +153,11 @@ export default defineComponent({
           } else {
             if (cfg.sqlite_path) dbSqlitePath.value = cfg.sqlite_path;
           }
+          originalDbPayload.value = buildDbPayload(false);
         } catch (e) { console.warn('Failed to load db-config:', e); }
-      } catch {}
+      } catch (err) {
+        setNotice(`加载设置失败：${err.message || err}`, 'error');
+      }
     });
 
     // Provider change → auto-fill base URL
@@ -189,6 +190,30 @@ export default defineComponent({
       sliderDisplay.value = String(feynmanPassScore.value);
     }
 
+    function buildDbPayload(includePasswords = true) {
+      const payload = { type: dbType.value };
+      if (dbType.value === 'sqlite') {
+        payload.sqlite_path = dbSqlitePath.value || '~/.aiterate/data.db';
+      } else if (dbType.value === 'oracle') {
+        payload.host = dbOracleHost.value;
+        payload.port = parseInt(dbOraclePort.value) || 1521;
+        payload.service_name = dbServiceName.value;
+        payload.user = dbOracleUser.value;
+        if (includePasswords && dbOraclePassword.value) payload.password = dbOraclePassword.value;
+      } else {
+        payload.host = dbHost.value;
+        payload.port = parseInt(dbPort.value) || (dbType.value === 'mysql' ? 3306 : 5432);
+        payload.dbname = dbName.value;
+        payload.user = dbUser.value;
+        if (includePasswords && dbPassword.value) payload.password = dbPassword.value;
+      }
+      return payload;
+    }
+
+    function stableStringify(obj) {
+      return JSON.stringify(obj, Object.keys(obj).sort());
+    }
+
     // Save
     async function save() {
       saving.value = true;
@@ -218,35 +243,16 @@ export default defineComponent({
           feynman_pass_score: parseInt(feynmanPassScore.value) || 60,
         });
 
-        // Save DB config
-        let dbPayload = { type: dbType.value };
-        if (dbType.value === 'sqlite') {
-          dbPayload.sqlite_path = dbSqlitePath.value || '~/.aiterate/data.db';
-        } else if (dbType.value === 'oracle') {
-          dbPayload.host = dbOracleHost.value;
-          dbPayload.port = parseInt(dbOraclePort.value) || 1521;
-          dbPayload.service_name = dbServiceName.value;
-          dbPayload.user = dbOracleUser.value;
-          if (dbOraclePassword.value) dbPayload.password = dbOraclePassword.value;
-        } else {
-          dbPayload.host = dbHost.value;
-          dbPayload.port = parseInt(dbPort.value) || (dbType.value === 'mysql' ? 3306 : 5432);
-          dbPayload.dbname = dbName.value;
-          dbPayload.user = dbUser.value;
-          if (dbPassword.value) dbPayload.password = dbPassword.value;
-        }
-
-        const dbResp = await fetch('/api/db-config', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(window.AITERATE_TOKEN ? { 'X-Admin-Token': window.AITERATE_TOKEN } : {}),
-          },
-          body: JSON.stringify(dbPayload),
-        });
-        if (!dbResp.ok) {
-          const err = await dbResp.json().catch(() => ({}));
-          throw new Error(err.detail || 'DB 配置保存失败');
+        // Save DB config only when the database tab actually changed.
+        // Otherwise a transient DB test failure would make unrelated AI/Tavily saves look failed.
+        const dbPayload = buildDbPayload(true);
+        const dbPayloadComparable = buildDbPayload(false);
+        const dbChanged = !originalDbPayload.value
+          || stableStringify(dbPayloadComparable) !== stableStringify(originalDbPayload.value)
+          || Boolean(dbPayload.password);
+        if (dbChanged) {
+          await api.saveDbConfig(dbPayload);
+          originalDbPayload.value = dbPayloadComparable;
         }
 
         emit('close');

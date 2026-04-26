@@ -177,6 +177,57 @@ class TestKnowledgeTree:
             assert "title" in domain, f"Domain missing title: {domain}"
 
 
+class TestExtractJsonBlock:
+    """Verify AI JSON extraction handles real-world LLM noise."""
+
+    def _extract(self, raw: str):
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from aiterate_ai import _extract_json_block
+        return _extract_json_block(raw)
+
+    def test_plain_json(self):
+        assert self._extract('{"score": 80, "gaps": []}') == {"score": 80, "gaps": []}
+
+    def test_json_with_explaining_text(self):
+        assert self._extract('好的：\n{"score": 70, "verdict": "ok"}\n以上') == {"score": 70, "verdict": "ok"}
+
+    def test_nested_json(self):
+        assert self._extract('{"eval": {"score": 90}, "gaps": [{"text": "x"}]}')["eval"]["score"] == 90
+
+    def test_braces_inside_string(self):
+        raw = '{"verdict": "可以用 {x} 表示变量", "score": 88}'
+        assert self._extract(raw)["verdict"] == "可以用 {x} 表示变量"
+
+    def test_bad_json_then_good_json(self):
+        raw = '示例 {bad json}\n最终 {"score": 66, "parse_failed": false}'
+        assert self._extract(raw)["score"] == 66
+
+
+class TestFrontendTokenInjection:
+    """Ensure built frontend shells keep the token placeholder injectable."""
+
+    def test_source_index_keeps_token_placeholder(self):
+        html = (Path(__file__).parent.parent / "index.html").read_text(encoding="utf-8")
+        assert 'window.AITERATE_TOKEN="%%AITERATE_TOKEN%%"' in html
+
+    def test_serve_frontend_replaces_placeholder(self, tmp_path, monkeypatch):
+        import asyncio
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        import aiterate_db as db
+        import aiterate_server as server
+
+        shell = tmp_path / "index.html"
+        shell.write_text('<script>window.AITERATE_TOKEN="%%AITERATE_TOKEN%%";</script>', encoding="utf-8")
+        monkeypatch.setattr(server, "FRONTEND", shell)
+        monkeypatch.setattr(db, "get_or_create_admin_token", lambda: "test-token-123")
+
+        response = asyncio.run(server.serve_frontend())
+        body = response.body.decode("utf-8")
+        assert "%%AITERATE_TOKEN%%" not in body
+        assert 'window.AITERATE_TOKEN="test-token-123"' in body
+
+
 class TestSettingsKeyMerge:
     """Verify the _merge_keys logic used in update_settings."""
 
@@ -201,12 +252,12 @@ class TestSettingsKeyMerge:
         assert result["provider"] == "openai"    # preserved
 
     def test_replace_key_with_new(self):
-        base = {"api_key": "old"}
+        base = {"api_key": "sk-old"}
         result = self._merge_keys(base, {"api_key": "new-key"})
         assert result["api_key"] == "new-key"
 
     def test_clear_key_with_sentinel(self):
-        base = {"api_key": "secret"}
+        base = {"api_key": "sk-secret"}
         result = self._merge_keys(base, {"api_key": "__CLEAR__"})
         assert result["api_key"] == ""
 

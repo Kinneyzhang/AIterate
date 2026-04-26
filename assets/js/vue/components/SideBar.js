@@ -58,7 +58,7 @@ export default defineComponent({
         </div>
       </div>
       <div class="session-list" id="sessionList">
-        <div v-if="!sortedSessions.length" class="sidebar-empty">加载中…</div>
+        <div v-if="!sortedSessions.length" class="sidebar-empty">暂无会话</div>
         <div v-for="s in sortedSessions" :key="s.id"
              :class="['session-item', { active: s.id === selectedId }]"
              :data-sid="s.id"

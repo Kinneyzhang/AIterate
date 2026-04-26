@@ -2,8 +2,7 @@
 
 import { createApp } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
-import { store, setNotice } from './store.js';
-import { api } from './api.js';
+import { setNotice } from './store.js';
 import AppRoot from './components/AppRoot.js';
 
 // ── 路由结构 ─────────────────────────────────────────────────────────────────
@@ -63,14 +62,5 @@ app.config.errorHandler = (err) => {
 
 app.use(router);
 app.mount('#app');
-
-// ── Load sessions on boot ────────────────────────────────────────────────────
-(async () => {
-  try {
-    store.sessions = await api.getSessions();
-  } catch (err) {
-    console.error('Failed to load sessions', err);
-  }
-})();
 
 window.__vueApp = app;

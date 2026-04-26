@@ -30,21 +30,43 @@ async def close_http_session():
 
 
 def _extract_json_block(raw: str) -> dict | None:
-    """从 AI 原始输出中提取第一个完整 JSON 对象（balance 括号匹配，处理嵌套）。"""
+    """从 AI 原始输出中提取第一个完整 JSON 对象。
+
+    处理嵌套对象、JSON 字符串内的花括号与转义字符；若前面出现坏 JSON，
+    继续扫描后续对象，避免一次噪声导致整个评估 fallback。
+    """
     depth = 0
     start = -1
+    in_string = False
+    escape = False
+
     for i, ch in enumerate(raw):
+        if escape:
+            escape = False
+            continue
+        if ch == '\\' and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+
         if ch == '{':
             if depth == 0:
                 start = i
             depth += 1
-        elif ch == '}':
+        elif ch == '}' and depth > 0:
             depth -= 1
             if depth == 0 and start >= 0:
                 try:
                     return json.loads(raw[start:i+1])
                 except json.JSONDecodeError:
-                    return None
+                    start = -1
+                    in_string = False
+                    escape = False
+                    continue
     return None
 
 
@@ -548,8 +570,9 @@ async def evaluate_review_re_explanation(original_question: str, ai_material: st
     ]
     raw = await _call_llm(messages, temperature=0.3, max_tokens=400, role="review")
     try:
-        block = _extract_json_block(raw, "{", "}")
-        result = json.loads(block)
+        result = _extract_json_block(raw)
+        if result is None:
+            raise ValueError("parse failed")
         return {
             "score": int(result.get("score", 50)),
             "praise": result.get("praise", ""),

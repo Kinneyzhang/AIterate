@@ -83,7 +83,8 @@ export function renderMarkdown(md) {
     const allowed = ['h1','h2','h3','h4','h5','h6','p','br','hr','pre','blockquote','strong','em','b','i','u','s','del','ins','a','code','img','span','div','ul','ol','li','table','thead','tbody','tfoot','tr','th','td','sup','sub'];
     return DOMPurify.sanitize(raw, { ALLOWED_TAGS: allowed, ALLOWED_ATTR: ['href','title','target','rel','src','alt','width','height','class','id'] });
   }
-  return raw;
+  // Fail closed: if the sanitizer did not load, never inject raw HTML/AI output.
+  return escapeHtml(md).replace(/\n/g, '<br>');
 }
 
 const STAGE_META = {
