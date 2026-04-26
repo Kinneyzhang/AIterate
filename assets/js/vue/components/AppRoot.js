@@ -196,22 +196,12 @@ export default defineComponent({
     }
 
     async function handleSessionCreated(payload) {
-      const sid = Number(payload?.session_id);
       try {
         const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
         store.sessions = sessions;
         if (stats) store.stats = stats;
-        if (sid) {
-          store.selectedSessionId = sid;
-          store.workspace = await api.getWorkspace(sid);
-          updateCurrentFeynmanGroup();
-          lastNonOverlayRoute.value = {
-            name: 'session-learn',
-            params: { id: String(sid) },
-            query: {},
-            hash: '',
-          };
-        }
+        // 只刷新侧栏与统计，不切换当前 selectedSession/workspace。
+        // 新建 modal 是 overlay；提交后背景应继续停留在用户原来的 session/panel。
         startBackgroundRefresh();
       } catch (err) {
         console.error('created session refresh failed', err);
