@@ -82,11 +82,19 @@
   color: var(--fg-0);
 }
 [data-theme="night"] .session-item.active {
-  background: var(--bg-elevated);
-  border-color: var(--border);
-  color: var(--fg-0);
+  background: var(--bg-2);
+  border-color: rgba(165, 180, 252, 0.45);
+  border-left-color: var(--accent-2);
+  border-left-width: 3px;
+  color: #fff;
+  font-weight: 600;
+}
+[data-theme="night"] .session-item.active:hover {
+  background: var(--bg-2);
+  color: #fff;
 }
 [data-theme="night"] .session-item-title { color: inherit; }
+[data-theme="night"] .session-item.active .session-item-title { font-weight: 700; }
 [data-theme="night"] .sidebar-resizer:hover { background: var(--fg-2); }
 [data-theme="night"] .sidebar-empty { color: var(--fg-2); }
 

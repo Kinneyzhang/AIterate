@@ -28,6 +28,13 @@ export default defineComponent({
     const isOverlay = computed(() => isOverlayRouteName(route.name));
     const lastNonOverlayRoute = ref(null);
     let pollBusy = false;
+    let workspaceLoadSeq = 0;
+
+    function routeNameForStatus(status) {
+      if (status === 'feynman' || status === 'completed') return 'session-review';
+      if (status === 'deepening' || status === 'revising') return 'session-deepen';
+      return 'session-learn';
+    }
 
     function updateCurrentFeynmanGroup() {
       const g = store.workspace?.current_review_group;
@@ -38,11 +45,19 @@ export default defineComponent({
       return (store.sessions || []).some(s => s.status === 'preparing');
     }
 
+    function warmCaches(sessions) {
+      const ids = (sessions || []).map(s => s.id);
+      api.prefetchWorkspaces(ids, 24);
+      api.prefetchCommandCenter();
+      api.prefetchKnowledgeMastery();
+    }
+
     async function loadSessionsAfterAuth() {
       try {
         const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
         store.sessions = sessions;
         if (stats) store.stats = stats;
+        warmCaches(sessions);
         if (hasPreparingSessions()) startBackgroundRefresh();
       } catch (err) {
         console.error('Failed to load sessions', err);
@@ -100,6 +115,7 @@ export default defineComponent({
       async (id, oldId) => {
         if (!id) {
           if (!isOverlay.value) {
+            workspaceLoadSeq++;
             store.selectedSessionId = null;
             store.workspace = null;
             stopPolling();
@@ -108,12 +124,14 @@ export default defineComponent({
         }
         const numId = Number(id);
         if (numId === store.selectedSessionId && store.workspace) return;
-        store.selectedSessionId = numId;
-        store.workspace = null;
+        const seq = ++workspaceLoadSeq;
         setNotice('');
         store.sidebarExpanded = false;
         try {
-          store.workspace = await api.getWorkspace(numId);
+          const workspace = await api.getWorkspace(numId);
+          if (seq !== workspaceLoadSeq) return;
+          store.selectedSessionId = numId;
+          store.workspace = workspace;
           updateCurrentFeynmanGroup();
           if (store.workspace?.session?.status === 'preparing' || hasPreparingSessions()) startBackgroundRefresh();
           else stopPolling();
@@ -129,8 +147,9 @@ export default defineComponent({
       const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
       store.sessions = sessions;
       if (stats) store.stats = stats;
+      warmCaches(sessions);
       if (store.selectedSessionId) {
-        store.workspace = await api.getWorkspace(store.selectedSessionId);
+        store.workspace = await api.getWorkspace(store.selectedSessionId, { force: true });
         updateCurrentFeynmanGroup();
       }
     }
@@ -172,7 +191,8 @@ export default defineComponent({
     function selectSession(id) {
       const numId = Number(id);
       if (numId === store.selectedSessionId && store.workspace) return;
-      router.push({ name: 'session-learn', params: { id } });
+      const session = (store.sessions || []).find(s => Number(s.id) === numId);
+      router.push({ name: routeNameForStatus(session?.status), params: { id } });
     }
 
     // ── 关闭 overlay ────────────────────────────────────────────────
@@ -200,6 +220,7 @@ export default defineComponent({
         const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
         store.sessions = sessions;
         if (stats) store.stats = stats;
+        warmCaches(sessions);
         // 只刷新侧栏与统计，不切换当前 selectedSession/workspace。
         // 新建 modal 是 overlay；提交后背景应继续停留在用户原来的 session/panel。
         startBackgroundRefresh();

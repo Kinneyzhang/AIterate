@@ -2,6 +2,7 @@
 
 import { defineComponent, computed } from 'vue';
 import { store, getStageMeta, formatDate } from '../store.js';
+import { api } from '../api.js';
 
 export default defineComponent({
   props: { sessions: Array, selectedId: Number, expanded: Boolean },
@@ -35,7 +36,11 @@ export default defineComponent({
       emit('select', id);
     }
 
-    return { stats, sortedSessions, onSelect, getStageMeta, formatDate };
+    function prefetch(id) {
+      api.prefetchWorkspace(id);
+    }
+
+    return { stats, sortedSessions, onSelect, prefetch, getStageMeta, formatDate };
   },
 
   template: `
@@ -52,6 +57,8 @@ export default defineComponent({
              :class="['session-item', { active: s.id === selectedId }]"
              :data-sid="s.id"
              tabindex="0"
+             @mouseenter="prefetch(s.id)"
+             @focus="prefetch(s.id)"
              @click="onSelect(s.id)"
              @keydown.enter="onSelect(s.id)"
              @keydown.space.prevent="onSelect(s.id)">

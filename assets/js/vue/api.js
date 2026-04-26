@@ -2,6 +2,45 @@
 
 const BASE = '';
 
+const workspaceCache = new Map();
+const workspaceInflight = new Map();
+let workspaceCacheVersion = 0;
+let commandCenterCache = null;
+let commandCenterInflight = null;
+let knowledgeMasteryCache = null;
+let knowledgeMasteryInflight = null;
+let derivedCacheVersion = 0;
+const STATIC_CACHE_TTL = 120_000;
+
+function now() { return Date.now(); }
+function isFresh(entry, ttl = STATIC_CACHE_TTL) {
+  return entry && (now() - entry.ts) < ttl;
+}
+
+function cacheEntry(data) {
+  return { data, ts: now() };
+}
+
+function invalidateWorkspace(id) {
+  workspaceCacheVersion += 1;
+  if (id === undefined || id === null) {
+    workspaceCache.clear();
+    workspaceInflight.clear();
+  } else {
+    const key = Number(id);
+    workspaceCache.delete(key);
+    workspaceInflight.delete(key);
+  }
+}
+
+function invalidateDerived() {
+  derivedCacheVersion += 1;
+  commandCenterCache = null;
+  commandCenterInflight = null;
+  knowledgeMasteryCache = null;
+  knowledgeMasteryInflight = null;
+}
+
 async function request(path, opts = {}) {
   const headers = { ...opts.headers };
   if (opts.body !== undefined && !headers['Content-Type']) {
@@ -38,6 +77,81 @@ async function request(path, opts = {}) {
   return data;
 }
 
+async function getWorkspaceCached(id, opts = {}) {
+  const key = Number(id);
+  if (opts.force) invalidateWorkspace(key);
+  if (!opts.force && workspaceCache.has(key)) return workspaceCache.get(key).data;
+  if (!opts.force && workspaceInflight.has(key)) return workspaceInflight.get(key);
+  const version = workspaceCacheVersion;
+  const p = request(`/api/sessions/${key}/workspace`)
+    .then(data => {
+      if (version === workspaceCacheVersion) workspaceCache.set(key, cacheEntry(data));
+      return data;
+    })
+    .finally(() => {
+      if (workspaceInflight.get(key) === p) workspaceInflight.delete(key);
+    });
+  workspaceInflight.set(key, p);
+  return p;
+}
+
+function prefetchWorkspace(id) {
+  const key = Number(id);
+  if (!key || workspaceCache.has(key) || workspaceInflight.has(key)) return;
+  getWorkspaceCached(key).catch(() => {});
+}
+
+function prefetchWorkspaces(ids, limit = 12) {
+  const queue = [...new Set((ids || []).map(Number).filter(Boolean))].slice(0, limit);
+  let i = 0;
+  const pump = () => {
+    if (i >= queue.length) return;
+    prefetchWorkspace(queue[i++]);
+    setTimeout(pump, 60);
+  };
+  if (window.requestIdleCallback) requestIdleCallback(pump, { timeout: 600 });
+  else setTimeout(pump, 120);
+}
+
+async function getCommandCenterCached(opts = {}) {
+  if (opts.force) invalidateDerived();
+  if (!opts.force && isFresh(commandCenterCache)) return commandCenterCache.data;
+  if (!opts.force && commandCenterInflight) return commandCenterInflight;
+  const version = derivedCacheVersion;
+  const p = request('/api/command-center')
+    .then(data => {
+      if (version === derivedCacheVersion) commandCenterCache = cacheEntry(data);
+      return data;
+    })
+    .finally(() => {
+      if (commandCenterInflight === p) commandCenterInflight = null;
+    });
+  commandCenterInflight = p;
+  return commandCenterInflight;
+}
+
+function prefetchCommandCenter() {
+  if (isFresh(commandCenterCache) || commandCenterInflight) return;
+  getCommandCenterCached().catch(() => {});
+}
+
+async function getKnowledgeMasteryCached(opts = {}) {
+  if (!opts.force && isFresh(knowledgeMasteryCache)) return knowledgeMasteryCache.data;
+  if (!opts.force && knowledgeMasteryInflight) return knowledgeMasteryInflight;
+  knowledgeMasteryInflight = request('/api/knowledge-tree/mastery')
+    .then(data => {
+      knowledgeMasteryCache = cacheEntry(data);
+      return data;
+    })
+    .finally(() => { knowledgeMasteryInflight = null; });
+  return knowledgeMasteryInflight;
+}
+
+function prefetchKnowledgeMastery() {
+  if (isFresh(knowledgeMasteryCache) || knowledgeMasteryInflight) return;
+  getKnowledgeMasteryCached().catch(() => {});
+}
+
 export const api = {
     // Auth
     login: (token) => request('/api/auth/login', { method: 'POST', body: JSON.stringify({ token }) }),
@@ -47,26 +161,56 @@ export const api = {
 
     // Sessions
   getSessions: () => request('/api/sessions'),
-  createSession: (title, content, entryType, webSearch, nodeId) =>
-    request('/api/sessions', { method: 'POST', body: JSON.stringify({ title, content, type: entryType, web_search: webSearch, knowledge_node_id: nodeId }) }),
-  getWorkspace: (id) => request(`/api/sessions/${id}/workspace`),
-  deepenSession: (id, action_type, content) =>
-    request(`/api/sessions/${id}/deepen`, { method: 'POST', body: JSON.stringify({ action_type, content }) }),
-  startFeynman: (id) => request(`/api/sessions/${id}/start-feynman`, { method: 'POST' }),
-  completeFeynman: (id, groupId, answers) =>
-    request(`/api/sessions/${id}/complete-feynman`, { method: 'POST', body: JSON.stringify({ group_id: groupId, answers }) }),
+  createSession: async (title, content, entryType, webSearch, nodeId) => {
+    invalidateWorkspace();
+    invalidateDerived();
+    return request('/api/sessions', { method: 'POST', body: JSON.stringify({ title, content, type: entryType, web_search: webSearch, knowledge_node_id: nodeId }) });
+  },
+  getWorkspace: getWorkspaceCached,
+  prefetchWorkspace,
+  prefetchWorkspaces,
+  invalidateWorkspace,
+  deepenSession: async (id, action_type, content) => {
+    invalidateWorkspace(id);
+    invalidateDerived();
+    return request(`/api/sessions/${id}/deepen`, { method: 'POST', body: JSON.stringify({ action_type, content }) });
+  },
+  startFeynman: async (id) => {
+    invalidateWorkspace(id);
+    invalidateDerived();
+    return request(`/api/sessions/${id}/start-feynman`, { method: 'POST' });
+  },
+  completeFeynman: async (id, groupId, answers) => {
+    invalidateWorkspace(id);
+    invalidateDerived();
+    return request(`/api/sessions/${id}/complete-feynman`, { method: 'POST', body: JSON.stringify({ group_id: groupId, answers }) });
+  },
   getSettings: () => request('/api/settings'),
   saveSettings: (payload) => request('/api/settings', { method: 'PATCH', body: JSON.stringify(payload) }),
   getReady: () => request('/api/ready'),
   getKnowledgeTree: () => request('/api/knowledge-tree'),
   getKnowledgeProgress: () => request('/api/knowledge-tree/progress'),
-  getKnowledgeMastery: () => request('/api/knowledge-tree/mastery'),
+  getKnowledgeMastery: getKnowledgeMasteryCached,
+  prefetchKnowledgeMastery,
   getRecommendedNodes: () => request('/api/knowledge-tree/recommend'),
-  getCommandCenter: () => request('/api/command-center'),
+  getCommandCenter: getCommandCenterCached,
+  prefetchCommandCenter,
   getJobsStatus: () => request('/api/jobs/status'),
   getDbConfig: () => request('/api/db-config'),
-  completeReview: (rid) => request(`/api/review/${rid}/complete`, { method: 'POST', body: '{}' }),
-  skipReview: (rid) => request(`/api/review/${rid}/skip`, { method: 'POST' }),
-  submitReview: (rid, content) => request(`/api/review/${rid}/submit`, { method: 'POST', body: JSON.stringify({ content }) }),
+  completeReview: async (rid) => {
+    invalidateWorkspace();
+    invalidateDerived();
+    return request(`/api/review/${rid}/complete`, { method: 'POST', body: '{}' });
+  },
+  skipReview: async (rid) => {
+    invalidateWorkspace();
+    invalidateDerived();
+    return request(`/api/review/${rid}/skip`, { method: 'POST' });
+  },
+  submitReview: async (rid, content) => {
+    invalidateWorkspace();
+    invalidateDerived();
+    return request(`/api/review/${rid}/submit`, { method: 'POST', body: JSON.stringify({ content }) });
+  },
   saveDbConfig: (payload) => request('/api/db-config', { method: 'PUT', body: JSON.stringify(payload) }),
 };

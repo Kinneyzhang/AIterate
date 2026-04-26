@@ -16,12 +16,19 @@ export default defineComponent({
     const feynmanAnswers = ref({});
     const submitting = ref(false);
 
-    // activeTab 从路由派生，但 overlay 页面期间保持上次的 session tab
+    // activeTab 从路由派生，但 overlay / 新 session 加载期间保持上次的 session tab。
+    // 关键：切换 session 时 route 会先变，workspace 异步稍后才回来。
+    // 如果此时直接按新 route 切 tab，就会把“旧 session”短暂渲染到“新 route 的 tab”里，用户会看到闪页。
     const OVERLAY_ROUTES = new Set(['new-session','knowledge-tree','command-center',
       'settings-basic','settings-roles','settings-tavily','settings-database','settings-learn']);
     const lastSessionTab = ref('learn');   // 记住上次选的 tab
     const activeTab = computed(() => {
       if (OVERLAY_ROUTES.has(route.name)) return lastSessionTab.value;  // overlay 期间不变
+      const routeSessionId = route.params.id ? Number(route.params.id) : null;
+      const loadedSessionId = currentSession.value?.id ? Number(currentSession.value.id) : null;
+      if (routeSessionId && loadedSessionId && routeSessionId !== loadedSessionId) {
+        return lastSessionTab.value; // 新 workspace 未加载完成前，不用新 route 改旧 workspace 的 tab
+      }
       const tab = route.name === 'session-deepen' ? 'deepen'
                 : route.name === 'session-review'  ? 'review'
                 : 'learn';

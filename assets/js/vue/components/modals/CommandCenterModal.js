@@ -19,18 +19,22 @@ export default defineComponent({
       no_knowledge_node: 0,
       low_score: 0,
     });
-    const loading = ref(true);
+    const loading = ref(false);
+    const ready = ref(false);
     const error = ref('');
     
     onMounted(async () => {
+      const loadingTimer = setTimeout(() => { loading.value = true; }, 120);
       try {
         data.value = await api.getCommandCenter();
         health.value = data.value.health || {};
+        ready.value = true;
       } catch (err) {
         console.error('command center error', err);
         error.value = err.message || '指挥中心加载失败';
         setNotice(`指挥中心加载失败：${error.value}`, 'error');
       } finally {
+        clearTimeout(loadingTimer);
         loading.value = false;
       }
     });
@@ -70,7 +74,7 @@ export default defineComponent({
     }
     const today = localDateKey();
 
-    return { data, health, loading, error, completeReview, icon, emit, gotoSession, statusLabel, severityLabel, today };
+    return { data, health, loading, ready, error, completeReview, icon, emit, gotoSession, statusLabel, severityLabel, today };
   },
   
   template: `
@@ -81,9 +85,9 @@ export default defineComponent({
           <button class="modal-close" @click="$emit('close')">✕</button>
         </div>
         <div class="modal-body cc-body">
-          <div v-if="loading" class="cmd-empty">加载中…</div>
+          <div v-if="!ready && loading" class="cmd-empty">加载中…</div>
           <div v-else-if="error" class="cmd-empty notice-error">加载失败：{{ error }}</div>
-          <template v-else>
+          <template v-else-if="ready">
 
           <!-- 🔥 必须做：逾期复习 + 待费曼 -->
           <div class="cc-section">

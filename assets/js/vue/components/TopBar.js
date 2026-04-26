@@ -3,6 +3,7 @@
 import { defineComponent } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { store } from '../store.js';
+import { api } from '../api.js';
 
 export default defineComponent({
   emits: ['toggle-sidebar'],
@@ -10,6 +11,14 @@ export default defineComponent({
   setup(props, { emit }) {
     const router = useRouter();
     const route  = useRoute();
+
+    function prefetchKnowledgeTree() {
+      api.prefetchKnowledgeMastery();
+    }
+
+    function prefetchCommandCenter() {
+      api.prefetchCommandCenter();
+    }
 
     function toggleTheme() {
       const next = store.theme === 'night' ? 'mono' : 'night';
@@ -19,7 +28,7 @@ export default defineComponent({
       if (window.syncHljsTheme) syncHljsTheme(next);
     }
 
-    return { store, router, route, toggleTheme };
+    return { store, router, route, toggleTheme, prefetchKnowledgeTree, prefetchCommandCenter };
   },
 
   data() {
@@ -42,6 +51,8 @@ export default defineComponent({
         <button class="btn btn-sm"
                 :class="{ active: route.name === 'knowledge-tree' }"
                 title="知识地图"
+                @mouseenter="prefetchKnowledgeTree"
+                @focus="prefetchKnowledgeTree"
                 @click="router.push({ name: 'knowledge-tree' })">
           <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
         </button>
@@ -49,6 +60,8 @@ export default defineComponent({
         <button class="btn btn-sm"
                 :class="{ active: route.name === 'command-center' }"
                 title="指挥中心"
+                @mouseenter="prefetchCommandCenter"
+                @focus="prefetchCommandCenter"
                 @click="router.push({ name: 'command-center' })">
           <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
         </button>
