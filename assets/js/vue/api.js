@@ -217,6 +217,26 @@ export const api = {
   getCommandCenter: getCommandCenterCached,
   prefetchCommandCenter,
   getJobsStatus: () => request('/api/jobs/status'),
+
+  // Inbox
+  getInboxItems: (limit = 50) => request(`/api/inbox?limit=${encodeURIComponent(limit)}`),
+  createInboxItem: async (content, sourceType = 'text', options = {}) => {
+    invalidateDerived();
+    return request('/api/inbox', { method: 'POST', body: JSON.stringify({ content, source_type: sourceType, direction: options.direction || null }) });
+  },
+  getInboxItem: (id) => request(`/api/inbox/${id}`),
+  regenerateInboxQuestions: (id, direction = null) => request(`/api/inbox/${id}/regenerate`, {
+    method: 'POST',
+    body: JSON.stringify({ direction }),
+  }),
+  archiveInboxItem: (id) => request(`/api/inbox/${id}/archive`, { method: 'POST' }),
+  selectInboxQuestion: async (id, payload = {}) => {
+    invalidateWorkspace();
+    invalidateDerived();
+    return request(`/api/inbox/questions/${id}/select`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  ignoreInboxQuestion: (id) => request(`/api/inbox/questions/${id}/ignore`, { method: 'POST' }),
+
   getDbConfig: () => request('/api/db-config'),
   completeReview: async (rid) => {
     invalidateWorkspace();

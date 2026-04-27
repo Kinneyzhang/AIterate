@@ -31,8 +31,8 @@ export default defineComponent({
         ready.value = true;
       } catch (err) {
         console.error('command center error', err);
-        error.value = err.message || '指挥中心加载失败';
-        setNotice(`指挥中心加载失败：${error.value}`, 'error');
+        error.value = err.message || '日拱一卒加载失败';
+        setNotice(`日拱一卒加载失败：${error.value}`, 'error');
       } finally {
         clearTimeout(loadingTimer);
         loading.value = false;
@@ -81,7 +81,7 @@ export default defineComponent({
     <div class="modal-overlay" @click.self="$emit('close')">
       <div class="modal-box command-center-modal" role="dialog">
         <div class="modal-header">
-          <div class="modal-title" v-html="icon('target') + ' 指挥中心'"></div>
+          <div class="modal-title" v-html="icon('target') + ' 日拱一卒'"></div>
           <button class="modal-close" @click="$emit('close')">✕</button>
         </div>
         <div class="modal-body cc-body">

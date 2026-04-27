@@ -321,7 +321,7 @@ class ProfileUpdate(BaseModel):
     theme: Optional[str] = None  # "night" | "mono"
 
 
-_LLM_ROLES = ["title", "answer", "evaluate", "review", "deepen"]
+_LLM_ROLES = ["title", "answer", "evaluate", "review", "deepen", "question"]
 
 
 class LLMRoleConfig(BaseModel):
@@ -523,6 +523,151 @@ async def get_ready():
 @app.get("/api/stats", dependencies=[Depends(_require_admin)])
 async def get_stats():
     return db.get_stats()
+
+
+# ── Inbox ──────────────────────────────────────────────────
+
+class InboxCreate(BaseModel):
+    content: str
+    source_type: str = "text"
+    direction: str | None = None
+
+    @field_validator("content")
+    @classmethod
+    def inbox_content_valid(cls, v):
+        if not v or not v.strip():
+            raise ValueError("内容不能为空")
+        v = v.strip()
+        if len(v) > 10000:
+            raise ValueError(f"内容过长（{len(v)} 字符），最多 10000 字符")
+        return v
+
+    @field_validator("source_type")
+    @classmethod
+    def source_type_valid(cls, v):
+        v = (v or "text").strip() or "text"
+        if len(v) > 40:
+            raise ValueError("source_type 过长")
+        return v
+
+    @field_validator("direction")
+    @classmethod
+    def create_direction_valid(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if len(v) > 200:
+            raise ValueError("方向描述过长，最多 200 字符")
+        return v or None
+
+
+class InboxRegenerateRequest(BaseModel):
+    direction: str | None = None
+
+    @field_validator("direction")
+    @classmethod
+    def direction_valid(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if len(v) > 200:
+            raise ValueError("方向描述过长，最多 200 字符")
+        return v or None
+
+
+class InboxQuestionSelectRequest(BaseModel):
+    web_search: bool = False
+    knowledge_node_id: str | None = None
+
+
+@app.get("/api/inbox", dependencies=[Depends(_require_admin)])
+async def list_inbox(limit: int = 50):
+    return db.get_inbox_items(limit=max(1, min(200, limit)))
+
+
+@app.post("/api/inbox", dependencies=[Depends(_require_admin)])
+async def create_inbox_item(body: InboxCreate):
+    item_id = db.create_inbox_item(body.content, body.source_type)
+    db.create_job(
+        job_type="generate_inbox_questions",
+        payload={"inbox_item_id": item_id, "content": body.content, "direction": body.direction, "replace": True},
+    )
+    return {"id": item_id, "status": "pending"}
+
+
+@app.get("/api/inbox/{item_id}", dependencies=[Depends(_require_admin)])
+async def get_inbox_item(item_id: int):
+    item = db.get_inbox_item(item_id)
+    if not item:
+        raise HTTPException(404, "Inbox item not found")
+    return {"item": item, "questions": db.get_inbox_questions(item_id)}
+
+
+@app.post("/api/inbox/{item_id}/regenerate", dependencies=[Depends(_require_admin)])
+async def regenerate_inbox_questions(item_id: int, body: InboxRegenerateRequest = InboxRegenerateRequest()):
+    item = db.get_inbox_item(item_id)
+    if not item:
+        raise HTTPException(404, "Inbox item not found")
+    db.update_inbox_item(item_id, status="pending", error_msg=None)
+    db.create_job(
+        job_type="generate_inbox_questions",
+        payload={
+            "inbox_item_id": item_id,
+            "content": item.get("content", ""),
+            "direction": body.direction,
+            "replace": True,
+        },
+    )
+    return {"ok": True, "id": item_id, "status": "pending"}
+
+
+@app.post("/api/inbox/{item_id}/archive", dependencies=[Depends(_require_admin)])
+async def archive_inbox(item_id: int):
+    if not db.archive_inbox_item(item_id):
+        raise HTTPException(404, "Inbox item not found")
+    return {"ok": True, "status": "archived"}
+
+
+@app.post("/api/inbox/questions/{question_id}/select", dependencies=[Depends(_require_admin)])
+async def select_inbox_question(question_id: int, body: InboxQuestionSelectRequest = InboxQuestionSelectRequest()):
+    question = db.get_inbox_question(question_id)
+    if not question:
+        raise HTTPException(404, "Inbox question not found")
+    if question.get("status") == "selected" and question.get("session_id"):
+        return {"session_id": question["session_id"], "question_id": question_id, "reused": True}
+    item = db.get_inbox_item(question["inbox_item_id"])
+    if not item:
+        raise HTTPException(404, "Inbox item not found")
+
+    content = (
+        f"问题：{question['question']}\n\n"
+        f"来源素材：\n{item.get('content', '')}\n\n"
+        f"AI 生成问题理由：\n{question.get('why') or '这个问题值得进一步学习和验证。'}"
+    )
+    temp_title = question["question"][:40].strip()
+    sid = db.create_session(temp_title, content, "question", web_search=body.web_search)
+    db.update_session(sid, status="preparing")
+    if body.knowledge_node_id:
+        db.set_knowledge_node(sid, body.knowledge_node_id)
+    db.mark_inbox_question_selected(question_id, sid)
+    db.create_job(
+        job_type="generate_session_answer",
+        payload={
+            "session_id": sid,
+            "content": content,
+            "type": "question",
+            "web_search": body.web_search,
+            "knowledge_node_id": body.knowledge_node_id,
+        },
+    )
+    return {"session_id": sid, "question_id": question_id}
+
+
+@app.post("/api/inbox/questions/{question_id}/ignore", dependencies=[Depends(_require_admin)])
+async def ignore_inbox_question(question_id: int):
+    if not db.get_inbox_question(question_id):
+        raise HTTPException(404, "Inbox question not found")
+    return {"ok": True, "question": db.ignore_inbox_question(question_id)}
 
 
 # ── Sessions ──────────────────────────────────────────────
@@ -1086,6 +1231,8 @@ async def _process_job(job: dict):
     try:
         if job_type == "generate_session_answer":
             await _process_generate_session_answer(job_id, job)
+        elif job_type == "generate_inbox_questions":
+            await _process_generate_inbox_questions(job_id, job)
         else:
             db.fail_job(job_id, f"Unknown job_type: {job_type}", rescind=True)
     except Exception as e:
@@ -1130,6 +1277,36 @@ async def _process_generate_session_answer(job_id: int, job: dict):
     answer = result["answer"]
     db.update_session(sid, title=title, material=answer, error_msg=None, status="learning")
     db.complete_job(job_id, {"title": title, "answer_len": len(answer)})
+
+
+async def _process_generate_inbox_questions(job_id: int, job: dict):
+    """Process a 'generate_inbox_questions' job: turn inbox content into candidate questions."""
+    payload = db._jload(job.get("payload")) if job.get("payload") else {}
+    item_id = payload.get("inbox_item_id")
+    if not item_id:
+        return db.fail_job(job_id, "Missing inbox_item_id in payload", rescind=True)
+
+    item = db.get_inbox_item(item_id)
+    if not item:
+        return db.complete_job(job_id, {"discarded": True, "reason": "inbox item deleted"})
+    if item.get("status") == "archived":
+        return db.complete_job(job_id, {"skipped": True, "reason": "inbox item archived"})
+
+    content = payload.get("content") or item.get("content", "")
+    direction = payload.get("direction")
+    replace = bool(payload.get("replace", True))
+    db.update_inbox_item(item_id, status="generating", error_msg=None)
+    try:
+        result = await ai.generate_inbox_questions(content, direction=direction)
+        questions = result.get("questions") if isinstance(result, dict) else []
+        if not isinstance(questions, list) or not questions:
+            raise RuntimeError("AI did not generate valid inbox questions")
+        ids = db.create_inbox_questions(item_id, questions[:5], replace_candidates=replace)
+        db.update_inbox_item(item_id, status="ready", error_msg=None)
+        db.complete_job(job_id, {"inbox_item_id": item_id, "question_count": len(ids)})
+    except Exception as e:
+        db.update_inbox_item(item_id, status="error", error_msg=str(e)[:500])
+        raise
 
 
 # ── Maintenance ────────────────────────────────────────────

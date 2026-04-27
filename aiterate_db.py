@@ -441,6 +441,63 @@ def init_db():
                 "CREATE INDEX IF NOT EXISTS idx_learning_gaps_status ON learning_gaps(status)"
             ))
 
+        # inbox_items / inbox_questions — 从碎片素材生成候选研究问题
+        if sqlite:
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS inbox_items (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                content     TEXT    NOT NULL,
+                source_type TEXT    NOT NULL DEFAULT 'text',
+                status      TEXT    NOT NULL DEFAULT 'pending',
+                error_msg   TEXT,
+                created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+                updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+            )"""))
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS inbox_questions (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                inbox_item_id    INTEGER NOT NULL REFERENCES inbox_items(id) ON DELETE CASCADE,
+                question         TEXT    NOT NULL,
+                why              TEXT,
+                angle            TEXT,
+                depth            TEXT,
+                related_concepts TEXT    NOT NULL DEFAULT '[]',
+                suggested_type   TEXT    NOT NULL DEFAULT 'question',
+                status           TEXT    NOT NULL DEFAULT 'candidate',
+                session_id       INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+                created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+                selected_at      TEXT
+            )"""))
+        else:
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS inbox_items (
+                id          SERIAL PRIMARY KEY,
+                content     TEXT NOT NULL,
+                source_type TEXT NOT NULL DEFAULT 'text',
+                status      TEXT NOT NULL DEFAULT 'pending',
+                error_msg   TEXT,
+                created_at  {ts} NOT NULL DEFAULT NOW(),
+                updated_at  {ts} NOT NULL DEFAULT NOW()
+            )"""))
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS inbox_questions (
+                id               SERIAL PRIMARY KEY,
+                inbox_item_id    INTEGER NOT NULL REFERENCES inbox_items(id) ON DELETE CASCADE,
+                question         TEXT NOT NULL,
+                why              TEXT,
+                angle            TEXT,
+                depth            TEXT,
+                related_concepts {jb} NOT NULL DEFAULT '[]',
+                suggested_type   TEXT NOT NULL DEFAULT 'question',
+                status           TEXT NOT NULL DEFAULT 'candidate',
+                session_id       INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+                created_at       {ts} NOT NULL DEFAULT NOW(),
+                selected_at      {ts}
+            )"""))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_items_status_created ON inbox_items(status, created_at DESC)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_questions_item ON inbox_questions(inbox_item_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_questions_status ON inbox_questions(status)"))
+
         # jobs — Phase 4: DB-backed async job queue
         if sqlite:
             conn.execute(text(f"""
@@ -484,7 +541,7 @@ def init_db():
     print(f"[DB] aiterate ready — {cfg.get('type','postgresql')} — sessions / rounds / profile / review_schedule / learning_gaps / jobs")
 
 
-_LLM_ROLES = ["title", "answer", "evaluate", "review", "deepen"]
+_LLM_ROLES = ["title", "answer", "evaluate", "review", "deepen", "question"]
 
 def _migrate_settings():
     p = _fetch_one("SELECT settings FROM profile WHERE id = :id", {"id": PROFILE_ID})
@@ -695,6 +752,168 @@ def upsert_profile(**kwargs) -> dict:
         """, {"id": PROFILE_ID, "theme": theme, "settings": s_json})
 
     return get_profile()
+
+
+# ── Inbox: raw fragments → candidate questions ────────────────────────────────
+
+def _normalize_inbox_question(row: dict | None) -> dict | None:
+    if not row:
+        return None
+    row = dict(row)
+    concepts = _jload(row.get("related_concepts") or [])
+    row["related_concepts"] = concepts if isinstance(concepts, list) else []
+    return row
+
+
+def create_inbox_item(content: str, source_type: str = "text") -> int:
+    content = (content or "").strip()
+    source_type = (source_type or "text").strip() or "text"
+    if _is_sqlite():
+        return _insert_returning_id(
+            """INSERT INTO inbox_items (content, source_type, status, created_at, updated_at)
+               VALUES (:content, :source_type, 'pending', datetime('now'), datetime('now')) RETURNING id""",
+            {"content": content, "source_type": source_type},
+        )
+    return _insert_returning_id(
+        """INSERT INTO inbox_items (content, source_type, status)
+           VALUES (:content, :source_type, 'pending') RETURNING id""",
+        {"content": content, "source_type": source_type},
+    )
+
+
+def update_inbox_item(item_id: int, **fields) -> dict | None:
+    allowed = {"content", "source_type", "status", "error_msg"}
+    parts, params = [], {"id": item_id}
+    for k, v in fields.items():
+        if k not in allowed:
+            continue
+        parts.append(f"{k} = :{k}")
+        params[k] = v
+    if not parts:
+        return get_inbox_item(item_id)
+    parts.append("updated_at = datetime('now')" if _is_sqlite() else "updated_at = NOW()")
+    _exec(f"UPDATE inbox_items SET {', '.join(parts)} WHERE id = :id", params)
+    return get_inbox_item(item_id)
+
+
+def get_inbox_items(limit: int = 50) -> list[dict]:
+    rows = _fetch_all(
+        """
+        SELECT i.*,
+               COUNT(q.id) AS question_count,
+               SUM(CASE WHEN q.status = 'selected' THEN 1 ELSE 0 END) AS selected_count
+        FROM inbox_items i
+        LEFT JOIN inbox_questions q ON q.inbox_item_id = i.id
+        GROUP BY i.id
+        ORDER BY i.created_at DESC, i.id DESC
+        LIMIT :limit
+        """,
+        {"limit": int(limit)},
+    )
+    for r in rows:
+        r["question_count"] = int(r.get("question_count") or 0)
+        r["selected_count"] = int(r.get("selected_count") or 0)
+    return rows
+
+
+def get_inbox_item(item_id: int) -> dict | None:
+    row = _fetch_one("SELECT * FROM inbox_items WHERE id = :id", {"id": item_id})
+    if row:
+        counts = _fetch_one(
+            """SELECT COUNT(*) AS question_count,
+                      SUM(CASE WHEN status = 'selected' THEN 1 ELSE 0 END) AS selected_count
+               FROM inbox_questions WHERE inbox_item_id = :id""",
+            {"id": item_id},
+        ) or {}
+        row["question_count"] = int(counts.get("question_count") or 0)
+        row["selected_count"] = int(counts.get("selected_count") or 0)
+    return row
+
+
+def get_inbox_questions(item_id: int) -> list[dict]:
+    rows = _fetch_all(
+        "SELECT * FROM inbox_questions WHERE inbox_item_id = :id ORDER BY id ASC",
+        {"id": item_id},
+    )
+    return [_normalize_inbox_question(r) for r in rows]
+
+
+def get_inbox_question(question_id: int) -> dict | None:
+    return _normalize_inbox_question(
+        _fetch_one("SELECT * FROM inbox_questions WHERE id = :id", {"id": question_id})
+    )
+
+
+def create_inbox_questions(item_id: int, questions: list[dict], replace_candidates: bool = False) -> list[int]:
+    if replace_candidates:
+        _exec(
+            "DELETE FROM inbox_questions WHERE inbox_item_id = :id AND status != 'selected'",
+            {"id": item_id},
+        )
+    ids: list[int] = []
+    for q in questions:
+        question = (q.get("question") or "").strip()
+        if not question:
+            continue
+        params = {
+            "item_id": item_id,
+            "question": question,
+            "why": (q.get("why") or "").strip(),
+            "angle": (q.get("angle") or "").strip(),
+            "depth": (q.get("depth") or "medium").strip() or "medium",
+            "related": json.dumps(q.get("related_concepts") or [], ensure_ascii=False),
+            "suggested_type": (q.get("suggested_type") or "question").strip() or "question",
+        }
+        if _is_sqlite():
+            qid = _insert_returning_id(
+                """INSERT INTO inbox_questions
+                   (inbox_item_id, question, why, angle, depth, related_concepts, suggested_type, status, created_at)
+                   VALUES (:item_id, :question, :why, :angle, :depth, :related, :suggested_type, 'candidate', datetime('now'))
+                   RETURNING id""",
+                params,
+            )
+        else:
+            qid = _insert_returning_id(
+                """INSERT INTO inbox_questions
+                   (inbox_item_id, question, why, angle, depth, related_concepts, suggested_type, status)
+                   VALUES (:item_id, :question, :why, :angle, :depth, CAST(:related AS jsonb), :suggested_type, 'candidate')
+                   RETURNING id""",
+                params,
+            )
+        ids.append(qid)
+    return ids
+
+
+def mark_inbox_question_selected(question_id: int, session_id: int) -> dict | None:
+    if _is_sqlite():
+        _exec(
+            """UPDATE inbox_questions SET status = 'selected', session_id = :sid, selected_at = datetime('now')
+               WHERE id = :qid""",
+            {"qid": question_id, "sid": session_id},
+        )
+    else:
+        _exec(
+            """UPDATE inbox_questions SET status = 'selected', session_id = :sid, selected_at = NOW()
+               WHERE id = :qid""",
+            {"qid": question_id, "sid": session_id},
+        )
+    q = get_inbox_question(question_id)
+    if q:
+        update_inbox_item(q["inbox_item_id"], status="partially_used")
+    return q
+
+
+def ignore_inbox_question(question_id: int) -> dict | None:
+    _exec("UPDATE inbox_questions SET status = 'ignored' WHERE id = :id", {"id": question_id})
+    return get_inbox_question(question_id)
+
+
+def archive_inbox_item(item_id: int) -> bool:
+    row = get_inbox_item(item_id)
+    if not row:
+        return False
+    update_inbox_item(item_id, status="archived")
+    return True
 
 
 # ── Sessions ───────────────────────────────────────────────────────────────────

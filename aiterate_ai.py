@@ -239,6 +239,79 @@ async def generate_title(content: str) -> str:
     return raw.strip().strip('"').strip('《》').strip()[:40]
 
 
+INBOX_QUESTION_SYSTEM = """你是一个“问题生成教练”，不是问答助手。
+
+用户会给你一个词、短语、句子、摘录、聊天片段或临时想法。这些素材可能很零散，用户自己还没有形成明确问题。
+
+你的任务：
+1. 从素材中识别值得深入研究的概念、矛盾、假设和边界。
+2. 生成 5 个高质量研究问题。
+3. 每个问题都要能进入后续学习、深化和费曼检验。
+4. 问题要具体、可探究、有张力，避免空泛。
+5. 不要直接回答问题。
+6. 不要生成鸡汤式问题。
+
+好问题标准：
+- 能揭示概念背后的机制
+- 能连接多个知识域
+- 能挑战用户原有假设
+- 能引出可验证的理解
+- 能推动用户形成更稳定的认知结构
+
+尽量覆盖不同问题类型：概念澄清型、机制解释型、边界条件型、反常识型、连接迁移型。
+输出严格 JSON：
+{
+  "questions": [
+    {
+      "question": "问题文本",
+      "why": "为什么这个问题值得研究",
+      "angle": "哲学 / 心理学 / 技术 / 写作 / 生活 / 跨学科",
+      "depth": "low / medium / high",
+      "related_concepts": ["概念1", "概念2"],
+      "suggested_type": "question"
+    }
+  ]
+}"""
+
+
+async def generate_inbox_questions(content: str, direction: str | None = None) -> dict:
+    """把用户随手收集的碎片素材转化为候选研究问题。"""
+    direction_line = f"\n用户希望这次问题更偏向：{direction}" if direction else ""
+    prompt = f"""用户素材：
+{content}
+{direction_line}
+
+请生成 5 个值得研究的问题。"""
+    messages = [
+        {"role": "system", "content": INBOX_QUESTION_SYSTEM},
+        {"role": "user", "content": prompt},
+    ]
+    raw = await _call_llm(messages, temperature=0.65, max_tokens=1200, role="question")
+    result = _extract_json_block(raw)
+    if not result or not isinstance(result.get("questions"), list):
+        return {"questions": [], "raw": raw, "parse_failed": True}
+
+    normalized = []
+    for item in result.get("questions", [])[:8]:
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("question") or "").strip()
+        if not question:
+            continue
+        concepts = item.get("related_concepts") or []
+        if not isinstance(concepts, list):
+            concepts = []
+        normalized.append({
+            "question": question,
+            "why": str(item.get("why") or "").strip(),
+            "angle": str(item.get("angle") or "跨学科").strip() or "跨学科",
+            "depth": str(item.get("depth") or "medium").strip() or "medium",
+            "related_concepts": [str(c).strip() for c in concepts if str(c).strip()][:8],
+            "suggested_type": str(item.get("suggested_type") or "question").strip() or "question",
+        })
+    return {"questions": normalized, "raw": raw, "parse_failed": False}
+
+
 async def generate_initial_answer(title: str, content: str, type: str = "question",
                                    web_search: bool = False,
                                    knowledge_node: dict | None = None) -> dict:

@@ -7,6 +7,10 @@ import { api } from '../api.js';
 import TopBar from './TopBar.js';
 import SideBar from './SideBar.js';
 import Workspace from './Workspace.js';
+import HomeDashboard from './HomeDashboard.js';
+import HomeRail from './HomeRail.js';
+import ContextRail from './ContextRail.js';
+import InboxPanel from './InboxPanel.js';
 import NewSessionModal from './modals/NewSessionModal.js';
 import SettingsModal from './modals/SettingsModal.js';
 import KnowledgeTreeModal from './modals/KnowledgeTreeModal.js';
@@ -15,7 +19,7 @@ import SessionShareModal from './modals/SessionShareModal.js';
 import LoginModal from './modals/LoginModal.js';
 
 export default defineComponent({
-  components: { TopBar, SideBar, Workspace, NewSessionModal, SettingsModal, KnowledgeTreeModal, CommandCenterModal, SessionShareModal, LoginModal },
+  components: { TopBar, SideBar, Workspace, ContextRail, HomeDashboard, HomeRail, InboxPanel, NewSessionModal, SettingsModal, KnowledgeTreeModal, CommandCenterModal, SessionShareModal, LoginModal },
 
   setup() {
     const router = useRouter();
@@ -39,6 +43,15 @@ export default defineComponent({
       return 'session-learn';
     }
 
+    const isInboxRoute = computed(() => route.name === 'inbox' || route.name === 'inbox-item');
+    const isHomeRoute = computed(() => route.name === 'home');
+    const backgroundRouteName = computed(() => {
+      if (!isOverlay.value) return route.name;
+      return lastNonOverlayRoute.value?.name || 'home';
+    });
+    const backgroundIsInboxRoute = computed(() => backgroundRouteName.value === 'inbox' || backgroundRouteName.value === 'inbox-item');
+    const backgroundIsHomeRoute = computed(() => backgroundRouteName.value === 'home');
+
     function updateCurrentFeynmanGroup() {
       const g = store.workspace?.current_review_group;
       store.currentFeynmanGroupId = (g?.length > 0) ? (g[0].group_id ?? g[0].id) : null;
@@ -57,8 +70,9 @@ export default defineComponent({
 
     async function loadSessionsAfterAuth() {
       try {
-        const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
+        const [sessions, stats, inboxItems] = await Promise.all([api.getSessions(), api.getStats().catch(() => null), api.getInboxItems(200).catch(() => [])]);
         if (stats) store.stats = stats;
+        store.inboxItems = inboxItems || [];
         setSessionsFromServer(sessions);
         if (hasPreparingSessions()) startBackgroundRefresh();
       } catch (err) {
@@ -85,6 +99,7 @@ export default defineComponent({
       authenticated.value = false;
       store.sessions = [];
       store.stats = { total_sessions: 0, completed_sessions: 0, active_sessions: 0 };
+      store.inboxItems = [];
       store.workspace = null;
       store.selectedSessionId = null;
       store.currentFeynmanGroupId = null;
@@ -113,8 +128,18 @@ export default defineComponent({
 
     // ── 路由变化 → 加载 session 数据 ────────────────────────────────
     watch(
-      () => route.params.id,
-      async (id, oldId) => {
+      () => [route.name, route.params.id],
+      async ([name, id], oldVal) => {
+        const isSessionRoute = ['session-learn', 'session-deepen', 'session-review'].includes(name);
+        if (!isSessionRoute) {
+          if (!isOverlay.value) {
+            workspaceLoadSeq++;
+            store.selectedSessionId = null;
+            store.workspace = null;
+            store.currentFeynmanGroupId = null;
+          }
+          return;
+        }
         if (!id) {
           if (!isOverlay.value) {
             workspaceLoadSeq++;
@@ -146,8 +171,10 @@ export default defineComponent({
 
     // ── Background auto-refresh ───────────────────────────────────────
     async function refreshRuntime() {
-      const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
+      const [sessions, stats, inboxItems] = await Promise.all([api.getSessions(), api.getStats().catch(() => null), api.getInboxItems(200).catch(() => [])]);
+      api.getCommandCenter({ force: true }).catch(() => null);
       if (stats) store.stats = stats;
+      store.inboxItems = inboxItems || [];
       setSessionsFromServer(sessions);
       if (store.selectedSessionId) {
         store.workspace = await api.getWorkspace(store.selectedSessionId, { force: true });
@@ -157,6 +184,7 @@ export default defineComponent({
         }
         updateCurrentFeynmanGroup();
       }
+      store.runtimeTick += 1;
     }
 
     async function pollBackgroundOnce() {
@@ -222,8 +250,9 @@ export default defineComponent({
 
     async function handleSessionCreated(payload) {
       try {
-        const [sessions, stats] = await Promise.all([api.getSessions(), api.getStats().catch(() => null)]);
+        const [sessions, stats, inboxItems] = await Promise.all([api.getSessions(), api.getStats().catch(() => null), api.getInboxItems(200).catch(() => [])]);
         if (stats) store.stats = stats;
+        store.inboxItems = inboxItems || [];
         setSessionsFromServer(sessions);
         // 只刷新侧栏与统计，不切换当前 selectedSession/workspace。
         // 新建 modal 是 overlay；提交后背景应继续停留在用户原来的 session/panel。
@@ -369,7 +398,8 @@ export default defineComponent({
     }
 
     return { store, route, router, refreshAll, selectSession, closeOverlay, closeOverlayAndRefresh, handleSessionCreated,
-      handleShareSession, handleRenameSession, handlePinSession, handleDeleteSession, shareSessionId, isOverlay,
+      handleShareSession, handleRenameSession, handlePinSession, handleDeleteSession, shareSessionId, isOverlay, isInboxRoute, isHomeRoute,
+      backgroundIsInboxRoute, backgroundIsHomeRoute,
       authenticated, checking, handleAuthenticated };
   },
 
@@ -443,6 +473,11 @@ export default defineComponent({
     <!-- ── topbar ──────────────────────────────────────────────────────── -->
     <TopBar @toggle-sidebar="toggleSidebar" />
 
+    <div id="noticeBar"
+         :class="['notice-bar', store.notice.text ? 'visible' : '', store.notice.type === 'error' ? 'notice-error' : '']">
+      {{ store.notice.text }}
+    </div>
+
     <!-- ── sidebar overlay (mobile) ────────────────────────────────────── -->
     <div class="sidebar-overlay"
          :class="{ active: store.sidebarExpanded }"
@@ -450,7 +485,7 @@ export default defineComponent({
          @click="toggleSidebar"></div>
 
     <!-- ── main layout ──────────────────────────────────────────────────── -->
-    <div class="workspace-shell">
+    <div :class="['workspace-shell', { 'inbox-mode': backgroundIsInboxRoute }]">
       <SideBar :sessions="store.sessions"
                :selected-id="store.selectedSessionId"
                :expanded="store.sidebarExpanded"
@@ -460,12 +495,12 @@ export default defineComponent({
                @pin="handlePinSession"
                @delete="handleDeleteSession" />
       <main class="main-pane">
-        <div id="noticeBar"
-             :class="['notice-bar', store.notice.text ? 'visible' : '', store.notice.type === 'error' ? 'notice-error' : '']">
-          {{ store.notice.text }}
-        </div>
-        <Workspace @refresh="refreshAll(false)" />
+        <InboxPanel v-if="backgroundIsInboxRoute" @refresh="refreshAll(false)" />
+        <HomeDashboard v-else-if="backgroundIsHomeRoute" />
+        <Workspace v-else @refresh="refreshAll(false)" />
       </main>
+      <HomeRail v-if="backgroundIsHomeRoute" />
+      <ContextRail v-else-if="!backgroundIsInboxRoute" @refresh="refreshAll(false)" />
     </div>
 
     <!-- ── overlay 页面（独立功能，路由控制） ───────────────────────── -->

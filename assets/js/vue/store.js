@@ -6,6 +6,7 @@ export const store = reactive({
   // sessions
   sessions: [],
   stats: { total_sessions: 0, completed_sessions: 0, active_sessions: 0 },
+  inboxItems: [],
   selectedSessionId: null,
   
   // workspace
@@ -24,8 +25,9 @@ export const store = reactive({
   sidebarExpanded: false,
   loading: false,
   
-  // polling
+  // polling / live refresh
   pollTimer: null,
+  runtimeTick: 0,
 });
 
 // computed

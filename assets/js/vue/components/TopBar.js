@@ -16,10 +16,6 @@ export default defineComponent({
       api.prefetchKnowledgeMastery();
     }
 
-    function prefetchCommandCenter() {
-      api.prefetchCommandCenter();
-    }
-
     function toggleTheme() {
       const next = store.theme === 'night' ? 'mono' : 'night';
       store.theme = next;
@@ -28,7 +24,7 @@ export default defineComponent({
       if (window.syncHljsTheme) syncHljsTheme(next);
     }
 
-    return { store, router, route, toggleTheme, prefetchKnowledgeTree, prefetchCommandCenter };
+    return { store, router, route, toggleTheme, prefetchKnowledgeTree };
   },
 
   data() {
@@ -56,15 +52,6 @@ export default defineComponent({
                 @click="router.push({ name: 'knowledge-tree' })">
           <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
         </button>
-        <!-- 指挥中心 -->
-        <button class="btn btn-sm"
-                :class="{ active: route.name === 'command-center' }"
-                title="指挥中心"
-                @mouseenter="prefetchCommandCenter"
-                @focus="prefetchCommandCenter"
-                @click="router.push({ name: 'command-center' })">
-          <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-        </button>
         <!-- 设置 -->
         <button class="btn btn-sm"
                 :class="{ active: route.name?.startsWith('settings') }"
@@ -72,11 +59,6 @@ export default defineComponent({
                 @click="router.push({ name: 'settings-basic' })">
           <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
-        <!-- 新建 -->
-        <button class="btn btn-icon"
-                :class="{ active: route.name === 'new-session' }"
-                title="新建问题/观点"
-                @click="router.push({ name: 'new-session' })">＋</button>
         <!-- 主题切换 -->
         <button class="btn btn-sm" id="themeToggleBtn" @click="toggleTheme" title="切换主题" v-html="store.theme === 'mono' ? moonIcon : sunIcon"></button>
       </div>

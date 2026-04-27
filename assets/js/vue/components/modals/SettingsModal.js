@@ -41,6 +41,7 @@ const ROLES = [
   { key: 'evaluate', label: '评估 (evaluate)' },
   { key: 'review', label: '费曼 (review)' },
   { key: 'deepen', label: '深化追问 (deepen)' },
+  { key: 'question', label: '问题生成 (question)' },
 ];
 
 const DB_TYPE_OPTIONS = [

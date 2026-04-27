@@ -1,14 +1,20 @@
 // ── SideBar.js ── 精确复刻原版 sidebar ───────────────────────────────────
 
 import { defineComponent, computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { store, getStageMeta, formatDate } from '../store.js';
 import { api } from '../api.js';
+import { icon } from '../icons.js';
+import InboxComposer from './InboxComposer.js';
 
 export default defineComponent({
+  components: { InboxComposer },
   props: { sessions: Array, selectedId: Number, expanded: Boolean },
   emits: ['select', 'share', 'rename', 'pin', 'delete'],
 
   setup(props, { emit }) {
+    const router = useRouter();
+    const route = useRoute();
     const stats = computed(() => {
       // 全局 stats 由 AppRoot 的自动刷新维护；fallback 到当前列表统计
       if (store.stats?.total_sessions > 0) {
@@ -22,6 +28,10 @@ export default defineComponent({
       const completed = s.filter(x => x.status === 'completed').length;
       const active = s.filter(x => ['preparing','learning','deepening','revising','feynman'].includes(x.status)).length;
       return { total: s.length, active, completed };
+    });
+
+    const inboxPendingCount = computed(() => {
+      return (store.inboxItems || []).filter(x => ['pending', 'generating', 'ready', 'error'].includes(x.status)).length;
     });
 
     const sortedSessions = computed(() => {
@@ -101,6 +111,21 @@ export default defineComponent({
       api.prefetchWorkspace(id);
     }
 
+    function goHome() {
+      store.sidebarExpanded = false;
+      router.push({ name: 'home' });
+    }
+
+    function openNewSession() {
+      store.sidebarExpanded = false;
+      router.push({ name: 'new-session' });
+    }
+
+    function goInbox() {
+      store.sidebarExpanded = false;
+      router.push({ name: 'inbox' });
+    }
+
     function onDocumentKeydown(event) {
       if (event.key === 'Escape') {
         closeMenu();
@@ -118,14 +143,38 @@ export default defineComponent({
     });
 
     return {
-      stats, sortedSessions, menu, menuStyle, editingId, editingTitle,
-      onSelect, openMenu, closeMenu, runAction, prefetch, getStageMeta, formatDate,
+      stats, inboxPendingCount, sortedSessions, menu, menuStyle, editingId, editingTitle,
+      onSelect, openMenu, closeMenu, runAction, prefetch, goHome, openNewSession, goInbox,
+      getStageMeta, formatDate, icon, route,
       commitEditing, cancelEditing,
     };
   },
 
   template: `
     <aside :class="['sidebar', { expanded }]" id="sessionSidebar">
+      <div class="sidebar-quick-actions" aria-label="快捷入口">
+        <button type="button"
+                :class="['sidebar-quick-btn', { active: route.name === 'home' }]"
+                title="推进"
+                @click="goHome">
+          <span v-html="icon('target')"></span><span>推进</span>
+          <em v-if="stats.active > 0">{{ stats.active }}</em>
+        </button>
+        <button type="button"
+                :class="['sidebar-quick-btn', { active: route.name === 'inbox' || route.name === 'inbox-item' }]"
+                title="收集箱"
+                @click="goInbox">
+          <span v-html="icon('clip')"></span><span>收集</span>
+          <em v-if="inboxPendingCount > 0" class="is-muted">{{ inboxPendingCount }}</em>
+        </button>
+        <button type="button"
+                :class="['sidebar-quick-btn', { active: route.name === 'new-session' }]"
+                title="提问"
+                @click="openNewSession">
+          <span v-html="icon('edit')"></span><span>提问</span>
+        </button>
+      </div>
+      <InboxComposer />
       <div class="sidebar-head">
         <div class="sidebar-head-row">
           <div class="sidebar-title">会话 </div>

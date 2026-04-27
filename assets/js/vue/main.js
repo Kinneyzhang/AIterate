@@ -37,6 +37,10 @@ const router = createRouter({
     { path: '/session/:id/deepen',       name: 'session-deepen',  component: EmptyView, props: true },
     { path: '/session/:id/review',       name: 'session-review',  component: EmptyView, props: true },
 
+    // inbox workspace
+    { path: '/inbox',                    name: 'inbox',            component: EmptyView },
+    { path: '/inbox/:id',                name: 'inbox-item',       component: EmptyView, props: true },
+
     // overlay pages (独立功能页，不叫 modal)
     { path: '/new',                      name: 'new-session',      component: EmptyView },
     { path: '/knowledge-tree',           name: 'knowledge-tree',   component: EmptyView },

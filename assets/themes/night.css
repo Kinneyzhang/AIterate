@@ -84,8 +84,6 @@
 [data-theme="night"] .session-item.active {
   background: var(--bg-2);
   border-color: rgba(165, 180, 252, 0.45);
-  border-left-color: var(--accent-2);
-  border-left-width: 3px;
   color: #fff;
   font-weight: 600;
 }
@@ -214,7 +212,7 @@
 [data-theme="night"] .csel-option.selected { color: var(--fg-0); font-weight: 600; }
 
 /* ── 11. Buttons ─────────────────────────────────────────────────────────── */
-[data-theme="night"] button:not(.btn):not(.ws-tab):not(.settings-tab):not(.modal-close):not(.type-btn):not(.sidebar-toggle):not(.session-menu-trigger):not(.session-menu-action) {
+[data-theme="night"] button:not(.btn):not(.ws-tab):not(.settings-tab):not(.modal-close):not(.type-btn):not(.sidebar-toggle):not(.session-menu-trigger):not(.session-menu-action):not(.inbox-label):not(.inbox-recent-item):not(.inbox-list-item):not(.inbox-overview-item):not(.inbox-breadcrumb-link):not(.sidebar-quick-btn) {
   border-radius: 7px;
   font-size: 13px;
   font-weight: 500;
