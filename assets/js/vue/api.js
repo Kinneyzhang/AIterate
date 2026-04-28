@@ -220,6 +220,7 @@ export const api = {
 
   // Inbox
   getInboxItems: (limit = 50) => request(`/api/inbox?limit=${encodeURIComponent(limit)}`),
+  extractInboxUrl: (url) => request('/api/inbox/extract-url', { method: 'POST', body: JSON.stringify({ url }) }),
   createInboxItem: async (content, sourceType = 'text', options = {}) => {
     invalidateDerived();
     return request('/api/inbox', { method: 'POST', body: JSON.stringify({ content, source_type: sourceType, direction: options.direction || null }) });

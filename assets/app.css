@@ -2327,3 +2327,101 @@ select {
   .inbox-material-line { flex-wrap: wrap; }
   .inbox-material-actions { justify-content: flex-start; }
 }
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+.inbox-source-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.inbox-url-import {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.inbox-source-tool-btn {
+  min-height: unset;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+.inbox-source-tool-btn.active {
+  background: var(--bg-2, rgba(255,255,255,0.06));
+  color: var(--fg-0);
+  font-weight: 700;
+}
+.inbox-image-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin: 0 0 10px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-0, rgba(255,255,255,0.02));
+  color: var(--fg-1);
+  font-size: 12px;
+}
+.inbox-image-preview img {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+@media (max-width: 820px) {
+  .inbox-source-tools,
+  .inbox-url-import {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.inbox-batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -2px 0 8px;
+  color: var(--fg-1);
+  font-size: 12px;
+}
+.inbox-batch-toolbar > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.inbox-batch-toolbar .btn {
+  min-height: unset;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.inbox-material-card.batchable {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.inbox-batch-check {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent, #4f46e5);
+  cursor: pointer;
+}
+@media (max-width: 720px) {
+  .inbox-batch-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .inbox-batch-toolbar > div { justify-content: flex-start; }
+}

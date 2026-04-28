@@ -22,19 +22,51 @@ export default defineComponent({
     const pageDirection = ref('');
     const pageSubmitting = ref(false);
     const selectedDomains = ref([]);
+    const selectedBatchIds = ref([]);
     const collectMode = ref('questions');
-    const sourceType = ref('text');
-    const domainOptions = ['计算机', '写作', '心理学', '哲学'];
+    const sourceUrl = ref('');
+    const urlFetching = ref(false);
+    const voiceListening = ref(false);
+    const imagePreview = ref('');
+    const imageName = ref('');
+    const domainOptions = ref(['计算机', '写作', '心理学', '哲学']);
     const modeOptions = [
-      { value: 'questions', label: '生成问题', hint: '转成可学习的问题' },
-      { value: 'counter', label: '找反例', hint: '优先暴露边界和漏洞' },
-      { value: 'summary', label: '提炼要点', hint: '先压缩成结构化笔记' },
-      { value: 'action', label: '行动化', hint: '提炼成下一步实验' },
-    ];
-    const sourceOptions = [
-      { value: 'text', label: '想法' },
-      { value: 'quote', label: '摘录' },
-      { value: 'url', label: '链接' },
+      {
+        value: 'questions',
+        label: '生成问题',
+        hint: '转成可学习的问题',
+        prompt: '请把素材转化为可进入学习流程的研究问题，问题要具体、可回答、能引出核心概念。',
+      },
+      {
+        value: 'counter',
+        label: '找反例',
+        hint: '暴露边界和漏洞',
+        prompt: '请优先从反例、边界条件、失败场景、隐藏假设入手生成问题，帮助我避免过早相信这个观点。',
+      },
+      {
+        value: 'summary',
+        label: '提炼要点',
+        hint: '压缩成结构化笔记',
+        prompt: '请先提炼素材中的概念、论点、证据和疑问，再生成适合继续学习或写作的候选问题。',
+      },
+      {
+        value: 'action',
+        label: '行动实验',
+        hint: '变成下一步实践',
+        prompt: '请把素材转化为可执行的小实验、验证步骤或下一步行动，并生成围绕行动可行性的候选问题。',
+      },
+      {
+        value: 'writing',
+        label: '写作素材',
+        hint: '变成观点和例子',
+        prompt: '请把素材拆成可写作的观点、例子、金句、论证路径，并生成能扩展文章的候选问题。',
+      },
+      {
+        value: 'feynman',
+        label: '费曼检验',
+        hint: '检查我是否真懂',
+        prompt: '请围绕素材生成能检验理解的费曼式问题，偏向解释、举例、类比和反驳。',
+      },
     ];
     let pollTimer = null;
 
@@ -46,6 +78,7 @@ export default defineComponent({
     const readyItems = computed(() => pendingItems.value.filter(x => x.status === 'ready'));
     const generatingItems = computed(() => pendingItems.value.filter(x => ['pending', 'generating'].includes(x.status)));
     const errorItems = computed(() => pendingItems.value.filter(x => x.status === 'error'));
+    const selectedBatchItems = computed(() => pendingItems.value.filter(x => selectedBatchIds.value.includes(x.id)));
     const activeItems = computed(() => pendingItems.value.some(x => ['pending', 'generating'].includes(x.status)) || ['pending', 'generating'].includes(item.value?.status));
 
     function statusLabel(status) {
@@ -64,6 +97,54 @@ export default defineComponent({
       return { low: '浅', medium: '中', high: '深' }[depth] || depth || '中';
     }
 
+    function toggleBatchItem(id) {
+      selectedBatchIds.value = selectedBatchIds.value.includes(id)
+        ? selectedBatchIds.value.filter(x => x !== id)
+        : [...selectedBatchIds.value, id];
+    }
+
+    function clearBatchSelection() {
+      selectedBatchIds.value = [];
+    }
+
+    async function archiveSelectedBatch() {
+      const targets = selectedBatchItems.value;
+      if (!targets.length || actionBusy.value.batchArchive) return;
+      actionBusy.value.batchArchive = true;
+      try {
+        await Promise.all(targets.map(x => api.archiveInboxItem(x.id)));
+        selectedBatchIds.value = [];
+        await loadList();
+        emit('refresh');
+        setNotice(`已完成 ${targets.length} 条素材。`);
+      } catch (err) {
+        setNotice(`批量完成失败：${err.message}`, 'error');
+      } finally {
+        actionBusy.value.batchArchive = false;
+      }
+    }
+
+    async function mergeSelectedBatch() {
+      const targets = selectedBatchItems.value;
+      if (targets.length < 2 || actionBusy.value.batchMerge) return;
+      actionBusy.value.batchMerge = true;
+      try {
+        const content = targets.map((x, i) => `素材 ${i + 1}：\n${x.content}`).join('\n\n---\n\n');
+        const created = await api.createInboxItem(content, 'text', {
+          direction: `${buildPageDirection()}；批量处理：请把多条素材合并成一个更高价值的问题簇，识别共同主题、冲突点和可行动方向。`,
+        });
+        selectedBatchIds.value = [];
+        await loadList();
+        emit('refresh');
+        setNotice('已合并为一条批量素材，AI 正在生成候选问题。');
+        router.push({ name: 'inbox-item', params: { id: created.id } });
+      } catch (err) {
+        setNotice(`批量合并失败：${err.message}`, 'error');
+      } finally {
+        actionBusy.value.batchMerge = false;
+      }
+    }
+
     function toggleDomain(domain) {
       selectedDomains.value = selectedDomains.value.includes(domain)
         ? selectedDomains.value.filter(x => x !== domain)
@@ -71,10 +152,92 @@ export default defineComponent({
     }
 
     function buildPageDirection() {
-      const mode = modeOptions.find(x => x.value === collectMode.value)?.label || '生成问题';
+      const mode = modeOptions.find(x => x.value === collectMode.value) || modeOptions[0];
       const domains = selectedDomains.value.length ? selectedDomains.value.join('、') : '跨学科';
       const extra = pageDirection.value.trim();
-      return [`领域：${domains}`, `处理方式：${mode}`, extra ? `额外要求：${extra}` : ''].filter(Boolean).join('；');
+      return [
+        `领域：${domains}`,
+        `处理模板：${mode.label}`,
+        `模板提示词：${mode.prompt}`,
+        extra ? `额外要求：${extra}` : '',
+      ].filter(Boolean).join('；');
+    }
+
+    async function loadDomainOptions() {
+      try {
+        const data = await api.getKnowledgeTree();
+        const titles = (data.tree || [])
+          .map(node => (node.title || '').trim())
+          .filter(Boolean);
+        if (titles.length) domainOptions.value = titles.slice(0, 8);
+      } catch (_) {
+        // 领域只是预设入口，知识树加载失败时保留本地兜底，不打断收集。
+      }
+    }
+
+    async function importUrlToComposer() {
+      const url = sourceUrl.value.trim();
+      if (!url || urlFetching.value) return;
+      urlFetching.value = true;
+      try {
+        const data = await api.extractInboxUrl(url);
+        const title = data.title ? `标题：${data.title}\n` : '';
+        pageContent.value = `${title}来源：${data.url}\n\n${data.content}`.trim();
+        sourceUrl.value = '';
+        setNotice('链接正文已抓取，检查后可放入收集箱。');
+      } catch (err) {
+        setNotice(`链接抓取失败：${err.message}`, 'error');
+      } finally {
+        urlFetching.value = false;
+      }
+    }
+
+    function startVoiceInput() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        setNotice('当前浏览器不支持语音输入，可先用系统输入法语音转文字。', 'error');
+        return;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'zh-CN';
+      recognition.interimResults = false;
+      recognition.continuous = false;
+      voiceListening.value = true;
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results || [])
+          .map(result => result[0]?.transcript || '')
+          .join('')
+          .trim();
+        if (transcript) {
+          pageContent.value = [pageContent.value.trim(), transcript].filter(Boolean).join('\n\n');
+        }
+      };
+      recognition.onerror = (event) => {
+        setNotice(`语音输入失败：${event.error || '未知错误'}`, 'error');
+      };
+      recognition.onend = () => { voiceListening.value = false; };
+      recognition.start();
+    }
+
+    function handleImageFile(file) {
+      if (!file || !file.type?.startsWith('image/')) return;
+      imageName.value = file.name || 'clipboard-image.png';
+      const reader = new FileReader();
+      reader.onload = () => { imagePreview.value = String(reader.result || ''); };
+      reader.readAsDataURL(file);
+      const imageNote = `图片素材：${imageName.value}\n请围绕这张图片对应的信息生成候选问题。若图片里有文字，我会在这里补充关键内容。`;
+      if (!pageContent.value.trim()) pageContent.value = imageNote;
+      setNotice('图片已捕获到收集区；当前先保留预览和说明，精确 OCR 需要后续配置识别引擎。');
+    }
+
+    function handleImageInput(event) {
+      handleImageFile(event.target.files?.[0]);
+      event.target.value = '';
+    }
+
+    function handlePagePaste(event) {
+      const file = Array.from(event.clipboardData?.files || []).find(x => x.type?.startsWith('image/'));
+      if (file) handleImageFile(file);
     }
 
     async function submitPageCollection() {
@@ -82,7 +245,7 @@ export default defineComponent({
       if (!text || pageSubmitting.value) return;
       pageSubmitting.value = true;
       try {
-        const created = await api.createInboxItem(text, sourceType.value, { direction: buildPageDirection() });
+        const created = await api.createInboxItem(text, 'text', { direction: buildPageDirection() });
         pageContent.value = '';
         pageDirection.value = '';
         setNotice('已按预设放入收集箱，AI 正在生成候选问题。');
@@ -208,15 +371,19 @@ export default defineComponent({
     }
 
     watch(() => route.fullPath, loadCurrent);
-    onMounted(loadCurrent);
+    onMounted(() => {
+      loadDomainOptions();
+      loadCurrent();
+    });
     onUnmounted(stopPolling);
 
     return {
-      items, pendingItems, completedItems, visibleItems, readyItems, generatingItems, errorItems,
+      items, pendingItems, completedItems, visibleItems, readyItems, generatingItems, errorItems, selectedBatchItems,
       item, questions, loading, actionBusy, direction, router, icon,
-      pageContent, pageDirection, pageSubmitting, selectedDomains, collectMode, sourceType,
-      domainOptions, modeOptions, sourceOptions,
-      statusLabel, depthLabel, toggleDomain, buildPageDirection, submitPageCollection, handlePageKeydown,
+      pageContent, pageDirection, pageSubmitting, selectedDomains, selectedBatchIds, collectMode,
+      sourceUrl, urlFetching, voiceListening, imagePreview, imageName, domainOptions, modeOptions,
+      statusLabel, depthLabel, toggleDomain, toggleBatchItem, clearBatchSelection, archiveSelectedBatch, mergeSelectedBatch, buildPageDirection, loadDomainOptions,
+      importUrlToComposer, startVoiceInput, handleImageInput, handlePagePaste, submitPageCollection, handlePageKeydown,
       openItem, regenerate, selectQuestion, ignoreQuestion, archiveItem,
     };
   },
@@ -235,6 +402,20 @@ export default defineComponent({
               <div class="home-section-title" v-html="icon('edit') + ' 深度收集'"></div>
               <span>给素材预设处理方向，不只是快速捕获</span>
             </div>
+            <div class="inbox-source-tools">
+              <div class="inbox-url-import">
+                <input type="url" v-model="sourceUrl" placeholder="粘贴文章/网页链接，先抓正文再加工…" @keydown.enter.prevent="importUrlToComposer" />
+                <button type="button" class="btn" :disabled="!sourceUrl.trim() || urlFetching" @click="importUrlToComposer">{{ urlFetching ? '抓取中' : '抓取链接' }}</button>
+              </div>
+              <button type="button" class="btn inbox-source-tool-btn" :class="{ active: voiceListening }" @click="startVoiceInput">{{ voiceListening ? '正在听…' : '语音输入' }}</button>
+              <label class="btn inbox-source-tool-btn">贴图片
+                <input type="file" accept="image/*" class="visually-hidden" @change="handleImageInput" />
+              </label>
+            </div>
+            <div v-if="imagePreview" class="inbox-image-preview">
+              <img :src="imagePreview" :alt="imageName" />
+              <span>{{ imageName }}</span>
+            </div>
             <div class="inbox-page-compose-grid">
               <textarea
                 class="inbox-page-input"
@@ -242,14 +423,9 @@ export default defineComponent({
                 rows="5"
                 placeholder="粘贴摘录、链接、想法，或写下一个还没成型的灵感…"
                 :disabled="pageSubmitting"
-                @keydown="handlePageKeydown"></textarea>
+                @keydown="handlePageKeydown"
+                @paste="handlePagePaste"></textarea>
               <div class="inbox-compose-side">
-                <div class="inbox-compose-option-row">
-                  <span class="inbox-compose-label">素材类型</span>
-                  <div class="inbox-chip-row">
-                    <button v-for="opt in sourceOptions" :key="opt.value" type="button" :class="['btn', 'inbox-chip', { active: sourceType === opt.value }]" @click="sourceType = opt.value">{{ opt.label }}</button>
-                  </div>
-                </div>
                 <div class="inbox-compose-option-row">
                   <span class="inbox-compose-label">处理方式</span>
                   <div class="inbox-compose-mode-list">
@@ -279,7 +455,16 @@ export default defineComponent({
               <div class="home-section-title" v-html="icon('clip') + ' 待处理素材'"></div>
               <span>{{ pendingItems.length }} 条</span>
             </div>
-            <article v-for="x in pendingItems" :key="'pending-'+x.id" class="inbox-material-card clickable" tabindex="0" @click="openItem(x)" @keydown.enter.prevent="openItem(x)" @keydown.space.prevent="openItem(x)">
+            <div v-if="pendingItems.length" class="inbox-batch-toolbar">
+              <span>{{ selectedBatchItems.length ? '已选 ' + selectedBatchItems.length + ' 条' : '可多选后批量加工' }}</span>
+              <div>
+                <button type="button" class="btn" :disabled="selectedBatchItems.length < 2 || actionBusy.batchMerge" @click="mergeSelectedBatch">合并加工</button>
+                <button type="button" class="btn btn-ghost" :disabled="!selectedBatchItems.length || actionBusy.batchArchive" @click="archiveSelectedBatch">批量完成</button>
+                <button v-if="selectedBatchItems.length" type="button" class="btn btn-ghost" @click="clearBatchSelection">清空</button>
+              </div>
+            </div>
+            <article v-for="x in pendingItems" :key="'pending-'+x.id" class="inbox-material-card batchable clickable" tabindex="0" @click="openItem(x)" @keydown.enter.prevent="openItem(x)" @keydown.space.prevent="openItem(x)">
+              <input type="checkbox" class="inbox-batch-check" :checked="selectedBatchIds.includes(x.id)" @click.stop.prevent="toggleBatchItem(x.id)" aria-label="选择素材" />
               <div class="inbox-material-main">
                 <div class="inbox-material-line">
                   <span class="inbox-material-title">{{ x.content }}</span>
@@ -287,6 +472,7 @@ export default defineComponent({
                 </div>
               </div>
               <div class="inbox-material-actions">
+                <button type="button" class="btn btn-ghost inbox-batch-toggle" @click.stop="toggleBatchItem(x.id)">{{ selectedBatchIds.includes(x.id) ? '已选' : '选择' }}</button>
                 <button type="button" class="btn btn-primary" @click.stop="openItem(x)">处理</button>
                 <button type="button" class="btn btn-ghost" :disabled="actionBusy['archive-' + x.id]" @click.stop="archiveItem(x)">完成</button>
               </div>

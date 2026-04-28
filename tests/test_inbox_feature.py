@@ -209,16 +209,20 @@ def test_inbox_frontend_contract_files_are_wired():
     assert "收集箱" in inbox_panel
     assert "class=\"inbox-page-composer\"" in inbox_panel
     assert "pageContent" in inbox_panel and "submitPageCollection" in inbox_panel and "toggleDomain" in inbox_panel
-    assert "domainOptions" in inbox_panel and "modeOptions" in inbox_panel and "sourceOptions" in inbox_panel
+    assert "domainOptions" in inbox_panel and "modeOptions" in inbox_panel
+    assert "sourceOptions" not in inbox_panel and "sourceType" not in inbox_panel and "素材类型" not in inbox_panel
+    assert "loadDomainOptions" in inbox_panel and "api.getKnowledgeTree()" in inbox_panel
+    assert "prompt:" in inbox_panel and "mode.prompt" in inbox_panel
     assert "buildPageDirection" in inbox_panel
     assert "class=\"inbox-overview-stats\"" not in inbox_panel
     assert "待处理素材" in inbox_panel and "历史素材" in inbox_panel
-    assert "class=\"inbox-material-card clickable\"" in inbox_panel
+    assert "inbox-material-card batchable clickable" in inbox_panel
     assert "class=\"inbox-material-line\"" in inbox_panel
     assert "v-html=\"icon('clip') + ' 待处理素材'\"" in inbox_panel
     assert "v-html=\"icon('refresh') + ' 历史素材'\"" in inbox_panel
     assert ".inbox-page-composer" in css and ".inbox-page-compose-grid" in css and ".inbox-compose-option-row" in css
     assert ".inbox-compose-domain-grid" in css and ".inbox-chip.active" in css
+    assert ".inbox-compose-source" not in css
     assert ".inbox-overview-stats" not in css
     assert ".inbox-material-card" in css and "background: var(--bg-1, rgba(255,255,255,0.03));" in css
     assert "margin-bottom: 4px;" in css

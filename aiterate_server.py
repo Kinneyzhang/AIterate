@@ -5,9 +5,14 @@ Port: 7070
 import asyncio
 import json
 import logging
+import re
 import secrets
+from html import unescape
 from pathlib import Path
 from typing import Annotated, Optional
+from urllib.parse import urlparse
+
+import aiohttp
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -341,6 +346,7 @@ class SettingsUpdate(BaseModel):
     llm:               Optional[LLMConfig] = None
     tavily_api_key:    Optional[str]       = None
     feynman_pass_score: Optional[int]      = None
+    inbox_sources:      Optional[dict]     = None
 
 
 class KnowledgeSelectionUpdate(BaseModel):
@@ -453,6 +459,7 @@ async def get_settings():
         "tavily_api_key_masked": _mask_key(tavily_raw),
         "has_tavily_api_key": bool(tavily_raw),
         "feynman_pass_score": settings.get("feynman_pass_score", 60),
+        "inbox_sources": settings.get("inbox_sources") or {"telegram_sources": []},
     }
 
 
@@ -503,6 +510,24 @@ async def update_settings(body: SettingsUpdate):
     if "feynman_pass_score" in updates:
         score = max(1, min(100, int(updates["feynman_pass_score"])))
         kwargs["settings__feynman_pass_score"] = score
+
+    if "inbox_sources" in updates:
+        raw_sources = updates.get("inbox_sources") or {}
+        raw_telegram = raw_sources.get("telegram_sources") or []
+        cleaned = []
+        if isinstance(raw_telegram, list):
+            for item in raw_telegram[:20]:
+                if isinstance(item, str):
+                    label = item.strip()
+                    source = item.strip()
+                elif isinstance(item, dict):
+                    label = str(item.get("label") or "").strip()
+                    source = str(item.get("source") or item.get("url") or "").strip()
+                else:
+                    continue
+                if source:
+                    cleaned.append({"label": label[:80] or source[:80], "source": source[:200]})
+        kwargs["settings__inbox_sources"] = {"telegram_sources": cleaned}
 
     if kwargs:
         db.upsert_profile(**kwargs)
@@ -556,9 +581,74 @@ class InboxCreate(BaseModel):
         if v is None:
             return v
         v = v.strip()
-        if len(v) > 200:
-            raise ValueError("方向描述过长，最多 200 字符")
+        if len(v) > 2000:
+            raise ValueError("方向描述过长，最多 2000 字符")
         return v or None
+
+
+class InboxUrlExtractRequest(BaseModel):
+    url: str
+
+    @field_validator("url")
+    @classmethod
+    def url_valid(cls, v):
+        v = (v or "").strip()
+        parsed = urlparse(v)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("请输入有效的 http/https 链接")
+        if len(v) > 1000:
+            raise ValueError("链接过长")
+        return v
+
+
+def _compact_text(text: str, limit: int = 9000) -> str:
+    text = re.sub(r"\s+", " ", text or "").strip()
+    return text[:limit].strip()
+
+
+def _extract_html_title(html: str) -> str:
+    m = re.search(r"<title[^>]*>(.*?)</title>", html or "", re.I | re.S)
+    if not m:
+        return ""
+    return _compact_text(unescape(re.sub(r"<[^>]+>", " ", m.group(1))), 120)
+
+
+def _html_to_readable_text(html: str) -> str:
+    html = re.sub(r"<script[\s\S]*?</script>", " ", html or "", flags=re.I)
+    html = re.sub(r"<style[\s\S]*?</style>", " ", html, flags=re.I)
+    html = re.sub(r"<(p|div|section|article|h[1-6]|li|br)[^>]*>", "\n", html, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = unescape(text)
+    lines = [_compact_text(line, 600) for line in text.splitlines()]
+    lines = [line for line in lines if len(line) >= 12]
+    return "\n".join(lines)[:9000].strip()
+
+
+@app.post("/api/inbox/extract-url", dependencies=[Depends(_require_admin)])
+async def extract_inbox_url(body: InboxUrlExtractRequest):
+    headers = {"User-Agent": "AIIterate/3.0 (+local learning inbox)"}
+    try:
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            async with session.get(body.url, allow_redirects=True) as resp:
+                if resp.status >= 400:
+                    raise HTTPException(400, f"链接抓取失败：HTTP {resp.status}")
+                content_type = resp.headers.get("content-type", "")
+                raw = await resp.text(errors="ignore")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(400, f"链接抓取失败：{type(exc).__name__}") from exc
+
+    if "html" in content_type.lower() or "<html" in raw[:1000].lower():
+        title = _extract_html_title(raw)
+        text = _html_to_readable_text(raw)
+    else:
+        title = ""
+        text = _compact_text(raw, 9000)
+    if not text:
+        raise HTTPException(400, "没有从链接中提取到可读文本")
+    return {"url": body.url, "title": title, "content": text}
 
 
 class InboxRegenerateRequest(BaseModel):
@@ -570,8 +660,8 @@ class InboxRegenerateRequest(BaseModel):
         if v is None:
             return v
         v = v.strip()
-        if len(v) > 200:
-            raise ValueError("方向描述过长，最多 200 字符")
+        if len(v) > 2000:
+            raise ValueError("方向描述过长，最多 2000 字符")
         return v or None
 
 

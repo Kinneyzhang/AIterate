@@ -88,9 +88,10 @@ export default defineComponent({
       roles[r.key] = reactive({ provider: '', base_url: '', api_key: '', model: '', api_key_placeholder: '继承基础配置' });
     }
 
-    // Tavily
+    // Tavily / Inbox sources
     const tavilyKey = ref('');
     const tavilyKeyPlaceholder = ref('tvly-...');
+    const telegramSourcesText = ref('');
 
     // DB
     const dbType = ref('postgresql');
@@ -122,6 +123,10 @@ export default defineComponent({
         if (llm.model) model.value = llm.model;
 
         tavilyKeyPlaceholder.value = s.has_tavily_api_key ? '已配置 (留空不修改)' : 'tvly-...';
+        const telegramSources = (s.inbox_sources?.telegram_sources || [])
+          .map(x => [x.label, x.source].filter(Boolean).join(' | '))
+          .join('\n');
+        telegramSourcesText.value = telegramSources;
 
         const ps = s.feynman_pass_score ?? 60;
         feynmanPassScore.value = ps;
@@ -215,6 +220,19 @@ export default defineComponent({
       return JSON.stringify(obj, Object.keys(obj).sort());
     }
 
+    function parseTelegramSources() {
+      return telegramSourcesText.value
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .slice(0, 20)
+        .map(line => {
+          const parts = line.split('|').map(x => x.trim()).filter(Boolean);
+          if (parts.length >= 2) return { label: parts[0], source: parts.slice(1).join(' | ') };
+          return { label: parts[0], source: parts[0] };
+        });
+    }
+
     // Save
     async function save() {
       saving.value = true;
@@ -241,6 +259,7 @@ export default defineComponent({
             roles: rolesPayload,
           },
           tavily_api_key: tavilyKey.value.trim(),
+          inbox_sources: { telegram_sources: parseTelegramSources() },
           feynman_pass_score: parseInt(feynmanPassScore.value) || 60,
         });
 
@@ -269,7 +288,7 @@ export default defineComponent({
       activeTab, switchTab, saving,
       provider, baseUrl, apiKey, apiKeyPlaceholder, model, modelHint,
       roles, ROLES, PROVIDER_OPTIONS, ROLE_PROVIDER_OPTIONS,
-      tavilyKey, tavilyKeyPlaceholder,
+      tavilyKey, tavilyKeyPlaceholder, telegramSourcesText,
       dbType, dbHost, dbPort, dbName, dbUser, dbPassword,
       dbSqlitePath, dbOracleHost, dbOraclePort, dbServiceName, dbOracleUser, dbOraclePassword,
       DB_TYPE_OPTIONS, feynmanPassScore, sliderDisplay,
@@ -290,7 +309,7 @@ export default defineComponent({
         <div class="settings-tabs">
           <button :class="['settings-tab', { active: activeTab === 'basic' }]" @click="switchTab('basic')">AI 基础</button>
           <button :class="['settings-tab', { active: activeTab === 'roles' }]" @click="switchTab('roles')">分功能模型</button>
-          <button :class="['settings-tab', { active: activeTab === 'tavily' }]" @click="switchTab('tavily')">联网搜索</button>
+          <button :class="['settings-tab', { active: activeTab === 'tavily' }]" @click="switchTab('tavily')">搜索/来源</button>
           <button :class="['settings-tab', { active: activeTab === 'database' }]" @click="switchTab('database')">数据库</button>
           <button :class="['settings-tab', { active: activeTab === 'learn' }]" @click="switchTab('learn')">学习</button>
         </div>
@@ -359,6 +378,11 @@ export default defineComponent({
               <a class="settings-link" href="https://tavily.com/" target="_blank" rel="noopener">前往 tavily.com 免费申请 ↗</a>
               （每月 1000 次免费）
             </p>
+            <div class="settings-row" style="margin-top:18px;">
+              <div class="settings-label">Telegram 素材来源</div>
+              <textarea v-model="telegramSourcesText" class="settings-input" rows="5" placeholder="每行一个来源：频道名 | https://t.me/example 或 @channel&#10;以后可在收集箱里按这些来源抓取消息。"></textarea>
+              <div class="settings-hint">这里只保存来源清单；真正拉取频道消息需要后续接入 Telegram 客户端凭证/机器人权限，避免在前端暴露账号密钥。</div>
+            </div>
           </div>
 
           <!-- Tab4: 数据库 -->
