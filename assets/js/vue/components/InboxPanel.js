@@ -34,36 +34,42 @@ export default defineComponent({
       {
         value: 'questions',
         label: '生成问题',
+        icon: 'search',
         hint: '转成可学习的问题',
         prompt: '请把素材转化为可进入学习流程的研究问题，问题要具体、可回答、能引出核心概念。',
       },
       {
         value: 'counter',
         label: '找反例',
+        icon: 'warn',
         hint: '暴露边界和漏洞',
         prompt: '请优先从反例、边界条件、失败场景、隐藏假设入手生成问题，帮助我避免过早相信这个观点。',
       },
       {
         value: 'summary',
         label: '提炼要点',
+        icon: 'clip',
         hint: '压缩成结构化笔记',
         prompt: '请先提炼素材中的概念、论点、证据和疑问，再生成适合继续学习或写作的候选问题。',
       },
       {
         value: 'action',
         label: '行动实验',
+        icon: 'rocket',
         hint: '变成下一步实践',
         prompt: '请把素材转化为可执行的小实验、验证步骤或下一步行动，并生成围绕行动可行性的候选问题。',
       },
       {
         value: 'writing',
         label: '写作素材',
+        icon: 'edit',
         hint: '变成观点和例子',
         prompt: '请把素材拆成可写作的观点、例子、金句、论证路径，并生成能扩展文章的候选问题。',
       },
       {
         value: 'feynman',
         label: '费曼检验',
+        icon: 'flask',
         hint: '检查我是否真懂',
         prompt: '请围绕素材生成能检验理解的费曼式问题，偏向解释、举例、类比和反驳。',
       },
@@ -91,6 +97,24 @@ export default defineComponent({
         ignored: '已忽略',
         error: '失败',
       }[status] || status || '未知';
+    }
+
+    function summarizeInboxTitle(content) {
+      const text = String(content || '').trim();
+      if (!text) return '未命名素材';
+      const first = text.split(/\n+/).map(x => x.trim()).filter(Boolean)[0] || text;
+      const cleaned = first
+        .replace(/^标题[:：]\s*/i, '')
+        .replace(/^来源[:：]\s*/i, '')
+        .replace(/https?:\/\/\S+/g, '')
+        .replace(/^[#>*\-\s]+/, '')
+        .trim();
+      const title = (cleaned || text).split(/[。！？!?；;]/)[0].trim();
+      return (title || '未命名素材').slice(0, 32);
+    }
+
+    function displayInboxTitle(x) {
+      return (x?.title && String(x.title).trim()) || summarizeInboxTitle(x?.content);
     }
 
     function depthLabel(depth) {
@@ -370,6 +394,41 @@ export default defineComponent({
       }
     }
 
+    async function deleteHistoryItem(target) {
+      if (!target?.id || actionBusy.value[`delete-${target.id}`]) return;
+      actionBusy.value[`delete-${target.id}`] = true;
+      try {
+        await api.deleteInboxItem(target.id);
+        if (item.value?.id === target.id) router.push({ name: 'inbox' });
+        await loadCurrent();
+        emit('refresh');
+        setNotice('已删除这条历史素材。');
+      } catch (err) {
+        setNotice(`删除失败：${err.message}`, 'error');
+      } finally {
+        actionBusy.value[`delete-${target.id}`] = false;
+      }
+    }
+
+    async function clearHistory() {
+      if (!completedItems.value.length || actionBusy.value.clearHistory) return;
+      if (!window.confirm(`确定清空 ${completedItems.value.length} 条历史素材？`)) return;
+      actionBusy.value.clearHistory = true;
+      try {
+        const result = await api.clearInboxHistory();
+        if (item.value && ['partially_used', 'archived', 'ignored'].includes(item.value.status)) {
+          router.push({ name: 'inbox' });
+        }
+        await loadCurrent();
+        emit('refresh');
+        setNotice(`已清空 ${result.deleted || 0} 条历史素材。`);
+      } catch (err) {
+        setNotice(`清空历史失败：${err.message}`, 'error');
+      } finally {
+        actionBusy.value.clearHistory = false;
+      }
+    }
+
     watch(() => route.fullPath, loadCurrent);
     onMounted(() => {
       loadDomainOptions();
@@ -384,7 +443,7 @@ export default defineComponent({
       sourceUrl, urlFetching, voiceListening, imagePreview, imageName, domainOptions, modeOptions,
       statusLabel, depthLabel, toggleDomain, toggleBatchItem, clearBatchSelection, archiveSelectedBatch, mergeSelectedBatch, buildPageDirection, loadDomainOptions,
       importUrlToComposer, startVoiceInput, handleImageInput, handlePagePaste, submitPageCollection, handlePageKeydown,
-      openItem, regenerate, selectQuestion, ignoreQuestion, archiveItem,
+      openItem, regenerate, selectQuestion, ignoreQuestion, archiveItem, deleteHistoryItem, clearHistory, displayInboxTitle,
     };
   },
 
@@ -405,10 +464,10 @@ export default defineComponent({
             <div class="inbox-source-tools">
               <div class="inbox-url-import">
                 <input type="url" v-model="sourceUrl" placeholder="粘贴文章/网页链接，先抓正文再加工…" @keydown.enter.prevent="importUrlToComposer" />
-                <button type="button" class="btn" :disabled="!sourceUrl.trim() || urlFetching" @click="importUrlToComposer">{{ urlFetching ? '抓取中' : '抓取链接' }}</button>
+                <button type="button" class="btn inbox-source-tool-btn" :disabled="!sourceUrl.trim() || urlFetching" @click="importUrlToComposer"><span v-html="icon('globe')"></span>{{ urlFetching ? '抓取中' : '抓取链接' }}</button>
               </div>
-              <button type="button" class="btn inbox-source-tool-btn" :class="{ active: voiceListening }" @click="startVoiceInput">{{ voiceListening ? '正在听…' : '语音输入' }}</button>
-              <label class="btn inbox-source-tool-btn">贴图片
+              <button type="button" class="btn inbox-source-tool-btn" :class="{ active: voiceListening }" @click="startVoiceInput"><span v-html="icon('mic')"></span>{{ voiceListening ? '正在听…' : '语音输入' }}</button>
+              <label class="btn inbox-source-tool-btn"><span v-html="icon('image')"></span>贴图片
                 <input type="file" accept="image/*" class="visually-hidden" @change="handleImageInput" />
               </label>
             </div>
@@ -430,7 +489,7 @@ export default defineComponent({
                   <span class="inbox-compose-label">处理方式</span>
                   <div class="inbox-compose-mode-list">
                     <button v-for="opt in modeOptions" :key="opt.value" type="button" :class="['btn', 'inbox-mode-chip', { active: collectMode === opt.value }]" @click="collectMode = opt.value">
-                      <strong>{{ opt.label }}</strong><small>{{ opt.hint }}</small>
+                      <span class="inbox-mode-main"><span v-html="icon(opt.icon)"></span><strong>{{ opt.label }}</strong></span><small>{{ opt.hint }}</small>
                     </button>
                   </div>
                 </div>
@@ -463,16 +522,15 @@ export default defineComponent({
                 <button v-if="selectedBatchItems.length" type="button" class="btn btn-ghost" @click="clearBatchSelection">清空</button>
               </div>
             </div>
-            <article v-for="x in pendingItems" :key="'pending-'+x.id" class="inbox-material-card batchable clickable" tabindex="0" @click="openItem(x)" @keydown.enter.prevent="openItem(x)" @keydown.space.prevent="openItem(x)">
-              <input type="checkbox" class="inbox-batch-check" :checked="selectedBatchIds.includes(x.id)" @click.stop.prevent="toggleBatchItem(x.id)" aria-label="选择素材" />
+            <article v-for="x in pendingItems" :key="'pending-'+x.id" class="inbox-material-card batchable">
+              <input type="checkbox" class="inbox-batch-check" v-model="selectedBatchIds" :value="x.id" @click.stop aria-label="选择素材" />
               <div class="inbox-material-main">
                 <div class="inbox-material-line">
-                  <span class="inbox-material-title">{{ x.content }}</span>
+                  <button type="button" class="inbox-material-title inbox-material-title-button" @click.stop="openItem(x)">{{ displayInboxTitle(x) }}</button>
                   <span :class="['inbox-list-status', 'is-' + x.status]">{{ statusLabel(x.status) }} · {{ x.question_count || 0 }} 个问题</span>
                 </div>
               </div>
               <div class="inbox-material-actions">
-                <button type="button" class="btn btn-ghost inbox-batch-toggle" @click.stop="toggleBatchItem(x.id)">{{ selectedBatchIds.includes(x.id) ? '已选' : '选择' }}</button>
                 <button type="button" class="btn btn-primary" @click.stop="openItem(x)">处理</button>
                 <button type="button" class="btn btn-ghost" :disabled="actionBusy['archive-' + x.id]" @click.stop="archiveItem(x)">完成</button>
               </div>
@@ -484,15 +542,19 @@ export default defineComponent({
             <div class="inbox-section-head">
               <div class="home-section-title" v-html="icon('refresh') + ' 历史素材'"></div>
               <span>共 {{ completedItems.length }} 条</span>
+              <button v-if="completedItems.length" type="button" class="btn btn-ghost inbox-clear-history" :disabled="actionBusy.clearHistory" @click="clearHistory">清空历史</button>
             </div>
-            <article v-for="x in completedItems" :key="'done-'+x.id" class="inbox-material-card done clickable" tabindex="0" @click="openItem(x)" @keydown.enter.prevent="openItem(x)" @keydown.space.prevent="openItem(x)">
+            <article v-for="x in completedItems" :key="'done-'+x.id" class="inbox-material-card done">
               <div class="inbox-material-main">
                 <div class="inbox-material-line">
-                  <span class="inbox-material-title">{{ x.content }}</span>
+                  <button type="button" class="inbox-material-title inbox-material-title-button" @click.stop="openItem(x)">{{ displayInboxTitle(x) }}</button>
                   <span :class="['inbox-list-status', 'is-' + x.status]">{{ statusLabel(x.status) }} · {{ x.question_count || 0 }} 个问题</span>
                 </div>
               </div>
-              <button type="button" class="btn btn-ghost" @click.stop="openItem(x)">查看</button>
+              <div class="inbox-material-actions">
+                <button type="button" class="btn btn-ghost" @click.stop="openItem(x)">查看</button>
+                <button type="button" class="btn btn-ghost" :disabled="actionBusy['delete-' + x.id]" @click.stop="deleteHistoryItem(x)">删除</button>
+              </div>
             </article>
             <div v-if="!completedItems.length" class="inbox-overview-empty">暂无历史素材。</div>
           </section>
@@ -504,7 +566,7 @@ export default defineComponent({
                 <button type="button" class="inbox-breadcrumb-link" @click="router.push({ name: 'inbox' })">收集箱</button>
                 <span>/ {{ statusLabel(item.status) }}</span>
               </div>
-              <h2>{{ item.content }}</h2>
+              <h2>{{ displayInboxTitle(item) }}</h2>
             </div>
             <button type="button" class="btn btn-ghost" @click="archiveItem()">完成</button>
           </header>
@@ -554,7 +616,7 @@ export default defineComponent({
           <button v-for="x in pendingItems" :key="x.id" type="button"
                   :class="['inbox-list-item', { active: item && item.id === x.id }]"
                   @click="openItem(x)">
-            <span class="inbox-list-title">{{ x.content }}</span>
+            <span class="inbox-list-title">{{ displayInboxTitle(x) }}</span>
             <span :class="['inbox-list-status', 'is-' + x.status]">{{ statusLabel(x.status) }} · {{ x.question_count || 0 }}</span>
           </button>
         </template>
@@ -562,9 +624,9 @@ export default defineComponent({
           <div class="inbox-panel-title">处理规则</div>
           <div class="inbox-panel-subtitle">收集箱不是仓库，是素材加工台</div>
           <div class="inbox-rail-note">
-            <p><strong>处理</strong>：打开候选问题，选择一个进入学习。</p>
-            <p><strong>完成</strong>：这条素材不再需要推进，移到已处理。</p>
-            <p><strong>已处理</strong>：留在页面下方备查，不占主待办。</p>
+            <p><strong>处理</strong><span>打开候选问题，选择一个进入学习。</span></p>
+            <p><strong>完成</strong><span>这条素材不再需要推进，移到已处理。</span></p>
+            <p><strong>已处理</strong><span>留在页面下方备查，不占主待办。</span></p>
           </div>
         </template>
       </aside>

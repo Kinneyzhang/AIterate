@@ -5,6 +5,7 @@ Config file: config/db.json
 """
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -446,6 +447,7 @@ def init_db():
             conn.execute(text(f"""
             CREATE TABLE IF NOT EXISTS inbox_items (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                title       TEXT,
                 content     TEXT    NOT NULL,
                 source_type TEXT    NOT NULL DEFAULT 'text',
                 status      TEXT    NOT NULL DEFAULT 'pending',
@@ -472,6 +474,7 @@ def init_db():
             conn.execute(text(f"""
             CREATE TABLE IF NOT EXISTS inbox_items (
                 id          SERIAL PRIMARY KEY,
+                title       TEXT,
                 content     TEXT NOT NULL,
                 source_type TEXT NOT NULL DEFAULT 'text',
                 status      TEXT NOT NULL DEFAULT 'pending',
@@ -495,6 +498,7 @@ def init_db():
                 selected_at      {ts}
             )"""))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_items_status_created ON inbox_items(status, created_at DESC)"))
+        _ensure_column(conn, "inbox_items", "title", "TEXT")
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_questions_item ON inbox_questions(inbox_item_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_questions_status ON inbox_questions(status)"))
 
@@ -765,24 +769,46 @@ def _normalize_inbox_question(row: dict | None) -> dict | None:
     return row
 
 
+def _derive_inbox_title(content: str, limit: int = 32) -> str:
+    """Create a compact display title for inbox material without calling AI."""
+    text = (content or "").strip()
+    if not text:
+        return "未命名素材"
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    first = lines[0] if lines else text
+    for prefix in ("标题：", "标题:", "Title:", "title:", "来源：", "来源:"):
+        if first.startswith(prefix):
+            first = first[len(prefix):].strip()
+            break
+    first = re.sub(r"https?://\S+", "", first).strip() or (lines[1] if len(lines) > 1 else text)
+    first = re.sub(r"^[#>*\-\s]+", "", first).strip()
+    first = re.sub(r"\s+", " ", first)
+    parts = re.split(r"[。！？!?；;\n]", first)
+    title = (parts[0] if parts else first).strip(" \t\"'“”‘’《》")
+    if not title:
+        title = re.sub(r"\s+", " ", text).strip()
+    return title[:limit] or "未命名素材"
+
+
 def create_inbox_item(content: str, source_type: str = "text") -> int:
     content = (content or "").strip()
     source_type = (source_type or "text").strip() or "text"
+    title = _derive_inbox_title(content)
     if _is_sqlite():
         return _insert_returning_id(
-            """INSERT INTO inbox_items (content, source_type, status, created_at, updated_at)
-               VALUES (:content, :source_type, 'pending', datetime('now'), datetime('now')) RETURNING id""",
-            {"content": content, "source_type": source_type},
+            """INSERT INTO inbox_items (title, content, source_type, status, created_at, updated_at)
+               VALUES (:title, :content, :source_type, 'pending', datetime('now'), datetime('now')) RETURNING id""",
+            {"title": title, "content": content, "source_type": source_type},
         )
     return _insert_returning_id(
-        """INSERT INTO inbox_items (content, source_type, status)
-           VALUES (:content, :source_type, 'pending') RETURNING id""",
-        {"content": content, "source_type": source_type},
+        """INSERT INTO inbox_items (title, content, source_type, status)
+           VALUES (:title, :content, :source_type, 'pending') RETURNING id""",
+        {"title": title, "content": content, "source_type": source_type},
     )
 
 
 def update_inbox_item(item_id: int, **fields) -> dict | None:
-    allowed = {"content", "source_type", "status", "error_msg"}
+    allowed = {"title", "content", "source_type", "status", "error_msg"}
     parts, params = [], {"id": item_id}
     for k, v in fields.items():
         if k not in allowed:
@@ -914,6 +940,22 @@ def archive_inbox_item(item_id: int) -> bool:
         return False
     update_inbox_item(item_id, status="archived")
     return True
+
+
+def delete_inbox_item(item_id: int) -> bool:
+    row = get_inbox_item(item_id)
+    if not row:
+        return False
+    _exec("DELETE FROM inbox_items WHERE id = :id", {"id": item_id})
+    return True
+
+
+def clear_inbox_history() -> int:
+    result = _exec(
+        """DELETE FROM inbox_items
+           WHERE status IN ('partially_used', 'archived', 'ignored')"""
+    )
+    return int(result.rowcount or 0)
 
 
 # ── Sessions ───────────────────────────────────────────────────────────────────

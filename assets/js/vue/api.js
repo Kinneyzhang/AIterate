@@ -231,6 +231,8 @@ export const api = {
     body: JSON.stringify({ direction }),
   }),
   archiveInboxItem: (id) => request(`/api/inbox/${id}/archive`, { method: 'POST' }),
+  deleteInboxItem: (id) => request(`/api/inbox/${id}`, { method: 'DELETE' }),
+  clearInboxHistory: () => request('/api/inbox/history', { method: 'DELETE' }),
   selectInboxQuestion: async (id, payload = {}) => {
     invalidateWorkspace();
     invalidateDerived();

@@ -678,11 +678,12 @@ async def list_inbox(limit: int = 50):
 @app.post("/api/inbox", dependencies=[Depends(_require_admin)])
 async def create_inbox_item(body: InboxCreate):
     item_id = db.create_inbox_item(body.content, body.source_type)
+    item = db.get_inbox_item(item_id) or {"id": item_id, "title": body.content[:32]}
     db.create_job(
         job_type="generate_inbox_questions",
         payload={"inbox_item_id": item_id, "content": body.content, "direction": body.direction, "replace": True},
     )
-    return {"id": item_id, "status": "pending"}
+    return {"id": item_id, "title": item.get("title"), "status": "pending"}
 
 
 @app.get("/api/inbox/{item_id}", dependencies=[Depends(_require_admin)])
@@ -716,6 +717,19 @@ async def archive_inbox(item_id: int):
     if not db.archive_inbox_item(item_id):
         raise HTTPException(404, "Inbox item not found")
     return {"ok": True, "status": "archived"}
+
+
+@app.delete("/api/inbox/history", dependencies=[Depends(_require_admin)])
+async def clear_inbox_history():
+    deleted = db.clear_inbox_history()
+    return {"ok": True, "deleted": deleted}
+
+
+@app.delete("/api/inbox/{item_id}", dependencies=[Depends(_require_admin)])
+async def delete_inbox_item(item_id: int):
+    if not db.delete_inbox_item(item_id):
+        raise HTTPException(404, "Inbox item not found")
+    return {"ok": True, "deleted_id": item_id}
 
 
 @app.post("/api/inbox/questions/{question_id}/select", dependencies=[Depends(_require_admin)])

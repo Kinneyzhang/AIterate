@@ -153,6 +153,43 @@ def test_inbox_regenerate_replaces_candidates_with_direction(tmp_path, monkeypat
     assert all("更偏技术一点" in q["question"] for q in refreshed)
 
 
+def test_inbox_item_has_short_title_and_history_delete_contract(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch)
+
+    long_content = "标题：大型语言模型在个人学习系统中的反馈闭环设计\n\n这是一段很长的素材正文，包含许多细节，不应该整段作为列表标题展示。"
+    created = client.post("/api/inbox", headers=AUTH_HEADERS, json={"content": long_content})
+    assert created.status_code == 200, created.text
+    item_id = created.json()["id"]
+    assert created.json()["title"] == "大型语言模型在个人学习系统中的反馈闭环设计"[:32]
+
+    listed = client.get("/api/inbox", headers=AUTH_HEADERS).json()
+    row = next(x for x in listed if x["id"] == item_id)
+    assert row["title"]
+    assert row["title"] != row["content"]
+    assert len(row["title"]) <= 32
+
+    archived = client.post(f"/api/inbox/{item_id}/archive", headers=AUTH_HEADERS)
+    assert archived.status_code == 200, archived.text
+    deleted = client.delete(f"/api/inbox/{item_id}", headers=AUTH_HEADERS)
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {"ok": True, "deleted_id": item_id}
+    assert client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).status_code == 404
+
+    keep = client.post("/api/inbox", headers=AUTH_HEADERS, json={"content": "还没处理的素材"}).json()["id"]
+    old1 = client.post("/api/inbox", headers=AUTH_HEADERS, json={"content": "历史素材 A"}).json()["id"]
+    old2 = client.post("/api/inbox", headers=AUTH_HEADERS, json={"content": "历史素材 B"}).json()["id"]
+    client.post(f"/api/inbox/{old1}/archive", headers=AUTH_HEADERS)
+    client.post(f"/api/inbox/{old2}/archive", headers=AUTH_HEADERS)
+
+    cleared = client.delete("/api/inbox/history", headers=AUTH_HEADERS)
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["deleted"] == 2
+    remaining = client.get("/api/inbox", headers=AUTH_HEADERS).json()
+    remaining_ids = {x["id"] for x in remaining}
+    assert keep in remaining_ids
+    assert old1 not in remaining_ids and old2 not in remaining_ids
+
+
 def test_inbox_frontend_contract_files_are_wired():
     root = Path(__file__).resolve().parents[1]
     main = (root / "assets/js/vue/main.js").read_text(encoding="utf-8")
@@ -172,6 +209,7 @@ def test_inbox_frontend_contract_files_are_wired():
     assert sidebar.index('<InboxComposer />') < sidebar.index('class="sidebar-head"') < sidebar.index('class="session-list"')
     assert 'class="inbox-recent-list"' not in (root / "assets/js/vue/components/InboxComposer.js").read_text(encoding="utf-8")
     assert "createInboxItem" in api and "selectInboxQuestion" in api
+    assert "deleteInboxItem" in api and "clearInboxHistory" in api
     assert "createInboxItem: async (content, sourceType = 'text', options = {})" in api
     assert "direction: options.direction || null" in api
     assert ".inbox-composer" in css and ".inbox-panel" in css
@@ -186,6 +224,7 @@ def test_inbox_frontend_contract_files_are_wired():
     assert ":not(.inbox-list-item)" in night
     assert ":not(.inbox-overview-item)" in night
     assert ":not(.inbox-breadcrumb-link)" in night
+    assert ":not(.inbox-material-title-button)" in night
     assert ".inbox-label" in css and "background: transparent" in css
     assert ".inbox-label { cursor: default; }" in css
     assert ".inbox-list-item.active" in css and "background: var(--bg-2)" in css
@@ -216,7 +255,9 @@ def test_inbox_frontend_contract_files_are_wired():
     assert "buildPageDirection" in inbox_panel
     assert "class=\"inbox-overview-stats\"" not in inbox_panel
     assert "待处理素材" in inbox_panel and "历史素材" in inbox_panel
-    assert "inbox-material-card batchable clickable" in inbox_panel
+    assert "displayInboxTitle" in inbox_panel and "deleteHistoryItem" in inbox_panel and "clearHistory" in inbox_panel
+    assert "inbox-material-card batchable" in inbox_panel
+    assert "inbox-material-card batchable clickable" not in inbox_panel
     assert "class=\"inbox-material-line\"" in inbox_panel
     assert "v-html=\"icon('clip') + ' 待处理素材'\"" in inbox_panel
     assert "v-html=\"icon('refresh') + ' 历史素材'\"" in inbox_panel
@@ -231,9 +272,29 @@ def test_inbox_frontend_contract_files_are_wired():
     assert ".inbox-material-line" in css and "display: flex;" in css and "gap: 8px;" in css
     assert ".inbox-material-line .inbox-list-status" in css and "flex-shrink: 0;" in css
     assert "justify-self: end;" not in css and "text-align: right;" not in css
-    assert "@click=\"openItem(x)\"" in inbox_panel and "@click.stop=\"archiveItem(x)\"" in inbox_panel and ">完成</button>" in inbox_panel
+    assert "@click.stop=\"archiveItem(x)\"" in inbox_panel and ">完成</button>" in inbox_panel
+    assert "class=\"inbox-material-card batchable clickable\"" not in inbox_panel
+    assert "class=\"inbox-material-card done clickable\"" not in inbox_panel
+    assert "@keydown.enter.prevent=\"openItem(x)\"" not in inbox_panel
+    assert "inbox-material-title-button" in inbox_panel
+    assert "@click.stop=\"openItem(x)\"" in inbox_panel
+    assert "class=\"inbox-batch-check\"" in inbox_panel
+    assert "v-model=\"selectedBatchIds\"" in inbox_panel and ":value=\"x.id\"" in inbox_panel
+    assert "inbox-batch-toggle" not in inbox_panel and ">选择</button>" not in inbox_panel and ">已选</button>" not in inbox_panel
     assert "const isInboxRoute = computed(() => route.name === 'inbox' || route.name === 'inbox-item')" in inbox_panel
     assert "const itemId = computed(() => route.name === 'inbox-item'" in inbox_panel
     assert "if (!isInboxRoute.value) return;" in inbox_panel
     assert "WHERE i.status != 'archived'" not in (root / "aiterate_db.py").read_text(encoding="utf-8")
     assert "font-size: 15px;" in css and "font-size: 13px;" in css
+    assert ".inbox-url-import input" in css and "font-size: 13px;" in css
+    assert ".inbox-url-import input::placeholder" in css and "font-size: inherit;" in css
+    assert ".inbox-page-input" in css and "font-size: 13px;" in css
+    assert ".inbox-material-card.selected" not in css
+    assert ":class=\"{ selected: selectedBatchIds.includes(x.id) }\"" not in inbox_panel
+    assert "box-shadow: inset 0 0 0 2px var(--accent" not in css
+    assert ".inbox-batch-toggle.is-selected" not in css
+    assert "icon('globe')" in inbox_panel and "icon('mic')" in inbox_panel and "icon('image')" in inbox_panel
+    assert "mic:" in (root / "assets/js/vue/icons.js").read_text(encoding="utf-8")
+    assert "image:" in (root / "assets/js/vue/icons.js").read_text(encoding="utf-8")
+    assert ".inbox-source-tool-btn svg" in css and "gap: 6px;" in css
+    assert "@media (max-width: 620px)" in css and ".inbox-page-compose-grid" in css and "grid-template-columns: 1fr;" in css
