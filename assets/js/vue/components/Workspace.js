@@ -65,6 +65,37 @@ export default defineComponent({
       }
     });
 
+    // #1: knowledge node auto-suggest
+    const nodeSuggestion = ref(null);
+    const nodeSuggestionLoading = ref(false);
+    watch(() => store.workspace, async (ws) => {
+      if (!ws || !ws.session) { nodeSuggestion.value = null; return; }
+      if (ws.knowledge_node_id) { nodeSuggestion.value = null; return; }
+      if (nodeSuggestionLoading.value || nodeSuggestion.value) return;
+      const sid = ws.session.id;
+      if (!sid) return;
+      nodeSuggestionLoading.value = true;
+      try {
+        const data = await api.suggestKnowledgeNodes(sid);
+        if (data?.suggestions?.length) {
+          nodeSuggestion.value = data.suggestions[0];
+        }
+      } catch {} finally {
+        nodeSuggestionLoading.value = false;
+      }
+    });
+
+    async function bindSuggestedNode() {
+      if (!nodeSuggestion.value) return;
+      const sid = store.selectedSessionId;
+      if (!sid) return;
+      try {
+        await api.bindKnowledgeNode(sid, nodeSuggestion.value.id);
+        nodeSuggestion.value = null;
+        emit('refresh');
+      } catch (err) { setNotice(`绑定失败：${err.message}`, 'error'); }
+    }
+
     const canEditDeepen = computed(() => {
       const s = currentSession.value?.status;
       // Phase 5: whitelist — only allow deepen in these states
@@ -99,6 +130,11 @@ export default defineComponent({
         if (e?.eval) map[e.id] = e.eval;
       }
       return map;
+    });
+
+    // #3: 学习状态且未写过理解 → 先隐藏 AI 回答，让用户写
+    const hasUserTake = computed(() => {
+      return currentRounds.value.some(r => r.type === 'take');
     });
 
     // Review schedule for completed sessions
@@ -158,6 +194,8 @@ export default defineComponent({
     }
 
     // Feynman
+    const correctionPlan = ref(null);   // #8: 费曼失败修正计划
+
     async function startFeynman() {
       const sid = store.selectedSessionId;
       if (!sid) return;
@@ -184,8 +222,9 @@ export default defineComponent({
       try {
         const data = await api.completeFeynman(sid, gid, answers);
         feynmanAnswers.value = {};
+        correctionPlan.value = data.correction_plan || null;
         emit('refresh');
-        setNotice(data.passed ? '费曼检验通过，学习完成！\uD83C\uDF89' : '费曼未通过，已退回深化阶段。');
+        setNotice(data.passed ? '费曼检验通过，学习完成！\uD83C\uDF89' : '费曼未通过——下方有具体修正计划。');
       } catch (err) {
         setNotice(`提交失败：${err.message}`, 'error');
       } finally {
@@ -219,10 +258,30 @@ export default defineComponent({
       router.push({ name: 'knowledge-tree' });
     }
 
+    // #5: 监听 gap → 追问预填
+    watch(() => store.prefillQuestion, (val) => {
+      if (val) {
+        questionInput.value = val;
+        store.prefillQuestion = '';
+      }
+    });
+
+    // #3: 跳过写理解，直接查看 AI 回答
+    const writeFirstSkipped = ref(false);
+    function skipWriteFirst() {
+      writeFirstSkipped.value = true;
+    }
+    const shouldWriteFirst = computed(() => {
+      return currentSession.value?.status === 'learning' && !hasUserTake.value && !writeFirstSkipped.value;
+    });
+
     return {
       activeTab, takeInput, questionInput, feynmanAnswers, submitting,
       canDeepen, canEditDeepen, canReview, currentSession, currentRounds, feynmanGroup,
       unresolvedGaps, reviewReport, knowledgeNode, doneFeynmanGroups, takeEvals,
+      shouldWriteFirst, skipWriteFirst,
+      correctionPlan,
+      nodeSuggestion, nodeSuggestionLoading, bindSuggestedNode,
       submitDeepAction, startFeynman, submitFeynman, switchTab,
       reviewSchedule, completeReviewDirect,
       reviewContents, reviewSubmitting, reviewResults, submitReviewReExplain,
@@ -268,7 +327,23 @@ export default defineComponent({
             </span>
           </div>
           <div v-else class="knowledge-node-bar" style="opacity:0.65; cursor:pointer;" @click="openKnowledgeTree" v-html="icons.tag + ' 未绑定知识节点 — 点击关联'"></div>
-          <div v-if="currentSession.material" class="panel-section">
+          <!-- #1: knowledge node auto-suggest -->
+          <div v-if="nodeSuggestion && !knowledgeNode" class="knowledge-node-bar suggest-bar" style="cursor:default;">
+            <span v-html="icons.tag + ' 系统推荐：' + nodeSuggestion.title"></span>
+            <button class="btn btn-sm" @click="bindSuggestedNode" :disabled="nodeSuggestionLoading">确认绑定</button>
+            <button class="btn btn-sm btn-text" @click="nodeSuggestion = null">忽略</button>
+          </div>
+          <!-- #3: 先写理解 — 不看 AI 回答，靠自己的理解 -->
+          <div v-if="shouldWriteFirst" class="panel-section write-first-section">
+            <div class="ps-label" v-html="icons.edit + ' 先写你的理解（可选）'"></div>
+            <div class="ps-hint muted small mb8">用自己的话解释你对这个问题的理解，AI 会对比并指出差距。也可以直接跳过。</div>
+            <textarea id="firstTakeInput" v-model="takeInput" rows="6" placeholder="你对这个问题的理解是什么？靠自己的知识来回答…"></textarea>
+            <div class="write-first-actions">
+              <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('take')">提交理解，查看 AI 对比</button>
+              <button class="btn btn-text" @click="skipWriteFirst">跳过，直接看 AI 回答</button>
+            </div>
+          </div>
+          <div v-else-if="currentSession.material" class="panel-section">
             <div class="ps-label">AI 回答</div>
             <div class="ps-body md-body" v-html="renderMarkdown(currentSession.material)"></div>
           </div>
@@ -434,6 +509,30 @@ export default defineComponent({
               </div>
             </div>
           </template>
+
+          <!-- #8: 费曼失败修正计划 -->
+          <div v-if="correctionPlan && currentSession.status !== 'completed'" class="correction-plan-section mt16">
+            <div class="ps-label" v-html="icons.warn + ' 修正计划'"></div>
+            <div v-if="correctionPlan.weak_concepts?.length" class="cp-block">
+              <div class="cp-subtitle">薄弱概念</div>
+              <ul class="cp-list weak"><li v-for="c in correctionPlan.weak_concepts">{{ c }}</li></ul>
+            </div>
+            <div v-if="correctionPlan.failed_items?.length" class="cp-block">
+              <div class="cp-subtitle">失败题目</div>
+              <div v-for="(fi, i) in correctionPlan.failed_items" :key="i" class="cp-failed-item">
+                <div class="cp-failed-q">{{ fi.question }}</div>
+                <span :class="['item-score', fi.score >= 60 ? 'pass' : 'fail']">{{ fi.score }}分 — {{ fi.comment }}</span>
+              </div>
+            </div>
+            <div v-if="correctionPlan.recommended_actions?.length" class="cp-block">
+              <div class="cp-subtitle">建议动作</div>
+              <ul class="cp-list"><li v-for="a in correctionPlan.recommended_actions">{{ a }}</li></ul>
+            </div>
+            <div v-if="correctionPlan.next_feynman_prerequisites?.length" class="cp-block">
+              <div class="cp-subtitle">下次费曼前置条件</div>
+              <ul class="cp-list"><li v-for="p in correctionPlan.next_feynman_prerequisites">✅ {{ p }}</li></ul>
+            </div>
+          </div>
         </div>
       </template>
     </div>

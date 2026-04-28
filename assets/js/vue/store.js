@@ -28,6 +28,7 @@ export const store = reactive({
   // polling / live refresh
   pollTimer: null,
   runtimeTick: 0,
+  prefillQuestion: '',   // #5: gap → 追问 预填内容
 });
 
 // computed

@@ -778,7 +778,18 @@ async def ignore_inbox_question(question_id: int):
 
 @app.get("/api/sessions", dependencies=[Depends(_require_admin)])
 async def get_sessions(limit: int = 200):
-    return db.get_recent_sessions(limit=limit)
+    sessions = db.get_recent_sessions(limit=limit)
+    # #4: 为每个 session 标记是否有逾期复习
+    try:
+        overdue_ids = set(r["session_id"] for r in db._fetch_all(
+            "SELECT DISTINCT session_id FROM review_schedule "
+            "WHERE status = 'pending' AND review_date <= CURRENT_DATE"
+        ))
+        for s in sessions:
+            s["has_overdue_review"] = s.get("status") != "completed" and s["id"] in overdue_ids
+    except Exception:
+        pass  # 不阻塞列表加载
+    return sessions
 
 
 class SessionCreate(BaseModel):

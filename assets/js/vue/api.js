@@ -257,4 +257,10 @@ export const api = {
     return request(`/api/review/${rid}/submit`, { method: 'POST', body: JSON.stringify({ content }) });
   },
   saveDbConfig: (payload) => request('/api/db-config', { method: 'PUT', body: JSON.stringify(payload) }),
+  // #1: knowledge node auto-suggest
+  suggestKnowledgeNodes: (sid) => request(`/api/sessions/${sid}/suggest-knowledge-nodes`, { method: 'POST' }),
+  bindKnowledgeNode: async (sid, nodeId) => {
+    invalidateWorkspace(sid);
+    return request(`/api/sessions/${sid}/knowledge-node`, { method: 'PATCH', body: JSON.stringify({ knowledge_node_id: nodeId }) });
+  },
 };

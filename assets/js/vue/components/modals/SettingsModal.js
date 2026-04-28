@@ -380,8 +380,8 @@ export default defineComponent({
             </p>
             <div class="settings-row" style="margin-top:18px;">
               <div class="settings-label">Telegram 素材来源</div>
-              <textarea v-model="telegramSourcesText" class="settings-input" rows="5" placeholder="每行一个来源：频道名 | https://t.me/example 或 @channel&#10;以后可在收集箱里按这些来源抓取消息。"></textarea>
-              <div class="settings-hint">这里只保存来源清单；真正拉取频道消息需要后续接入 Telegram 客户端凭证/机器人权限，避免在前端暴露账号密钥。</div>
+              <textarea v-model="telegramSourcesText" class="settings-input" rows="5" placeholder="每行一个来源：标签 | t.me/username 或 t.me/+invite 或 @频道名 或数字ID&#10;例如：Emacs中文 | emacs_china&#10;私人群组需先用邀请链接，收集器会自动解析为数字ID。"></textarea>
+              <div class="settings-hint">收集器已在后台自动运行（60s 轮询）。来源变更保存后 SIGHUP 重载即可生效。</div>
             </div>
           </div>
 

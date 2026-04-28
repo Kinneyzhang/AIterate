@@ -55,6 +55,13 @@ export default defineComponent({
       router.push({ name: nameMap[tab], params: { id } });
     }
 
+    // #5: gap 一键转追问
+    function fillGapAsQuestion(gap) {
+      const text = typeof gap === 'string' ? gap : (gap.gap || gap.text || '');
+      store.prefillQuestion = '关于这个薄弱点：' + text + ' —— 请帮我理清这个概念。';
+      switchTab('deepen');
+    }
+
     function openKnowledgeTree() {
       router.push({ name: 'knowledge-tree' });
     }
@@ -76,6 +83,7 @@ export default defineComponent({
       reviewSchedule, hasTakeRound, canEditDeepen, canDeepen, canReview,
       contextScore, contextRoundCount, pendingReviewCount,
       switchTab, openKnowledgeTree, startFeynman, getStageMeta, icons,
+      fillGapAsQuestion,
       route,
     };
   },
@@ -102,9 +110,10 @@ export default defineComponent({
       <section class="context-card context-gaps-card">
         <div class="context-card-title" v-html="icons.clip + ' 未解决薄弱点'"></div>
         <template v-if="unresolvedGaps.length">
-          <button v-for="g in unresolvedGaps.slice(0, 5)" :key="g.id || g.gap" type="button" class="context-gap-item btn" @click="switchTab('deepen')">
+          <button v-for="g in unresolvedGaps.slice(0, 5)" :key="g.id || g.gap" type="button" class="context-gap-item btn" @click="fillGapAsQuestion(g)">
             <span class="context-gap-text">{{ g.gap }}</span>
             <small v-if="g.seq">第{{ g.seq }}轮</small>
+            <span class="context-gap-arrow">→追问</span>
           </button>
           <button v-if="unresolvedGaps.length > 5" type="button" class="context-more-btn btn" @click="switchTab('deepen')">还有 {{ unresolvedGaps.length - 5 }} 个，去深化页查看</button>
         </template>

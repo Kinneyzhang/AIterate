@@ -52,6 +52,33 @@ export default defineComponent({
       router.push({ name, params: { id } });
     }
 
+    // #3: flashcard quick review
+    const flashcard = ref(null);  // { review_id, session_id, title }
+    const fcAnswer = ref('');
+    const fcSubmitting = ref(false);
+    const fcDone = ref(null);     // { score, feedback }
+
+    function openFlashcard(review) {
+      flashcard.value = { review_id: review.review_id, session_id: review.session_id, title: review.title };
+      fcAnswer.value = '';
+      fcDone.value = null;
+    }
+
+    function closeFlashcard() { flashcard.value = null; fcAnswer.value = ''; fcDone.value = null; }
+
+    async function submitFlashcard() {
+      if (!fcAnswer.value.trim() || !flashcard.value) return;
+      fcSubmitting.value = true;
+      try {
+        const result = await api.submitReview(flashcard.value.review_id, fcAnswer.value.trim());
+        fcDone.value = { score: result.score, feedback: result.feedback };
+      } catch (err) {
+        setNotice(`复习提交失败：${err.message}`, 'error');
+      } finally {
+        fcSubmitting.value = false;
+      }
+    }
+
     const STATUS_LABEL = {
       preparing:  { text: '准备中', cls: 'stage-preparing' },
       learning:   { text: '学习中', cls: 'stage-learning'  },
@@ -81,6 +108,7 @@ export default defineComponent({
 
     return {
       data, health, loading, ready, error, icon, gotoSession,
+      flashcard, fcAnswer, fcSubmitting, fcDone, openFlashcard, closeFlashcard, submitFlashcard,
       statusLabel, severityLabel, today,
     };
   },
@@ -106,7 +134,7 @@ export default defineComponent({
               <span class="cmd-badge cmd-badge-overdue">逾期复习</span>
               <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'review')">{{ r.title || '未命名' }}</a>
               <span v-if="r.display_score > 0" class="cmd-score">{{ r.display_score }}分</span>
-              <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'review')">开始复习 →</a>
+              <a class="cmd-link" href="#" @click.prevent="openFlashcard(r)">快速复习 →</a>
             </div>
             <div v-for="s in data.feynman_pending" :key="'feyn-'+s.id" class="cmd-item cmd-item-urgent">
               <span class="cmd-badge cmd-badge-feynman">待费曼</span>
@@ -124,7 +152,7 @@ export default defineComponent({
               <span class="cmd-badge cmd-badge-review">{{ r.review_round > 0 ? '第'+(r.review_round+1)+'轮' : '复习' }}</span>
               <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'review')">{{ r.title || '未命名' }}</a>
               <span v-if="r.display_score > 0" class="cmd-score">{{ r.display_score }}分</span>
-              <a class="cmd-link" href="#" @click.prevent="gotoSession(r.session_id, 'review')">开始复习 →</a>
+              <a class="cmd-link" href="#" @click.prevent="openFlashcard(r)">快速复习 →</a>
             </div>
             <div v-for="s in data.active_sessions" :key="'active-'+s.id" class="cmd-item">
               <span :class="['stage-badge', 'cmd-badge-stage', statusLabel(s.status).cls]">{{ statusLabel(s.status).text }}</span>
@@ -157,5 +185,28 @@ export default defineComponent({
         </section>
       </template>
     </div>
+      <!-- #3: flashcard modal -->
+      <div v-if="flashcard" class="flashcard-overlay" @click.self="closeFlashcard">
+        <div class="flashcard-card">
+          <div class="flashcard-header">
+            <span>{{ flashcard.title }}</span>
+            <button class="modal-close" @click="closeFlashcard">+</button>
+          </div>
+          <div v-if="!fcDone" class="flashcard-body">
+            <div class="ps-hint muted small mb8">用自己的话重新解释这个概念（3-5分钟）</div>
+            <textarea v-model="fcAnswer" rows="6" placeholder="不看材料，靠自己的理解来解释…"></textarea>
+            <button class="btn btn-primary btn-block mt8" :disabled="fcSubmitting" @click="submitFlashcard">
+              {{ fcSubmitting ? '提交中…' : '提交解释' }}
+            </button>
+          </div>
+          <div v-else class="flashcard-body">
+            <div class="flashcard-result">
+              <span :class="['final-score-num', fcDone.score >= 60 ? 'pass' : 'fail']">{{ fcDone.score }}/100</span>
+              <div class="md-body mt8" v-html="fcDone.feedback"></div>
+            </div>
+            <button class="btn btn-block mt8" @click="closeFlashcard">关闭</button>
+          </div>
+        </div>
+      </div>
   `,
 });

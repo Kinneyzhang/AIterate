@@ -308,8 +308,12 @@ export default defineComponent({
           item.value = null;
           questions.value = [];
         }
-        if (activeItems.value) startPolling();
-        else stopPolling();
+        // 只在打开具体素材（等 AI 生成问题）时才轮询，列表页不刷新
+        if (item.value && ['pending', 'generating'].includes(item.value.status)) {
+          startPolling();
+        } else {
+          stopPolling();
+        }
       } catch (err) {
         setNotice(`加载收集箱失败：${err.message}`, 'error');
       } finally {
@@ -319,7 +323,7 @@ export default defineComponent({
 
     function startPolling() {
       if (pollTimer) return;
-      pollTimer = setInterval(loadCurrent, 2200);
+      pollTimer = setInterval(loadCurrent, 10000);
     }
 
     function stopPolling() {

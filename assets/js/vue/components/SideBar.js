@@ -44,6 +44,31 @@ export default defineComponent({
       });
     });
 
+    // #4: 按需要行动分组
+    const ACTION_PRIORITY = { revising: 0, feynman: 1, deepening: 2, learning: 3 };
+    const groupedSessions = computed(() => {
+      const all = sortedSessions.value;
+      const needsAction = [];
+      const completed = [];
+      const error = [];
+      for (const s of all) {
+        const st = s.status || '';
+        if (st === 'completed') completed.push(s);
+        else if (st === 'error') error.push(s);
+        else needsAction.push(s);
+      }
+      // 按优先级排序（置顶优先，然后按状态优先级）
+      needsAction.sort((a, b) => {
+        // 置顶项永远在前
+        if (!!a.pinned_at !== !!b.pinned_at) return a.pinned_at ? -1 : 1;
+        if (a.pinned_at && b.pinned_at) return String(b.pinned_at).localeCompare(String(a.pinned_at));
+        const pa = ACTION_PRIORITY[a.status] ?? 9;
+        const pb = ACTION_PRIORITY[b.status] ?? 9;
+        return pa - pb;
+      });
+      return { needsAction, completed, error };
+    });
+
     const menu = ref({ open: false, x: 0, y: 0, session: null });
     const menuStyle = computed(() => ({ left: `${menu.value.x}px`, top: `${menu.value.y}px` }));
     const editingId = ref(null);
@@ -143,7 +168,7 @@ export default defineComponent({
     });
 
     return {
-      stats, inboxPendingCount, sortedSessions, menu, menuStyle, editingId, editingTitle,
+      stats, inboxPendingCount, sortedSessions, groupedSessions, menu, menuStyle, editingId, editingTitle,
       onSelect, openMenu, closeMenu, runAction, prefetch, goHome, openNewSession, goInbox,
       getStageMeta, formatDate, icon, route,
       commitEditing, cancelEditing,
@@ -183,35 +208,105 @@ export default defineComponent({
       </div>
       <div class="session-list" id="sessionList">
         <div v-if="!sortedSessions.length" class="sidebar-empty">暂无会话</div>
-        <div v-for="s in sortedSessions" :key="s.id"
-             :class="['session-item', { active: s.id === selectedId, pinned: !!s.pinned_at, editing: editingId === s.id }]"
-             :data-sid="s.id"
-             tabindex="0"
-             @mouseenter="prefetch(s.id)"
-             @focus="prefetch(s.id)"
-             @click="onSelect(s.id)"
-             @keydown.enter="onSelect(s.id)"
-             @keydown.space.prevent="onSelect(s.id)">
-          <div class="session-item-row">
-            <span :class="['stage-badge', getStageMeta(s.status).cls]">{{ getStageMeta(s.status).label }}</span>
-            <span v-if="s.pinned_at" class="session-pin-mark">置顶</span>
-            <input v-if="editingId === s.id"
-                   class="session-rename-input"
-                   :data-sid="s.id"
-                   v-model="editingTitle"
-                   @click.stop
-                   @keydown.stop
-                   @keydown.enter.prevent="commitEditing(s)"
-                   @keydown.esc.prevent="cancelEditing"
-                   @blur="commitEditing(s)" />
-            <span v-else class="session-item-title">{{ s.title || '未命名' }}</span>
-            <button class="session-menu-trigger"
-                    type="button"
-                    title="session 操作"
-                    aria-label="session 操作"
-                    @click.stop="openMenu(s, $event)">⋯</button>
+        <template v-if="groupedSessions.needsAction.length">
+          <div class="session-group-header">需要行动 <span class="group-count">{{ groupedSessions.needsAction.length }}</span></div>
+          <div v-for="s in groupedSessions.needsAction" :key="s.id"
+               :class="['session-item', { active: s.id === selectedId, pinned: !!s.pinned_at, editing: editingId === s.id }]"
+               :data-sid="s.id"
+               tabindex="0"
+               @mouseenter="prefetch(s.id)"
+               @focus="prefetch(s.id)"
+               @click="onSelect(s.id)"
+               @keydown.enter="onSelect(s.id)"
+               @keydown.space.prevent="onSelect(s.id)">
+            <div class="session-item-row">
+              <span :class="['stage-badge', getStageMeta(s.status).cls]">{{ getStageMeta(s.status).label }}</span>
+              <span v-if="s.has_overdue_review" class="session-overdue-mark" title="复习逾期">逾期</span>
+              <span v-if="s.pinned_at" class="session-pin-mark">置顶</span>
+              <input v-if="editingId === s.id"
+                     class="session-rename-input"
+                     :data-sid="s.id"
+                     v-model="editingTitle"
+                     @click.stop
+                     @keydown.stop
+                     @keydown.enter.prevent="commitEditing(s)"
+                     @keydown.esc.prevent="cancelEditing"
+                     @blur="commitEditing(s)" />
+              <span v-else class="session-item-title">{{ s.title || '未命名' }}</span>
+              <button class="session-menu-trigger"
+                      type="button"
+                      title="session 操作"
+                      aria-label="session 操作"
+                      @click.stop="openMenu(s, $event)">⋯</button>
+            </div>
           </div>
-        </div>
+        </template>
+        <div v-if="groupedSessions.completed.length" class="session-group-divider"></div>
+        <template v-if="groupedSessions.completed.length">
+          <div class="session-group-header completed-group">已完成 <span class="group-count">{{ groupedSessions.completed.length }}</span></div>
+          <div v-for="s in groupedSessions.completed" :key="s.id"
+               :class="['session-item', { active: s.id === selectedId, pinned: !!s.pinned_at, editing: editingId === s.id }]"
+               :data-sid="s.id"
+               tabindex="0"
+               @mouseenter="prefetch(s.id)"
+               @focus="prefetch(s.id)"
+               @click="onSelect(s.id)"
+               @keydown.enter="onSelect(s.id)"
+               @keydown.space.prevent="onSelect(s.id)">
+            <div class="session-item-row">
+              <span :class="['stage-badge', getStageMeta(s.status).cls]">{{ getStageMeta(s.status).label }}</span>
+              <span v-if="s.has_overdue_review" class="session-overdue-mark" title="复习逾期">逾期</span>
+              <span v-if="s.pinned_at" class="session-pin-mark">置顶</span>
+              <input v-if="editingId === s.id"
+                     class="session-rename-input"
+                     :data-sid="s.id"
+                     v-model="editingTitle"
+                     @click.stop
+                     @keydown.stop
+                     @keydown.enter.prevent="commitEditing(s)"
+                     @keydown.esc.prevent="cancelEditing"
+                     @blur="commitEditing(s)" />
+              <span v-else class="session-item-title">{{ s.title || '未命名' }}</span>
+              <button class="session-menu-trigger"
+                      type="button"
+                      title="session 操作"
+                      aria-label="session 操作"
+                      @click.stop="openMenu(s, $event)">⋯</button>
+            </div>
+          </div>
+        </template>
+        <template v-if="groupedSessions.error.length">
+          <div class="session-group-divider"></div>
+          <div class="session-group-header error-group">出错 <span class="group-count">{{ groupedSessions.error.length }}</span></div>
+          <div v-for="s in groupedSessions.error" :key="s.id"
+               :class="['session-item', { active: s.id === selectedId, pinned: !!s.pinned_at, editing: editingId === s.id }]"
+               :data-sid="s.id"
+               tabindex="0"
+               @mouseenter="prefetch(s.id)"
+               @focus="prefetch(s.id)"
+               @click="onSelect(s.id)"
+               @keydown.enter="onSelect(s.id)"
+               @keydown.space.prevent="onSelect(s.id)">
+            <div class="session-item-row">
+              <span :class="['stage-badge', getStageMeta(s.status).cls]">{{ getStageMeta(s.status).label }}</span>
+              <input v-if="editingId === s.id"
+                     class="session-rename-input"
+                     :data-sid="s.id"
+                     v-model="editingTitle"
+                     @click.stop
+                     @keydown.stop
+                     @keydown.enter.prevent="commitEditing(s)"
+                     @keydown.esc.prevent="cancelEditing"
+                     @blur="commitEditing(s)" />
+              <span v-else class="session-item-title">{{ s.title || '未命名' }}</span>
+              <button class="session-menu-trigger"
+                      type="button"
+                      title="session 操作"
+                      aria-label="session 操作"
+                      @click.stop="openMenu(s, $event)">⋯</button>
+            </div>
+          </div>
+        </template>
       </div>
       <div v-if="menu.open" class="session-context-menu" :style="menuStyle" @click.stop>
         <button type="button" class="session-menu-action" @click="runAction('share')">分享</button>

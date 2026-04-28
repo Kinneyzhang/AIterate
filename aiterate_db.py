@@ -2741,6 +2741,38 @@ def repair_invariants(dry_run: bool = True) -> dict:
                 "dry_run": dry_run,
             })
     
+    # Fix: multiple pending feynman groups → cancel duplicates, keep latest
+    with _tx() as conn:
+        dupes = conn.execute(text("""
+            SELECT session_id FROM rounds
+            WHERE type = 'feynman' AND status = 'pending' AND group_id IS NOT NULL
+            GROUP BY session_id HAVING COUNT(DISTINCT group_id) > 1
+        """)).fetchall()
+        for row in dupes:
+            sid = row._mapping["session_id"]
+            # Find all pending groups, keep only the latest (highest group_id)
+            groups = conn.execute(text("""
+                SELECT DISTINCT group_id FROM rounds
+                WHERE session_id = :sid AND type = 'feynman' AND status = 'pending' AND group_id IS NOT NULL
+                ORDER BY group_id
+            """), {"sid": sid}).fetchall()
+            all_gids = [g._mapping["group_id"] for g in groups]
+            keep_gid = all_gids[-1]  # latest
+            cancel_gids = [g for g in all_gids if g != keep_gid]
+            if not dry_run:
+                for cgid in cancel_gids:
+                    conn.execute(text(
+                        "UPDATE rounds SET status = 'cancelled' WHERE session_id = :sid AND group_id = :gid AND type = 'feynman' AND status = 'pending'"
+                    ), {"sid": sid, "gid": cgid})
+            repairs.append({
+                "session_id": sid,
+                "issue": "multiple_pending_feynman_groups",
+                "action": "cancelled duplicate groups",
+                "kept_group": keep_gid,
+                "cancelled_groups": cancel_gids,
+                "dry_run": dry_run,
+            })
+
     # Fix: completed missing review_report — rebuild from feynman rounds
     with _tx() as conn:
         rows = conn.execute(text("""

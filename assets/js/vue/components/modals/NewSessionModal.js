@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router';
 import { api } from '../../api.js';
 import { icon } from '../../icons.js';
 import { setNotice } from '../../store.js';
+import { store } from '../../store.js';
 
 export default defineComponent({
   emits: ['close', 'created'],
@@ -19,6 +20,7 @@ export default defineComponent({
     const ready = ref({ llm: true, tavily: false });
     const knowledgeTree = ref(null);
     const suggestions = ref([]);
+    const similarSessions = ref([]);   // #7
     
     onMounted(async () => {
       try { ready.value = await api.getReady(); } catch {}
@@ -31,8 +33,25 @@ export default defineComponent({
       selectedNodeId.value = null;
       suggestTimer = setTimeout(() => {
         const val = content.value.trim();
-        if (!val || val.length < 3 || !knowledgeTree.value) { suggestions.value = []; return; }
-        suggestions.value = clientSuggest(val).slice(0, 4);
+        if (!val || val.length < 3 || !knowledgeTree.value) {
+          suggestions.value = [];
+        } else {
+          suggestions.value = clientSuggest(val).slice(0, 4);
+        }
+        // #7: similar session matching
+        const ql = val.toLowerCase();
+        if (ql.length >= 3 && store.sessions?.length) {
+          similarSessions.value = store.sessions
+            .filter(s => {
+              const title = (s.title || '').toLowerCase();
+              const c = (s.content || '').toLowerCase();
+              const words = ql.split(/\s+/).filter(w => w.length > 1);
+              return words.some(w => title.includes(w) || c.includes(w));
+            })
+            .slice(0, 3);
+        } else {
+          similarSessions.value = [];
+        }
       }, 500);
     }
     
@@ -79,7 +98,7 @@ export default defineComponent({
     
     function close() { emit('close'); }
     
-    return { content, selectedType, webSearch, selectedNodeId, submitting, ready, suggestions, onInput, submit, close, icon, router };
+    return { content, selectedType, webSearch, selectedNodeId, submitting, ready, suggestions, similarSessions, onInput, submit, close, icon, router };
   },
   
   template: `
@@ -107,6 +126,13 @@ export default defineComponent({
                 @click="selectedNodeId = selectedNodeId === n.id ? null : n.id">
                 {{ n.path }} <span class="kn-score">{{ n.score }}</span>
               </button>
+            </div>
+          </div>
+          <!-- #7: similar sessions hint -->
+          <div v-if="similarSessions.length" class="modal-node-suggestions" style="display:block; border-color: var(--warn, #f59e0b);">
+            <div class="node-suggest-label" style="color:var(--warn);">你之前学过相关的</div>
+            <div class="node-suggest-list">
+              <span v-for="s in similarSessions" :key="s.id" class="similar-session-tag">{{ s.title }}</span>
             </div>
           </div>
           <div class="modal-hint">提交后立即入队，不阻塞你继续提下一个。</div>
