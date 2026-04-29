@@ -1086,25 +1086,19 @@ def create_inbox_item(content: str, source_type: str = "text", entry_id: int | N
     content = (content or "").strip()
     source_type = (source_type or "text").strip() or "text"
     title = _derive_inbox_title(content)
-    created_entry = entry_id is None
     if entry_id is None:
         entry_id = create_entry(content, title=title, kind="inbox", source_type=source_type, metadata={"origin": "inbox"})
-    params = {"title": title, "content": content, "source_type": source_type, "entry_id": entry_id}
     if _is_sqlite():
-        item_id = _insert_returning_id(
+        return _insert_returning_id(
             """INSERT INTO inbox_items (title, content, source_type, entry_id, status, created_at, updated_at)
                VALUES (:title, :content, :source_type, :entry_id, 'pending', datetime('now'), datetime('now')) RETURNING id""",
-            params,
+            {"title": title, "content": content, "source_type": source_type, "entry_id": entry_id},
         )
-    else:
-        item_id = _insert_returning_id(
-            """INSERT INTO inbox_items (title, content, source_type, entry_id, status)
-               VALUES (:title, :content, :source_type, :entry_id, 'pending') RETURNING id""",
-            params,
-        )
-    if created_entry:
-        update_entry(entry_id, metadata={"origin": "inbox", "inbox_item_id": item_id})
-    return item_id
+    return _insert_returning_id(
+        """INSERT INTO inbox_items (title, content, source_type, entry_id, status)
+           VALUES (:title, :content, :source_type, :entry_id, 'pending') RETURNING id""",
+        {"title": title, "content": content, "source_type": source_type, "entry_id": entry_id},
+    )
 
 
 def update_inbox_item(item_id: int, **fields) -> dict | None:
@@ -1393,18 +1387,8 @@ def set_session_thread(session_id: int, thread_id: int | None) -> dict | None:
     return get_session(session_id)
 
 
-def _jsonish_text(value) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False)
-    return str(value)
-
-
-def _context_item(item_type: str, item_id: int, title: str, excerpt: str, reason: str, score: int = 1, target: dict | None = None) -> dict:
-    item = {
+def _context_item(item_type: str, item_id: int, title: str, excerpt: str, reason: str, score: int = 1) -> dict:
+    return {
         "type": item_type,
         "id": item_id,
         "title": title,
@@ -1412,20 +1396,6 @@ def _context_item(item_type: str, item_id: int, title: str, excerpt: str, reason
         "score": score,
         "provenance": [{"type": item_type, "id": item_id, "title": title, "excerpt": excerpt, "reason": reason}],
     }
-    if target:
-        item["target"] = target
-    return item
-
-
-def _entry_navigation_target(entry: dict) -> dict | None:
-    metadata = entry.get("metadata") or {}
-    inbox_id = metadata.get("inbox_item_id") if isinstance(metadata, dict) else None
-    if not inbox_id:
-        row = _fetch_one("SELECT id FROM inbox_items WHERE entry_id = :entry_id ORDER BY id DESC LIMIT 1", {"entry_id": entry.get("id")})
-        inbox_id = row.get("id") if row else None
-    if inbox_id:
-        return {"type": "inbox_item", "id": int(inbox_id)}
-    return None
 
 
 def find_related_context_for_session(session_id: int, limit: int = 8) -> dict:
@@ -1555,7 +1525,7 @@ def build_learning_brief(period: str = "daily") -> dict:
     sessions = [s for s in get_recent_sessions(limit=limit) if s.get("status") != "completed"]
     gaps = _fetch_all("SELECT * FROM learning_gaps WHERE status = 'open' ORDER BY created_at DESC LIMIT :limit", {"limit": limit})
     for e in entries[:3]:
-        focus.append(_context_item("entry", int(e["id"]), e.get("title") or f"Entry #{e['id']}", _excerpt(e.get("content") or "", []), "最近新增/活跃的学习素材。", target=_entry_navigation_target(e)))
+        focus.append(_context_item("entry", int(e["id"]), e.get("title") or f"Entry #{e['id']}", _excerpt(e.get("content") or "", []), "最近新增/活跃的学习素材。"))
     for s in sessions[:3]:
         focus.append(_context_item("session", int(s["id"]), s.get("title") or f"Session #{s['id']}", _excerpt(s.get("content") or s.get("material") or "", []), "当前还未完成的学习会话。"))
     for g in gaps[:3]:
@@ -1575,13 +1545,7 @@ def synthesize_personal_understanding(query: str) -> dict:
         if score:
             evidence.append(_context_item("entry", int(e["id"]), e.get("title") or f"Entry #{e['id']}", _excerpt(e.get("content") or "", matched), f"Entry 命中查询关键词：{', '.join(matched[:4])}", score))
     for s in get_recent_sessions(limit=100):
-        session_text = " ".join([
-            _jsonish_text(s.get("title")),
-            _jsonish_text(s.get("content")),
-            _jsonish_text(s.get("material")),
-            _jsonish_text(s.get("review_report")),
-        ])
-        score, matched = _matches_keywords(session_text, keywords)
+        score, matched = _matches_keywords(" ".join([s.get("title") or "", s.get("content") or "", s.get("material") or "", s.get("review_report") or ""]), keywords)
         if score:
             evidence.append(_context_item("session", int(s["id"]), s.get("title") or f"Session #{s['id']}", _excerpt(s.get("content") or s.get("material") or "", matched), f"Session 命中查询关键词：{', '.join(matched[:4])}", score))
     for g in _fetch_all("SELECT * FROM learning_gaps WHERE status = 'open' ORDER BY created_at DESC LIMIT 100"):
