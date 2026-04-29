@@ -4,6 +4,14 @@
 import { getSettings, saveSettings } from './api.js';
 import { icon } from './utils.js';
 
+function setNotice(msg, type = 'info') {
+  const bar = document.getElementById('noticeBar');
+  if (!bar) return;
+  if (!msg) { bar.className = 'notice-bar'; bar.textContent = ''; return; }
+  bar.textContent = msg;
+  bar.className = `notice-bar visible notice-${type}`;
+}
+
 const PROVIDER_PRESETS = {
   openai: {
     base_url: 'https://api.openai.com/v1',
@@ -593,7 +601,7 @@ export function openSettings() {
 
       close();
     } catch (err) {
-      alert(`保存失败：${err.message}`);
+      setNotice(`保存失败：${err.message}`, 'error');
     } finally {
       saveBtn.disabled = false;
       saveBtn.innerHTML = `${icon('save')} 保存`;

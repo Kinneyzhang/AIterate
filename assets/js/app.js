@@ -26,7 +26,7 @@ function setNotice(msg, type = 'info') {
   if (!bar) return;
   if (!msg) { bar.className = 'notice-bar'; bar.textContent = ''; return; }
   bar.textContent = msg;
-  bar.className = `notice-bar visible${type === 'error' ? ' notice-error' : ''}`;
+  bar.className = `notice-bar visible notice-${type}`;
 }
 
 // ── theme ─────────────────────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ async function startFeynman() {
 async function submitFeynman() {
   if (!state.selectedSessionId || !state.currentFeynmanGroupId) return;
   const answers = Array.from(document.querySelectorAll('.review-answer')).map(el => el.value.trim());
-  if (answers.some(a => !a)) { alert('请填写所有费曼答案'); return; }
+  if (answers.some(a => !a)) { setNotice('请填写所有费曼答案。', 'error'); return; }
 
   setBtn('submitFeynmanBtn', true, `${icon('clock')} 评分中...`);
   try {

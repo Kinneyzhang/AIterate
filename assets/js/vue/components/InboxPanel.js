@@ -4,7 +4,7 @@ import { defineComponent, ref, computed, watch, onMounted, onUnmounted } from 'v
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '../api.js';
 import { icon } from '../icons.js';
-import { store, setNotice } from '../store.js';
+import { store, setNotice, askConfirm } from '../store.js';
 
 export default defineComponent({
   emits: ['refresh'],
@@ -75,6 +75,7 @@ export default defineComponent({
       },
     ];
     let pollTimer = null;
+    let lastProcessingNoticeKey = '';
 
     const isInboxRoute = computed(() => route.name === 'inbox' || route.name === 'inbox-item');
     const itemId = computed(() => route.name === 'inbox-item' && route.params.id ? Number(route.params.id) : null);
@@ -295,6 +296,21 @@ export default defineComponent({
       store.inboxItems = items.value;
     }
 
+    function syncGenerationNotice(currentItem) {
+      if (!currentItem?.id) return;
+      const key = `${currentItem.id}:${currentItem.status}`;
+      if (key === lastProcessingNoticeKey) return;
+      if (['pending', 'generating'].includes(currentItem.status)) {
+        lastProcessingNoticeKey = key;
+        setNotice('AI 正在把这条素材加工成候选问题…');
+        return;
+      }
+      if (currentItem.status === 'ready' && lastProcessingNoticeKey.startsWith(`${currentItem.id}:`)) {
+        lastProcessingNoticeKey = key;
+        setNotice('候选问题已生成，可以选择一个开始学习。');
+      }
+    }
+
     async function loadCurrent() {
       if (!isInboxRoute.value) return;
       loading.value = true;
@@ -309,6 +325,7 @@ export default defineComponent({
           questions.value = [];
         }
         // 只在打开具体素材（等 AI 生成问题）时才轮询，列表页不刷新
+        syncGenerationNotice(item.value);
         if (item.value && ['pending', 'generating'].includes(item.value.status)) {
           startPolling();
         } else {
@@ -416,7 +433,15 @@ export default defineComponent({
 
     async function clearHistory() {
       if (!completedItems.value.length || actionBusy.value.clearHistory) return;
-      if (!window.confirm(`确定清空 ${completedItems.value.length} 条历史素材？`)) return;
+      const ok = await askConfirm({
+        title: '清空历史素材',
+        message: `确定清空 ${completedItems.value.length} 条历史素材？`,
+        details: '只会清理已完成/已忽略的历史素材，不影响待处理素材。',
+        confirmText: '清空',
+        cancelText: '取消',
+        tone: 'danger',
+      });
+      if (!ok) return;
       actionBusy.value.clearHistory = true;
       try {
         const result = await api.clearInboxHistory();
@@ -576,10 +601,6 @@ export default defineComponent({
           </header>
 
           <div v-if="item.error_msg" class="inbox-error">{{ item.error_msg }}</div>
-          <div v-if="['pending','generating'].includes(item.status)" class="inbox-generating">
-            AI 正在把这条素材加工成候选问题…
-          </div>
-
           <section class="inbox-source-block">
             <div class="ps-label">原始素材</div>
             <div class="inbox-source-text">{{ item.content }}</div>

@@ -2,7 +2,7 @@
 
 import { defineComponent, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { store, currentSession, currentRounds, unresolvedGaps, reviewReport, knowledgeNode, getStageMeta, setNotice } from '../store.js';
+import { store, currentSession, currentRounds, unresolvedGaps, reviewReport, knowledgeNode, getStageMeta, setNotice, askConfirm } from '../store.js';
 import { api } from '../api.js';
 
 export default defineComponent({
@@ -82,7 +82,14 @@ export default defineComponent({
     async function completeEarly() {
       const sid = store.selectedSessionId;
       if (!sid) return;
-      if (!window.confirm('确定提前结束这个学习会话？')) return;
+      const ok = await askConfirm({
+        title: '提前结束学习',
+        message: '确定提前结束这个学习会话？',
+        details: '系统会把它标记完成，并放入后续复习队列。',
+        confirmText: '提前结束',
+        cancelText: '继续学习',
+      });
+      if (!ok) return;
       try {
         await api.completeSession(sid);
         emit('refresh');

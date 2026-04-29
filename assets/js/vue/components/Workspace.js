@@ -157,7 +157,7 @@ export default defineComponent({
 
     async function submitReviewReExplain(rid) {
       const content = (reviewContents.value[rid] || '').trim();
-      if (!content) { alert('请先写重新解释'); return; }
+      if (!content) { setNotice('请先写重新解释。', 'error'); return; }
       reviewSubmitting.value = { ...reviewSubmitting.value, [rid]: true };
       try {
         const data = await api.submitReview(rid, content);
@@ -227,7 +227,7 @@ export default defineComponent({
       if (!sid || !gid) return;
       const group = feynmanGroup.value;
       const answers = group.map((_, i) => (feynmanAnswers.value[i] || '').trim());
-      if (answers.some(a => !a)) { alert('请填写所有费曼答案'); return; }
+      if (answers.some(a => !a)) { setNotice('请填写所有费曼答案。', 'error'); return; }
       submitting.value = true;
       try {
         const data = await api.completeFeynman(sid, gid, answers);

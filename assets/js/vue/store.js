@@ -22,6 +22,16 @@ export const store = reactive({
   // UI
   theme: localStorage.getItem('aiterate-theme') || 'night',
   notice: { text: '', type: 'info' },
+  appDialog: {
+    visible: false,
+    title: '',
+    message: '',
+    details: '',
+    confirmText: '确定',
+    cancelText: '取消',
+    tone: 'default',
+    resolve: null,
+  },
   sidebarExpanded: false,
   loading: false,
   
@@ -58,9 +68,55 @@ export const knowledgeNode = computed(() => {
 });
 
 // helpers
+let noticeTimer = null;
+
 export function setNotice(text, type = 'info') {
+  if (noticeTimer) {
+    clearTimeout(noticeTimer);
+    noticeTimer = null;
+  }
   store.notice = { text, type };
-  if (text) setTimeout(() => { store.notice = { text: '', type: 'info' }; }, 5000);
+  if (text) {
+    noticeTimer = setTimeout(() => {
+      store.notice = { text: '', type: 'info' };
+      noticeTimer = null;
+    }, 5000);
+  }
+}
+
+const DEFAULT_DIALOG = {
+  visible: false,
+  title: '',
+  message: '',
+  details: '',
+  confirmText: '确定',
+  cancelText: '取消',
+  tone: 'default',
+  resolve: null,
+};
+
+export function askConfirm(options = {}) {
+  const opts = typeof options === 'string' ? { message: options } : options;
+  if (store.appDialog?.resolve) store.appDialog.resolve(false);
+  return new Promise(resolve => {
+    store.appDialog = {
+      ...DEFAULT_DIALOG,
+      visible: true,
+      title: opts.title || '确认操作',
+      message: opts.message || '',
+      details: opts.details || '',
+      confirmText: opts.confirmText || '确定',
+      cancelText: opts.cancelText || '取消',
+      tone: opts.tone || 'default',
+      resolve,
+    };
+  });
+}
+
+export function closeAppDialog(confirmed = false) {
+  const resolver = store.appDialog?.resolve;
+  store.appDialog = { ...DEFAULT_DIALOG };
+  if (resolver) resolver(Boolean(confirmed));
 }
 
 export function formatDate(ts) {

@@ -2,7 +2,7 @@
 
 import { defineComponent, watch, computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { store, setNotice } from '../store.js';
+import { store, setNotice, askConfirm } from '../store.js';
 import { api } from '../api.js';
 import TopBar from './TopBar.js';
 import SideBar from './SideBar.js';
@@ -17,9 +17,10 @@ import KnowledgeTreeModal from './modals/KnowledgeTreeModal.js';
 import CommandCenterModal from './modals/CommandCenterModal.js';
 import SessionShareModal from './modals/SessionShareModal.js';
 import LoginModal from './modals/LoginModal.js';
+import AppDialog from './AppDialog.js';
 
 export default defineComponent({
-  components: { TopBar, SideBar, Workspace, ContextRail, HomeDashboard, HomeRail, InboxPanel, NewSessionModal, SettingsModal, KnowledgeTreeModal, CommandCenterModal, SessionShareModal, LoginModal },
+  components: { TopBar, SideBar, Workspace, ContextRail, HomeDashboard, HomeRail, InboxPanel, NewSessionModal, SettingsModal, KnowledgeTreeModal, CommandCenterModal, SessionShareModal, LoginModal, AppDialog },
 
   setup() {
     const router = useRouter();
@@ -354,8 +355,16 @@ export default defineComponent({
         });
     }
 
-    function handleDeleteSession(session) {
-      if (!window.confirm(`删除「${session.title || '未命名'}」？此操作会删除该 session 的学习、深化和费曼记录。`)) return;
+    async function handleDeleteSession(session) {
+      const ok = await askConfirm({
+        title: '删除学习会话',
+        message: `删除「${session.title || '未命名'}」？`,
+        details: '会同时删除这个 session 的学习、深化和费曼记录。',
+        confirmText: '删除',
+        cancelText: '取消',
+        tone: 'danger',
+      });
+      if (!ok) return;
 
       const sid = Number(session.id);
       const previousSessions = [...(store.sessions || [])];
@@ -474,7 +483,7 @@ export default defineComponent({
     <TopBar @toggle-sidebar="toggleSidebar" />
 
     <div id="noticeBar"
-         :class="['notice-bar', store.notice.text ? 'visible' : '', store.notice.type === 'error' ? 'notice-error' : '']">
+         :class="['notice-bar', store.notice.text ? 'visible' : '', 'notice-' + (store.notice.type || 'info')]">
       {{ store.notice.text }}
     </div>
 
@@ -526,6 +535,8 @@ export default defineComponent({
       v-if="shareSessionId"
       :session-id="shareSessionId"
       @close="shareSessionId = null" />
+
+    <AppDialog />
     </template>
   `,
 });
