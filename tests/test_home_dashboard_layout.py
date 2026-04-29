@@ -28,7 +28,7 @@ def test_home_dashboard_has_right_rail_in_shell_third_column():
     assert '@media (max-width: 1100px)' in css and '.home-rail { display: none; }' in css
 
 
-def test_home_dashboard_surfaces_active_learning_context_as_visible_entry_point():
+def test_home_dashboard_surfaces_learning_assets_as_clear_visible_entry_point():
     src = _text(HOME_DASHBOARD_JS)
     assert 'activeContext' in src
     assert 'api.getLearningBrief' in src
@@ -36,10 +36,20 @@ def test_home_dashboard_surfaces_active_learning_context_as_visible_entry_point(
     assert 'api.getThreads' in src
     assert 'api.getLearningAgents' in src
     assert 'home-active-context' in src
-    assert '主动学习上下文' in src
-    assert '今日主动简报' in src
-    assert 'Entries' in src and 'Threads' in src and 'Agents' in src
-    assert '我怎么看 X' in src
+    assert '学习资产' in src
+    assert '今日该看什么' in src
+    assert '素材' in src and '主题' in src and '协作者' in src
+    assert '回顾我对 X 的理解' in src
+    assert '主动学习上下文' not in src
+    assert '今日主动简报' not in src
+    assert '我怎么看 X' not in src
+
+
+def test_home_dashboard_focus_items_have_real_navigation_targets():
+    src = _text(HOME_DASHBOARD_JS)
+    assert "item?.target?.type === 'inbox_item'" in src
+    assert "name: 'inbox-item'" in src
+    assert 'setNotice' in src and '还没有可打开的页面' in src
 
 
 def test_overlay_keeps_previous_background_route():

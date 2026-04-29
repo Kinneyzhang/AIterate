@@ -65,11 +65,22 @@ export default defineComponent({
     }
 
     function openFocus(item) {
-      if (item?.type === 'session' && item.id) gotoSession(item.id, 'learn');
+      if (item?.target?.type === 'inbox_item' && item.target.id) {
+        router.push({ name: 'inbox-item', params: { id: item.target.id } });
+        return;
+      }
+      if (item?.type === 'session' && item.id) {
+        gotoSession(item.id, 'learn');
+        return;
+      }
       if (item?.type === 'gap' && item.provenance?.[0]?.id) {
         const gap = item.provenance[0];
-        if (gap.session_id) gotoSession(gap.session_id, 'deepen');
+        if (gap.session_id) {
+          gotoSession(gap.session_id, 'deepen');
+          return;
+        }
       }
+      setNotice('这条素材还没有可打开的页面。', 'warn');
     }
 
     async function runActiveSynthesis() {
@@ -163,21 +174,21 @@ export default defineComponent({
 
       <template v-else-if="ready">
         <section class="home-section home-active-context">
-          <div class="home-section-title" v-html="icon('bulb') + ' 主动学习上下文'"></div>
+          <div class="home-section-title" v-html="icon('bulb') + ' 学习资产'"></div>
           <div class="cmd-item">
-            <span class="cmd-badge cmd-badge-review">Entries</span>
-            <span class="cmd-link">{{ activeContext.entries.length }} 条素材已成为长期学习资产</span>
+            <span class="cmd-badge cmd-badge-review">素材</span>
+            <span class="cmd-link">{{ activeContext.entries.length }} 条已入库</span>
           </div>
           <div class="cmd-item">
-            <span class="cmd-badge cmd-badge-review">Threads</span>
+            <span class="cmd-badge cmd-badge-review">主题</span>
             <span class="cmd-link">{{ activeContext.threads.length }} 个持续主题</span>
           </div>
           <div class="cmd-item">
-            <span class="cmd-badge cmd-badge-review">Agents</span>
-            <span class="cmd-link">{{ activeContext.agents.filter(a => a.enabled).length }} 个学习协作者待命</span>
+            <span class="cmd-badge cmd-badge-review">协作者</span>
+            <span class="cmd-link">{{ activeContext.agents.filter(a => a.enabled).length }} 个可用</span>
           </div>
           <template v-if="activeContext.brief?.suggested_focus?.length">
-            <div class="home-section-title small" v-html="icon('zap') + ' 今日主动简报'"></div>
+            <div class="home-section-title small" v-html="icon('zap') + ' 今日该看什么'"></div>
             <button v-for="item in activeContext.brief.suggested_focus.slice(0, 3)" :key="'focus-'+item.type+'-'+item.id" type="button" class="cmd-item btn" @click="openFocus(item)">
               <span class="cmd-badge cmd-badge-gap">{{ item.type }}</span>
               <span class="cmd-link">{{ item.title }}</span>
@@ -185,10 +196,10 @@ export default defineComponent({
             </button>
           </template>
           <div class="cmd-item home-synthesis-row">
-            <span class="cmd-badge cmd-badge-feynman">我怎么看 X</span>
+            <span class="cmd-badge cmd-badge-feynman">回顾我对 X 的理解</span>
             <input type="text" v-model="activeQuery" placeholder="输入概念，比如 MVCC" @keydown.enter="runActiveSynthesis" />
             <button type="button" class="btn btn-primary btn-sm" :disabled="activeSynthesisLoading || !activeQuery.trim()" @click="runActiveSynthesis">
-              {{ activeSynthesisLoading ? '查询中…' : '综合' }}
+              {{ activeSynthesisLoading ? '查询中…' : '回顾' }}
             </button>
           </div>
           <div v-if="activeSynthesis" class="cmd-empty">{{ activeSynthesis.answer }}</div>

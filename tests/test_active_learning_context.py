@@ -54,7 +54,10 @@ def test_inbox_creates_entry_and_selected_session_keeps_source_provenance(tmp_pa
     assert entry_id == created.json()["entry_id"]
 
     entries = client.get("/api/entries", headers=AUTH_HEADERS).json()
-    assert any(e["id"] == entry_id and e["content"] == "MVCC 快照读和当前读的差异" for e in entries)
+    entry = next(e for e in entries if e["id"] == entry_id)
+    assert entry["content"] == "MVCC 快照读和当前读的差异"
+    assert entry["metadata"]["origin"] == "inbox"
+    assert entry["metadata"]["inbox_item_id"] == item_id
 
     q = detail.json()["questions"][0]
     assert q["provenance"]["entry_id"] == entry_id
@@ -194,6 +197,45 @@ def test_learning_briefs_and_personal_synthesis_include_provenance(tmp_path, mon
     assert data["evidence"]
     assert data["provenance"]
     assert data["next_steps"]
+
+
+def test_learning_brief_entry_focus_links_back_to_inbox_item(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch)
+    created = client.post(
+        "/api/inbox",
+        headers=AUTH_HEADERS,
+        json={"content": "云南昆明旅行素材", "source_type": "telegram"},
+    )
+    assert created.status_code == 200, created.text
+    item_id = created.json()["id"]
+
+    brief = client.get("/api/briefs/learning?period=daily", headers=AUTH_HEADERS)
+    assert brief.status_code == 200, brief.text
+    entries = [x for x in brief.json()["suggested_focus"] if x["type"] == "entry"]
+    assert entries
+    assert entries[0]["target"] == {"type": "inbox_item", "id": item_id}
+
+
+def test_personal_synthesis_handles_json_review_report_dict(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch)
+    monkeypatch.setattr(db, "get_entries", lambda limit=100, q=None, kind=None, status=None: [])
+    monkeypatch.setattr(
+        db,
+        "get_recent_sessions",
+        lambda limit=100: [
+            {
+                "id": 1,
+                "title": "PostgreSQL MVCC 与隔离级别",
+                "content": "",
+                "material": "",
+                "review_report": {"final_summary": "MVCC 用快照可见性支撑一致性读。"},
+            }
+        ],
+    )
+
+    synth = client.post("/api/me/synthesis", headers=AUTH_HEADERS, json={"query": "MVCC"})
+    assert synth.status_code == 200, synth.text
+    assert "MVCC" in synth.json()["answer"]
 
 
 def test_personal_synthesis_rejects_empty_query(tmp_path, monkeypatch):
