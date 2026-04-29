@@ -261,6 +261,17 @@ export const api = {
     invalidateDerived();
     return request(`/api/review/${rid}/submit`, { method: 'POST', body: JSON.stringify({ content }) });
   },
+  getEntries: (params = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
+    return request(`/api/entries${qs.toString() ? '?' + qs.toString() : ''}`);
+  },
+  getThreads: (limit = 100) => request(`/api/threads?limit=${encodeURIComponent(limit)}`),
+  getRelatedContext: (sid, limit = 8) => request(`/api/sessions/${sid}/related-context?limit=${encodeURIComponent(limit)}`),
+  getLearningAgents: () => request('/api/agents'),
+  runLearningAgent: (agentId, payload) => request(`/api/agents/${agentId}/run`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  getLearningBrief: (period = 'daily') => request(`/api/briefs/learning?period=${encodeURIComponent(period)}`),
+  synthesizePersonalUnderstanding: (query) => request('/api/me/synthesis', { method: 'POST', body: JSON.stringify({ query }) }),
   saveDbConfig: (payload) => request('/api/db-config', { method: 'PUT', body: JSON.stringify(payload) }),
   // #1: knowledge node auto-suggest
   suggestKnowledgeNodes: (sid) => request(`/api/sessions/${sid}/suggest-knowledge-nodes`, { method: 'POST' }),
