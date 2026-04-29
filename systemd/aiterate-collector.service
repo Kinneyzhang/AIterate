@@ -1,0 +1,17 @@
+[Unit]
+Description=AIIterate Telegram collector daemon
+After=network.target aiterate.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/vibe/aiterate
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-%h/vibe/aiterate/config/telegram_collector.env
+ExecStart=%h/.hermes/venv/bin/python %h/vibe/aiterate/scripts/aiterate_telegram_collector.py --interval 60
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

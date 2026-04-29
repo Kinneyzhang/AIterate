@@ -122,7 +122,13 @@ aiterate/
   public/                           # Vite public assets
   config/
     db.json.example                 # 数据库配置模板
+    telegram_collector.env.example  # Telegram 收集器配置模板，真实 env 不提交
     knowledge_tree.json             # 知识树定义
+
+  scripts/
+    aiterate_telegram_collector.py  # Telegram 来源 → AIIterate Inbox 守护进程
+  systemd/
+    aiterate-collector.service      # collector user-level systemd unit 模板
 
   tests/
     app_fixture.py                  # 隔离测试 fixture：tmp SQLite + fake AI
@@ -254,6 +260,23 @@ http://192.168.31.222:7070
 ```bash
 curl -H "X-Admin-Token: $AITERATE_ADMIN_TOKEN" http://127.0.0.1:7070/api/ready
 ```
+
+### Telegram Inbox Collector
+
+AIIterate 自带 Telegram 收集器，用于把设置页中的 Telegram 来源增量推送到 Inbox。代码和 systemd unit 都在本项目内，不能依赖 Hermes workspace 脚本。
+
+```bash
+cd ~/vibe/aiterate
+cp config/telegram_collector.env.example config/telegram_collector.env
+# 编辑 config/telegram_collector.env：填 TELEGRAM_API_ID / TELEGRAM_API_HASH / TELEGRAM_SESSION / TELEGRAM_PROXY
+mkdir -p ~/.config/systemd/user
+cp systemd/aiterate-collector.service ~/.config/systemd/user/aiterate-collector.service
+systemctl --user daemon-reload
+systemctl --user enable --now aiterate-collector.service
+journalctl --user -u aiterate-collector.service -f
+```
+
+真实 `config/telegram_collector.env` 和 `data/` 目录已被 `.gitignore` 忽略；不要提交 Telegram session、API hash、代理密码或 admin token。
 
 ## 🐳 Docker Compose
 

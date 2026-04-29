@@ -9,6 +9,8 @@ __pycache__/
 learn.db
 assets/fonts/
 config/db.json
+config/telegram_collector.env
+data/
 
 dist/
 node_modules/
