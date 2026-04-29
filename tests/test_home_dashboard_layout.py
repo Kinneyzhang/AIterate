@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT_JS = ROOT / "assets/js/vue/components/AppRoot.js"
+HOME_DASHBOARD_JS = ROOT / "assets/js/vue/components/HomeDashboard.js"
 HOME_RAIL_JS = ROOT / "assets/js/vue/components/HomeRail.js"
 APP_CSS = ROOT / "assets/app.css"
 
@@ -25,6 +26,20 @@ def test_home_dashboard_has_right_rail_in_shell_third_column():
     assert 'border-left: 1px solid var(--border' in css
     assert 'background: var(--bg-sidebar' in css
     assert '@media (max-width: 1100px)' in css and '.home-rail { display: none; }' in css
+
+
+def test_home_dashboard_surfaces_active_learning_context_as_visible_entry_point():
+    src = _text(HOME_DASHBOARD_JS)
+    assert 'activeContext' in src
+    assert 'api.getLearningBrief' in src
+    assert 'api.getEntries' in src
+    assert 'api.getThreads' in src
+    assert 'api.getLearningAgents' in src
+    assert 'home-active-context' in src
+    assert '主动学习上下文' in src
+    assert '今日主动简报' in src
+    assert 'Entries' in src and 'Threads' in src and 'Agents' in src
+    assert '我怎么看 X' in src
 
 
 def test_overlay_keeps_previous_background_route():

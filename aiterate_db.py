@@ -689,6 +689,9 @@ def init_db():
 
     # 迁移旧格式 settings（幂等）
     _migrate_settings()
+    backfilled_entries = backfill_inbox_entries()
+    if backfilled_entries:
+        print(f"[DB] backfilled {backfilled_entries} inbox items into entries")
 
     print(f"[DB] aiterate ready — {cfg.get('type','postgresql')} — sessions / rounds / profile / review_schedule / learning_gaps / jobs")
 
@@ -1051,6 +1054,32 @@ def update_entry(entry_id: int, **fields) -> dict | None:
     parts.append("updated_at = datetime('now')" if _is_sqlite() else "updated_at = NOW()")
     _exec(f"UPDATE entries SET {', '.join(parts)} WHERE id = :id", params)
     return get_entry(entry_id)
+
+
+def backfill_inbox_entries(limit: int = 1000) -> int:
+    rows = _fetch_all(
+        """SELECT id, title, content, source_type
+           FROM inbox_items
+           WHERE entry_id IS NULL
+           ORDER BY id ASC
+           LIMIT :limit""",
+        {"limit": int(limit)},
+    )
+    changed = 0
+    for row in rows:
+        content = (row.get("content") or "").strip()
+        if not content:
+            continue
+        entry_id = create_entry(
+            content,
+            title=row.get("title") or _derive_inbox_title(content),
+            kind="inbox",
+            source_type=row.get("source_type") or "text",
+            metadata={"origin": "inbox", "backfilled_from": "inbox_items", "inbox_item_id": row["id"]},
+        )
+        _exec("UPDATE inbox_items SET entry_id = :entry_id WHERE id = :id AND entry_id IS NULL", {"entry_id": entry_id, "id": row["id"]})
+        changed += 1
+    return changed
 
 
 def create_inbox_item(content: str, source_type: str = "text", entry_id: int | None = None) -> int:
