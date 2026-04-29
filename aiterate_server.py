@@ -707,7 +707,7 @@ async def regenerate_inbox_questions(item_id: int, body: InboxRegenerateRequest 
             "inbox_item_id": item_id,
             "content": item.get("content", ""),
             "direction": body.direction,
-            "replace": True,
+            "replace": False,
         },
     )
     return {"ok": True, "id": item_id, "status": "pending"}
@@ -1436,9 +1436,12 @@ async def _process_generate_inbox_questions(job_id: int, job: dict):
         questions = result.get("questions") if isinstance(result, dict) else []
         if not isinstance(questions, list) or not questions:
             raise RuntimeError("AI did not generate valid inbox questions")
-        ids = db.create_inbox_questions(item_id, questions[:5], replace_candidates=replace)
-        db.update_inbox_item(item_id, status="ready", error_msg=None)
-        db.complete_job(job_id, {"inbox_item_id": item_id, "question_count": len(ids)})
+        ids = db.create_inbox_questions(item_id, questions, replace_candidates=replace)
+        latest_item = db.get_inbox_item(item_id) or {}
+        next_status = "partially_used" if int(latest_item.get("selected_count") or 0) > 0 or latest_item.get("status") == "partially_used" else "ready"
+        if latest_item.get("status") not in ("archived", "ignored"):
+            db.update_inbox_item(item_id, status=next_status, error_msg=None)
+        db.complete_job(job_id, {"inbox_item_id": item_id, "question_count": len(ids), "preserved_existing": True})
     except Exception as e:
         db.update_inbox_item(item_id, status="error", error_msg=str(e)[:500])
         raise

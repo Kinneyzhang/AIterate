@@ -122,7 +122,7 @@ def test_inbox_create_can_pass_generation_direction(tmp_path, monkeypatch):
     assert all("找反例" in q["question"] for q in questions)
 
 
-def test_inbox_regenerate_replaces_candidates_with_direction(tmp_path, monkeypatch):
+def test_inbox_regenerate_appends_without_replacing_visible_candidates(tmp_path, monkeypatch):
     client, db, server = setup_isolated_app(tmp_path, monkeypatch)
 
     async def fake_generate_inbox_questions(content: str, direction: str | None = None):
@@ -137,6 +137,7 @@ def test_inbox_regenerate_replaces_candidates_with_direction(tmp_path, monkeypat
     job = db.claim_pending_job()
     asyncio.run(server._process_generate_inbox_questions(job["id"], job))
     original = client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).json()["questions"]
+    original_ids = [q["id"] for q in original]
 
     regen = client.post(
         f"/api/inbox/{item_id}/regenerate",
@@ -149,8 +150,44 @@ def test_inbox_regenerate_replaces_candidates_with_direction(tmp_path, monkeypat
     asyncio.run(server._process_generate_inbox_questions(job["id"], job))
 
     refreshed = client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).json()["questions"]
-    assert [q["id"] for q in refreshed] != [q["id"] for q in original]
-    assert all("更偏技术一点" in q["question"] for q in refreshed)
+    assert [q["id"] for q in refreshed[: len(original_ids)]] == original_ids
+    assert any("更偏技术一点" in q["question"] for q in refreshed[len(original_ids):])
+
+
+def test_inbox_existing_question_remains_selectable_while_background_generation_finishes(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch)
+
+    async def fake_generate_inbox_questions(content: str, direction: str | None = None):
+        return _fake_questions(content, suffix="（后台批次）")
+
+    monkeypatch.setattr(server.ai, "generate_inbox_questions", fake_generate_inbox_questions, raising=False)
+
+    r = client.post("/api/inbox", headers=AUTH_HEADERS, json={"content": "缓存穿透"})
+    assert r.status_code == 200, r.text
+    item_id = r.json()["id"]
+    first_job = db.claim_pending_job()
+    asyncio.run(server._process_generate_inbox_questions(first_job["id"], first_job))
+    original = client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).json()["questions"]
+    first_question_id = original[0]["id"]
+
+    db.update_inbox_item(item_id, status="generating", error_msg=None)
+    db.create_job(
+        job_type="generate_inbox_questions",
+        payload={"inbox_item_id": item_id, "content": "缓存穿透", "direction": "后台批次", "replace": True},
+    )
+    background_job = db.claim_pending_job()
+    asyncio.run(server._process_generate_inbox_questions(background_job["id"], background_job))
+
+    detail = client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).json()
+    assert detail["questions"][0]["id"] == first_question_id
+    selected = client.post(
+        f"/api/inbox/questions/{first_question_id}/select",
+        headers=AUTH_HEADERS,
+        json={"web_search": False, "knowledge_node_id": None},
+    )
+    assert selected.status_code == 200, selected.text
+    assert selected.json()["session_id"]
+    assert client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).json()["item"]["status"] == "partially_used"
 
 
 def test_inbox_item_has_short_title_and_history_delete_contract(tmp_path, monkeypatch):
@@ -243,7 +280,9 @@ def test_inbox_frontend_contract_files_are_wired():
     assert "'inbox-detail-pane', { 'is-overview': !item }" in inbox_panel
     assert ".inbox-detail-pane.is-overview" in css
     assert inbox_panel.index("inbox-detail-pane") < inbox_panel.index('class="inbox-list-pane"')
-    assert "visibleItems" in inbox_panel
+    assert "visibleQuestions" in inbox_panel
+    assert "const visibleQuestions = computed(() => questions.value.slice(0, 5))" in inbox_panel
+    assert "v-for=\"q in visibleQuestions\"" in inbox_panel
     assert "pendingItems" in inbox_panel and "completedItems" in inbox_panel
     assert "收集箱" in inbox_panel
     assert "class=\"inbox-page-composer\"" in inbox_panel

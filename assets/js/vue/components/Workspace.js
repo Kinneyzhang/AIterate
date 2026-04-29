@@ -108,7 +108,7 @@ export default defineComponent({
 
     const canEditDeepen = computed(() => {
       const s = currentSession.value?.status;
-      // Phase 5: whitelist — only allow deepen in these states
+      // Phase 5: whitelist — only allow submitting deepen after the AI answer exists.
       return s && ['learning', 'deepening', 'revising'].includes(s);
     });
     const canDeepen = computed(() => {
@@ -282,7 +282,7 @@ export default defineComponent({
       writeFirstSkipped.value = true;
     }
     const shouldWriteFirst = computed(() => {
-      return currentSession.value?.status === 'learning' && !hasUserTake.value && !writeFirstSkipped.value;
+      return ['preparing', 'learning'].includes(currentSession.value?.status) && !hasUserTake.value && !writeFirstSkipped.value;
     });
 
     return {
@@ -349,7 +349,9 @@ export default defineComponent({
             <div class="ps-hint muted small mb8">用自己的话解释你对这个问题的理解，AI 会对比并指出差距。也可以直接跳过。</div>
             <textarea id="firstTakeInput" v-model="takeInput" rows="6" placeholder="你对这个问题的理解是什么？靠自己的知识来回答…"></textarea>
             <div class="write-first-actions">
-              <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('take')">提交理解，查看 AI 对比</button>
+              <button class="btn btn-primary" :disabled="submitting || currentSession.status === 'preparing'" @click="submitDeepAction('take')">
+                {{ currentSession.status === 'preparing' ? 'AI 回答生成中，可先写' : '提交理解，查看 AI 对比' }}
+              </button>
               <button class="btn btn-text" @click="skipWriteFirst">跳过，直接看 AI 回答</button>
             </div>
           </div>

@@ -87,6 +87,7 @@ export default defineComponent({
     const errorItems = computed(() => pendingItems.value.filter(x => x.status === 'error'));
     const selectedBatchItems = computed(() => pendingItems.value.filter(x => selectedBatchIds.value.includes(x.id)));
     const activeItems = computed(() => pendingItems.value.some(x => ['pending', 'generating'].includes(x.status)) || ['pending', 'generating'].includes(item.value?.status));
+    const visibleQuestions = computed(() => questions.value.slice(0, 5));
 
     function statusLabel(status) {
       return {
@@ -467,7 +468,7 @@ export default defineComponent({
 
     return {
       items, pendingItems, completedItems, visibleItems, readyItems, generatingItems, errorItems, selectedBatchItems,
-      item, questions, loading, actionBusy, direction, router, icon,
+      item, questions, visibleQuestions, loading, actionBusy, direction, router, icon,
       pageContent, pageDirection, pageSubmitting, selectedDomains, selectedBatchIds, collectMode,
       sourceUrl, urlFetching, voiceListening, imagePreview, imageName, domainOptions, modeOptions,
       statusLabel, depthLabel, toggleDomain, toggleBatchItem, clearBatchSelection, archiveSelectedBatch, mergeSelectedBatch, buildPageDirection, loadDomainOptions,
@@ -612,7 +613,7 @@ export default defineComponent({
           </section>
 
           <div class="inbox-question-list">
-            <article v-for="q in questions" :key="q.id" :class="['inbox-question-card', 'is-' + q.status]">
+            <article v-for="q in visibleQuestions" :key="q.id" :class="['inbox-question-card', 'is-' + q.status]">
               <div class="inbox-question-main">
                 <div class="inbox-question-title">{{ q.question }}</div>
                 <p v-if="q.why" class="inbox-question-why">{{ q.why }}</p>

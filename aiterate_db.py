@@ -874,15 +874,15 @@ def get_inbox_question(question_id: int) -> dict | None:
 
 
 def create_inbox_questions(item_id: int, questions: list[dict], replace_candidates: bool = False) -> list[int]:
-    if replace_candidates:
-        _exec(
-            "DELETE FROM inbox_questions WHERE inbox_item_id = :id AND status != 'selected'",
-            {"id": item_id},
-        )
+    # First-screen candidates must stay stable while background batches finish.
+    # `replace_candidates` is kept for API compatibility but no longer deletes
+    # existing rows; deleting caused users clicking visible questions to hit 404.
+    existing_rows = get_inbox_questions(item_id)
+    existing_questions = {str(r.get("question") or "").strip() for r in existing_rows}
     ids: list[int] = []
     for q in questions:
         question = (q.get("question") or "").strip()
-        if not question:
+        if not question or question in existing_questions:
             continue
         params = {
             "item_id": item_id,
@@ -910,6 +910,7 @@ def create_inbox_questions(item_id: int, questions: list[dict], replace_candidat
                 params,
             )
         ids.append(qid)
+        existing_questions.add(question)
     return ids
 
 

@@ -48,6 +48,14 @@ def test_context_rail_css_is_third_shell_column_and_mobile_fallback():
     assert '.context-rail { display: none;' in css
 
 
+def test_learning_page_keeps_write_first_input_available_while_ai_answer_generates():
+    src = _text(WORKSPACE_JS)
+    assert "['preparing', 'learning'].includes(currentSession.value?.status)" in src
+    assert "AI 回答生成中，可先写" in src
+    assert ":disabled=\"submitting || currentSession.status === 'preparing'\"" in src
+    assert src.index("write-first-section") < src.index("currentSession.material")
+
+
 def test_context_gap_long_text_wraps_and_rail_uses_continuous_sidebar_style():
     css = _text(APP_CSS)
     assert '.context-card-title {' in css
