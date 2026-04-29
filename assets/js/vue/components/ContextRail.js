@@ -47,6 +47,7 @@ export default defineComponent({
     });
     const contextRoundCount = computed(() => currentRounds.value.filter(r => r.type === 'take' || r.type === 'press').length);
     const pendingReviewCount = computed(() => reviewSchedule.value.filter(r => r.status === 'pending').length);
+    const canCompleteEarly = computed(() => ['learning', 'deepening', 'revising', 'feynman'].includes(currentSession.value?.status));
 
     function switchTab(tab) {
       const id = store.selectedSessionId;
@@ -78,11 +79,24 @@ export default defineComponent({
       }
     }
 
+    async function completeEarly() {
+      const sid = store.selectedSessionId;
+      if (!sid) return;
+      if (!window.confirm('确定提前结束这个学习会话？')) return;
+      try {
+        await api.completeSession(sid);
+        emit('refresh');
+        setNotice('已提前结束，进入复习队列。');
+      } catch (err) {
+        setNotice(`提前结束失败：${err.message}`, 'error');
+      }
+    }
+
     return {
       currentSession, currentRounds, unresolvedGaps, knowledgeNode,
       reviewSchedule, hasTakeRound, canEditDeepen, canDeepen, canReview,
-      contextScore, contextRoundCount, pendingReviewCount,
-      switchTab, openKnowledgeTree, startFeynman, getStageMeta, icons,
+      contextScore, contextRoundCount, pendingReviewCount, canCompleteEarly,
+      switchTab, openKnowledgeTree, startFeynman, completeEarly, getStageMeta, icons,
       fillGapAsQuestion,
       route,
     };
@@ -127,6 +141,7 @@ export default defineComponent({
           <button v-if="canEditDeepen" type="button" class="btn btn-primary btn-block btn-sm" @click="switchTab('deepen')">写一轮理解</button>
           <button v-if="canEditDeepen && hasTakeRound" type="button" class="btn btn-success btn-block btn-sm" @click="startFeynman">开始费曼检验</button>
           <button v-if="currentSession.status === 'feynman'" type="button" class="btn btn-primary btn-block btn-sm" @click="switchTab('review')">回答费曼题</button>
+          <button v-if="canCompleteEarly" type="button" class="btn btn-sm btn-block" @click="completeEarly">提前结束</button>
           <button v-if="pendingReviewCount" type="button" class="btn btn-primary btn-block btn-sm" @click="switchTab('review')">完成今日复习</button>
           <button type="button" class="btn btn-sm btn-block" @click="openKnowledgeTree">查看知识树</button>
         </div>

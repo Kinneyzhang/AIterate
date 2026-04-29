@@ -70,7 +70,7 @@ export default defineComponent({
     const nodeSuggestionLoading = ref(false);
     watch(() => store.workspace, async (ws) => {
       if (!ws || !ws.session) { nodeSuggestion.value = null; return; }
-      if (ws.knowledge_node_id) { nodeSuggestion.value = null; return; }
+      if (ws.knowledge_node_id || ws.knowledge_suggestion_ignored) { nodeSuggestion.value = null; return; }
       if (nodeSuggestionLoading.value || nodeSuggestion.value) return;
       const sid = ws.session.id;
       if (!sid) return;
@@ -94,6 +94,16 @@ export default defineComponent({
         nodeSuggestion.value = null;
         emit('refresh');
       } catch (err) { setNotice(`绑定失败：${err.message}`, 'error'); }
+    }
+
+    async function ignoreSuggestedNode() {
+      const sid = store.selectedSessionId;
+      if (!sid) return;
+      try {
+        await api.ignoreKnowledgeNodeSuggestion(sid);
+        nodeSuggestion.value = null;
+        emit('refresh');
+      } catch (err) { setNotice(`忽略失败：${err.message}`, 'error'); }
     }
 
     const canEditDeepen = computed(() => {
@@ -281,7 +291,7 @@ export default defineComponent({
       unresolvedGaps, reviewReport, knowledgeNode, doneFeynmanGroups, takeEvals,
       shouldWriteFirst, skipWriteFirst,
       correctionPlan,
-      nodeSuggestion, nodeSuggestionLoading, bindSuggestedNode,
+      nodeSuggestion, nodeSuggestionLoading, bindSuggestedNode, ignoreSuggestedNode,
       submitDeepAction, startFeynman, submitFeynman, switchTab,
       reviewSchedule, completeReviewDirect,
       reviewContents, reviewSubmitting, reviewResults, submitReviewReExplain,
@@ -331,7 +341,7 @@ export default defineComponent({
           <div v-if="nodeSuggestion && !knowledgeNode" class="knowledge-node-bar suggest-bar" style="cursor:default;">
             <span v-html="icons.tag + ' 系统推荐：' + nodeSuggestion.title"></span>
             <button class="btn btn-sm" @click="bindSuggestedNode" :disabled="nodeSuggestionLoading">确认绑定</button>
-            <button class="btn btn-sm btn-text" @click="nodeSuggestion = null">忽略</button>
+            <button class="btn btn-sm btn-text" @click="ignoreSuggestedNode" :disabled="nodeSuggestionLoading">忽略</button>
           </div>
           <!-- #3: 先写理解 — 不看 AI 回答，靠自己的理解 -->
           <div v-if="shouldWriteFirst" class="panel-section write-first-section">

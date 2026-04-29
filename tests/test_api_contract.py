@@ -76,6 +76,26 @@ def test_deepen_payload_contracts_and_validation(tmp_path, monkeypatch):
         assert r.status_code == 422, r.text
 
 
+def test_knowledge_node_suggestion_can_be_ignored_persistently(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch)
+    sid = create_learning_session(client, db, server, "泛型和静态类型系统有什么关系？")
+
+    first = client.post(f"/api/sessions/{sid}/suggest-knowledge-nodes", headers=AUTH_HEADERS)
+    assert first.status_code == 200, first.text
+    assert first.json()["suggestions"]
+
+    ignored = client.post(f"/api/sessions/{sid}/knowledge-node-suggestion/ignore", headers=AUTH_HEADERS)
+    assert ignored.status_code == 200, ignored.text
+    assert ignored.json()["ignored"] is True
+
+    second = client.post(f"/api/sessions/{sid}/suggest-knowledge-nodes", headers=AUTH_HEADERS)
+    assert second.status_code == 200, second.text
+    assert second.json()["suggestions"] == []
+    assert second.json()["ignored"] is True
+
+    workspace = client.get(f"/api/sessions/{sid}/workspace", headers=AUTH_HEADERS).json()
+    assert workspace["knowledge_suggestion_ignored"] is True
+
 def test_command_center_and_maintenance_contract(tmp_path, monkeypatch):
     client, db, server = setup_isolated_app(tmp_path, monkeypatch)
     create_learning_session(client, db, server)

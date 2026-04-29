@@ -254,6 +254,7 @@ def init_db():
                 score           INTEGER,
                 review_report   TEXT,
                 knowledge_node_id TEXT,
+                knowledge_suggestion_ignored INTEGER NOT NULL DEFAULT 0,
                 web_search      INTEGER     NOT NULL DEFAULT 0,
                 pinned_at       TEXT,
                 error_msg       TEXT,
@@ -272,6 +273,7 @@ def init_db():
                 score      SMALLINT,
                 review_report {jb},
                 knowledge_node_id TEXT,
+                knowledge_suggestion_ignored SMALLINT NOT NULL DEFAULT 0,
                 web_search      SMALLINT    NOT NULL DEFAULT 0,
                 pinned_at  {ts},
                 error_msg  TEXT,
@@ -285,6 +287,7 @@ def init_db():
         # ── 迁移：为已有表添加缺失列（SQLite + PostgreSQL）──
         _ensure_column(conn, "sessions", "review_report", _jsonb())
         _ensure_column(conn, "sessions", "knowledge_node_id", "TEXT")
+        _ensure_column(conn, "sessions", "knowledge_suggestion_ignored", "SMALLINT", "0")
         _ensure_column(conn, "sessions", "web_search", "SMALLINT", "0")
         _ensure_column(conn, "sessions", "pinned_at", _timestamptz())
 
@@ -992,7 +995,7 @@ def get_recent_sessions(limit: int = 20) -> list[dict]:
 def update_session(session_id: int, **kwargs):
     allowed = {
         "title", "content", "type", "status", "material", "score", "review_report",
-        "knowledge_node_id", "web_search", "pinned_at", "error_msg",
+        "knowledge_node_id", "knowledge_suggestion_ignored", "web_search", "pinned_at", "error_msg",
     }
     unknown = set(kwargs) - allowed
     if unknown:
@@ -1296,6 +1299,19 @@ def get_pending_feynman_group(session_id: int) -> list[dict]:
     WHERE session_id = :sid AND type = 'feynman' AND status = 'pending'
     ORDER BY seq
     """, {"sid": session_id})
+
+
+def cancel_pending_feynman_rounds(session_id: int) -> int:
+    """Cancel unanswered feynman rounds when a session is manually completed early."""
+    pending = get_pending_feynman_group(session_id)
+    if not pending:
+        return 0
+    _exec("""
+        UPDATE rounds
+        SET status = 'cancelled'
+        WHERE session_id = :sid AND type = 'feynman' AND status = 'pending'
+    """, {"sid": session_id})
+    return len(pending)
 
 def update_round(round_id: int, **kwargs):
     allowed = {"session_id", "seq", "type", "input", "output", "eval_json", "score_comment", "group_id", "score", "status"}
@@ -1648,12 +1664,36 @@ def set_knowledge_node(session_id: int, node_id: str | None):
     params = {"sid": session_id, "nid": node_id}
     if _is_sqlite():
         _exec("""
-            UPDATE sessions SET knowledge_node_id = :nid, updated_at = :ts WHERE id = :sid
+            UPDATE sessions
+            SET knowledge_node_id = :nid,
+                knowledge_suggestion_ignored = 0,
+                updated_at = :ts
+            WHERE id = :sid
         """, {**params, "ts": _now_str()})
     else:
         _exec("""
-            UPDATE sessions SET knowledge_node_id = :nid, updated_at = NOW() WHERE id = :sid
+            UPDATE sessions
+            SET knowledge_node_id = :nid,
+                knowledge_suggestion_ignored = 0,
+                updated_at = NOW()
+            WHERE id = :sid
         """, params)
+
+
+def set_knowledge_suggestion_ignored(session_id: int, ignored: bool = True) -> bool:
+    """Persistently hide auto knowledge-node suggestions for a session."""
+    if not get_session(session_id):
+        return False
+    update_session(session_id, knowledge_suggestion_ignored=1 if ignored else 0)
+    return True
+
+
+def is_knowledge_suggestion_ignored(session: dict | int | None) -> bool:
+    if session is None:
+        return False
+    if isinstance(session, int):
+        session = get_session(session)
+    return bool((session or {}).get("knowledge_suggestion_ignored"))
 
 
 def get_knowledge_node(session_id: int) -> str | None:

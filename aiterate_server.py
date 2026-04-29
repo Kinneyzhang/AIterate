@@ -224,6 +224,7 @@ def _build_session_workspace_payload(session: dict, rounds: list[dict]) -> dict:
         "review_report":         review_report,
         "review_schedule":       review_schedule,
         "knowledge_node_id":     knowledge_node_id,
+        "knowledge_suggestion_ignored": bool(session.get("knowledge_suggestion_ignored")),
     }
 
     # 如果有知识节点 ID，注入节点详情
@@ -1240,15 +1241,19 @@ async def complete_session(session_id: int):
 
     # Phase 5: state transition guard
     st = session.get("status", "")
-    if st not in ("learning", "deepening", "revising"):
-        raise HTTPException(409, f"Cannot complete in status '{st}'. Allowed: learning, deepening, revising.")
+    if st not in ("learning", "deepening", "revising", "feynman"):
+        raise HTTPException(409, f"Cannot complete in status '{st}'. Allowed: learning, deepening, revising, feynman.")
+
+    cancelled_feynman_rounds = 0
+    if st == "feynman":
+        cancelled_feynman_rounds = db.cancel_pending_feynman_rounds(session_id)
 
     db.update_session(session_id, status="completed")
 
     # 自动创建复习排期（如果有分数）
     db.schedule_review(session_id, session.get("score"))
 
-    return {"ok": True}
+    return {"ok": True, "cancelled_feynman_rounds": cancelled_feynman_rounds}
 
 
 @app.post("/api/sessions/{session_id}/reopen", dependencies=[Depends(_require_admin)])
@@ -1297,10 +1302,25 @@ async def suggest_nodes_for_session(session_id: int):
     session = db.get_session(session_id)
     if not session:
         raise HTTPException(404, "Session not found")
-    query = (session.get("title") or "") + " " + (session.get("content") or "")
-    tree = db.get_knowledge_tree()
-    suggestions = db.suggest_knowledge_nodes(tree, query)
-    return {"session_id": session_id, "suggestions": suggestions, "current_node_id": db.get_knowledge_node(session_id)}
+    ignored = db.is_knowledge_suggestion_ignored(session)
+    suggestions = []
+    if not ignored:
+        query = (session.get("title") or "") + " " + (session.get("content") or "")
+        tree = db.get_knowledge_tree()
+        suggestions = db.suggest_knowledge_nodes(tree, query)
+    return {
+        "session_id": session_id,
+        "suggestions": suggestions,
+        "current_node_id": db.get_knowledge_node(session_id),
+        "ignored": ignored,
+    }
+
+
+@app.post("/api/sessions/{session_id}/knowledge-node-suggestion/ignore", dependencies=[Depends(_require_admin)])
+async def ignore_knowledge_node_suggestion(session_id: int):
+    if not db.set_knowledge_suggestion_ignored(session_id, True):
+        raise HTTPException(404, "Session not found")
+    return {"ok": True, "ignored": True, "session_id": session_id}
 
 
 @app.get("/api/knowledge-tree/progress", dependencies=[Depends(_require_admin)])

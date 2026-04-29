@@ -76,6 +76,7 @@ SESSION = str(_env_path("TELEGRAM_SESSION", PROJECT_ROOT / "data" / "tg_session_
 PROXY = _parse_proxy(os.environ.get("TELEGRAM_PROXY"))
 AITERATE_BASE_URL = os.environ.get("AITERATE_BASE_URL", "http://127.0.0.1:7070").rstrip("/")
 AITERATE_INBOX_URL = f"{AITERATE_BASE_URL}/api/inbox"
+AITERATE_SESSIONS_URL = f"{AITERATE_BASE_URL}/api/sessions"
 STATE_DIR = _env_path("AITERATE_COLLECTOR_STATE_DIR", PROJECT_ROOT / "data" / "telegram_collector_state")
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -172,30 +173,67 @@ def save_state(source: str, state: dict) -> None:
     state_file(source).write_text(json.dumps(state, ensure_ascii=False))
 
 
-def push_to_inbox(content: str, source_label: str) -> bool:
+def _post_json(url: str, payload: dict, *, timeout: int = 10) -> bool:
     token = get_admin_token()
-    data = json.dumps(
-        {
-            "content": content,
-            "source_type": f"telegram:{source_label}",
-        },
-        ensure_ascii=False,
-    ).encode("utf-8")
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
-        AITERATE_INBOX_URL,
+        url,
         data=data,
         headers={"Content-Type": "application/json", "x-admin-token": token},
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             if 200 <= resp.status < 300:
                 return True
-            print(f"[collector] Inbox returned HTTP {resp.status}", flush=True)
+            print(f"[collector] AIIterate returned HTTP {resp.status} for {url}", flush=True)
             return False
     except Exception as e:
-        print(f"[collector] Failed to push inbox item: {type(e).__name__}: {e}", flush=True)
+        print(f"[collector] Failed to post to AIIterate: {type(e).__name__}: {e}", flush=True)
         return False
+
+
+def is_direct_session_question(text: str) -> bool:
+    """Only explicit Chinese/English question-mark endings become sessions."""
+    stripped = (text or "").strip()
+    return bool(stripped) and stripped[-1] in {"?", "？"}
+
+
+def format_telegram_content(content: str, source_label: str) -> str:
+    body = f"[{source_label}] {content}"
+    if len(body) > 5000:
+        body = body[:4997] + "..."
+    return body
+
+
+def create_question_session(content: str, source_label: str) -> bool:
+    return _post_json(
+        AITERATE_SESSIONS_URL,
+        {
+            "content": content,
+            "type": "question",
+            "web_search": False,
+        },
+        timeout=15,
+    )
+
+
+def push_to_inbox(content: str, source_label: str) -> bool:
+    return _post_json(
+        AITERATE_INBOX_URL,
+        {
+            "content": content,
+            "source_type": f"telegram:{source_label}",
+        },
+    )
+
+
+def dispatch_telegram_message(message_text: str, source_label: str) -> str:
+    """Route explicit questions to sessions; everything else to inbox."""
+    content = format_telegram_content(message_text, source_label)
+    if is_direct_session_question(message_text):
+        return "session" if create_question_session(content, source_label) else "failed"
+    return "inbox" if push_to_inbox(content, source_label) else "failed"
 
 
 # ── Signal handlers ─────────────────────────────────────────
@@ -280,11 +318,8 @@ async def fetch_round(client: TelegramClient, sources: list[dict], entity_cache:
                 if msg.id > new_last_id:
                     new_last_id = msg.id
 
-                content = f"[{label}] {msg.text}"
-                if len(content) > 5000:
-                    content = content[:4997] + "..."
-
-                if push_to_inbox(content, label):
+                route = dispatch_telegram_message(msg.text, label)
+                if route != "failed":
                     captured += 1
 
         except Exception as e:
@@ -292,7 +327,7 @@ async def fetch_round(client: TelegramClient, sources: list[dict], entity_cache:
             continue
 
         if captured:
-            print(f"[collector] {label}: {captured} new → inbox", flush=True)
+            print(f"[collector] {label}: {captured} new routed", flush=True)
             save_state(canonical, {"last_id": new_last_id, "last_run": datetime.now(cst).isoformat()})
 
 

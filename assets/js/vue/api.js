@@ -206,6 +206,11 @@ export const api = {
     invalidateDerived();
     return request(`/api/sessions/${id}/complete-feynman`, { method: 'POST', body: JSON.stringify({ group_id: groupId, answers }) });
   },
+  completeSession: async (id) => {
+    invalidateWorkspace(id);
+    invalidateDerived();
+    return request(`/api/sessions/${id}/complete`, { method: 'POST' });
+  },
   getSettings: () => request('/api/settings'),
   saveSettings: (payload) => request('/api/settings', { method: 'PATCH', body: JSON.stringify(payload) }),
   getReady: () => request('/api/ready'),
@@ -259,6 +264,10 @@ export const api = {
   saveDbConfig: (payload) => request('/api/db-config', { method: 'PUT', body: JSON.stringify(payload) }),
   // #1: knowledge node auto-suggest
   suggestKnowledgeNodes: (sid) => request(`/api/sessions/${sid}/suggest-knowledge-nodes`, { method: 'POST' }),
+  ignoreKnowledgeNodeSuggestion: async (sid) => {
+    invalidateWorkspace(sid);
+    return request(`/api/sessions/${sid}/knowledge-node-suggestion/ignore`, { method: 'POST' });
+  },
   bindKnowledgeNode: async (sid, nodeId) => {
     invalidateWorkspace(sid);
     return request(`/api/sessions/${sid}/knowledge-node`, { method: 'PATCH', body: JSON.stringify({ knowledge_node_id: nodeId }) });

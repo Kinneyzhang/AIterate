@@ -82,15 +82,39 @@ def test_full_flow_fail_then_revise_then_pass(tmp_path, monkeypatch):
     assert client.get(f"/api/sessions/{sid}", headers=AUTH_HEADERS).json()["status"] == "completed"
 
 
-def test_manual_completion_flow_schedules_review(tmp_path, monkeypatch):
+def test_manual_completion_is_allowed_from_learning_deepening_and_feynman(tmp_path, monkeypatch):
     client, db, server = setup_isolated_app(tmp_path, monkeypatch)
-    sid = create_learning_session(client, db, server, "什么是布隆过滤器？")
 
-    done = client.post(f"/api/sessions/{sid}/complete", headers=AUTH_HEADERS)
-    assert done.status_code == 200, done.text
-    assert done.json()["ok"] is True
-    assert client.get(f"/api/sessions/{sid}", headers=AUTH_HEADERS).json()["status"] == "completed"
-    assert db.get_session_review_schedule(sid)
+    learning_sid = create_learning_session(client, db, server, "什么是布隆过滤器？")
+    learning_done = client.post(f"/api/sessions/{learning_sid}/complete", headers=AUTH_HEADERS)
+    assert learning_done.status_code == 200, learning_done.text
+    assert client.get(f"/api/sessions/{learning_sid}", headers=AUTH_HEADERS).json()["status"] == "completed"
+    assert db.get_session_review_schedule(learning_sid)
+
+    deepening_sid = create_learning_session(client, db, server, "什么是 B 树？")
+    take = client.post(
+        f"/api/sessions/{deepening_sid}/deepen",
+        headers=AUTH_HEADERS,
+        json={"action_type": "take", "content": "我能解释 B 树的平衡、多路搜索和磁盘访问优化。"},
+    )
+    assert take.status_code == 200, take.text
+    deepening_done = client.post(f"/api/sessions/{deepening_sid}/complete", headers=AUTH_HEADERS)
+    assert deepening_done.status_code == 200, deepening_done.text
+    assert client.get(f"/api/sessions/{deepening_sid}", headers=AUTH_HEADERS).json()["status"] == "completed"
+
+    feynman_sid = create_learning_session(client, db, server, "什么是 MVCC？")
+    client.post(
+        f"/api/sessions/{feynman_sid}/deepen",
+        headers=AUTH_HEADERS,
+        json={"action_type": "take", "content": "我能解释版本链、快照读、当前读和隔离级别。"},
+    )
+    started = client.post(f"/api/sessions/{feynman_sid}/start-feynman", headers=AUTH_HEADERS)
+    assert started.status_code == 200, started.text
+    feynman_done = client.post(f"/api/sessions/{feynman_sid}/complete", headers=AUTH_HEADERS)
+    assert feynman_done.status_code == 200, feynman_done.text
+    assert client.get(f"/api/sessions/{feynman_sid}", headers=AUTH_HEADERS).json()["status"] == "completed"
+    rounds = db.get_rounds(feynman_sid)
+    assert [r["status"] for r in rounds if r["type"] == "feynman"] == ["cancelled", "cancelled"]
 
 
 def test_isolated_database_starts_clean_each_run(tmp_path, monkeypatch):
