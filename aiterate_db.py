@@ -255,8 +255,6 @@ def init_db():
                 review_report   TEXT,
                 knowledge_node_id TEXT,
                 knowledge_suggestion_ignored INTEGER NOT NULL DEFAULT 0,
-                source_entry_id INTEGER,
-                active_thread_id INTEGER,
                 web_search      INTEGER     NOT NULL DEFAULT 0,
                 pinned_at       TEXT,
                 error_msg       TEXT,
@@ -276,8 +274,6 @@ def init_db():
                 review_report {jb},
                 knowledge_node_id TEXT,
                 knowledge_suggestion_ignored SMALLINT NOT NULL DEFAULT 0,
-                source_entry_id INTEGER,
-                active_thread_id INTEGER,
                 web_search      SMALLINT    NOT NULL DEFAULT 0,
                 pinned_at  {ts},
                 error_msg  TEXT,
@@ -292,8 +288,6 @@ def init_db():
         _ensure_column(conn, "sessions", "review_report", _jsonb())
         _ensure_column(conn, "sessions", "knowledge_node_id", "TEXT")
         _ensure_column(conn, "sessions", "knowledge_suggestion_ignored", "SMALLINT", "0")
-        _ensure_column(conn, "sessions", "source_entry_id", "INTEGER")
-        _ensure_column(conn, "sessions", "active_thread_id", "INTEGER")
         _ensure_column(conn, "sessions", "web_search", "SMALLINT", "0")
         _ensure_column(conn, "sessions", "pinned_at", _timestamptz())
 
@@ -451,139 +445,6 @@ def init_db():
                 "CREATE INDEX IF NOT EXISTS idx_learning_gaps_status ON learning_gaps(status)"
             ))
 
-        # active learning context — entries / threads / agents
-        if sqlite:
-            conn.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS entries (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                title       TEXT,
-                content     TEXT NOT NULL,
-                kind        TEXT NOT NULL DEFAULT 'note',
-                source_type TEXT NOT NULL DEFAULT 'text',
-                source_url  TEXT,
-                status      TEXT NOT NULL DEFAULT 'active',
-                metadata    TEXT NOT NULL DEFAULT '{{}}',
-                created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-            )"""))
-            conn.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS threads (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                title       TEXT NOT NULL,
-                kind        TEXT NOT NULL DEFAULT 'topic',
-                summary     TEXT,
-                status      TEXT NOT NULL DEFAULT 'active',
-                metadata    TEXT NOT NULL DEFAULT '{{}}',
-                created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-            )"""))
-            conn.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS thread_items (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                thread_id   INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
-                item_type   TEXT NOT NULL,
-                item_id     INTEGER NOT NULL,
-                relation    TEXT NOT NULL DEFAULT 'related',
-                confidence  INTEGER NOT NULL DEFAULT 80,
-                provenance  TEXT NOT NULL DEFAULT '{{}}',
-                created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-                UNIQUE(thread_id, item_type, item_id, relation)
-            )"""))
-            conn.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS learning_agents (
-                id          TEXT PRIMARY KEY,
-                name        TEXT NOT NULL,
-                role        TEXT NOT NULL,
-                mode        TEXT NOT NULL DEFAULT 'relevant',
-                goal        TEXT NOT NULL,
-                enabled     INTEGER NOT NULL DEFAULT 1,
-                created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-            )"""))
-            conn.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS agent_runs (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_id    TEXT NOT NULL REFERENCES learning_agents(id),
-                target_type TEXT NOT NULL,
-                target_id   INTEGER,
-                trigger     TEXT NOT NULL DEFAULT 'manual',
-                output      TEXT NOT NULL DEFAULT '{{}}',
-                provenance  TEXT NOT NULL DEFAULT '[]',
-                created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-            )"""))
-        else:
-            conn.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS entries (
-                id          SERIAL PRIMARY KEY,
-                title       TEXT,
-                content     TEXT NOT NULL,
-                kind        TEXT NOT NULL DEFAULT 'note',
-                source_type TEXT NOT NULL DEFAULT 'text',
-                source_url  TEXT,
-                status      TEXT NOT NULL DEFAULT 'active',
-                metadata    {jb} NOT NULL DEFAULT '{{}}',
-                created_at  {ts} NOT NULL DEFAULT NOW(),
-                updated_at  {ts} NOT NULL DEFAULT NOW()
-            )"""))
-            conn.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS threads (
-                id          SERIAL PRIMARY KEY,
-                title       TEXT NOT NULL,
-                kind        TEXT NOT NULL DEFAULT 'topic',
-                summary     TEXT,
-                status      TEXT NOT NULL DEFAULT 'active',
-                metadata    {jb} NOT NULL DEFAULT '{{}}',
-                created_at  {ts} NOT NULL DEFAULT NOW(),
-                updated_at  {ts} NOT NULL DEFAULT NOW()
-            )"""))
-            conn.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS thread_items (
-                id          SERIAL PRIMARY KEY,
-                thread_id   INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
-                item_type   TEXT NOT NULL,
-                item_id     INTEGER NOT NULL,
-                relation    TEXT NOT NULL DEFAULT 'related',
-                confidence  SMALLINT NOT NULL DEFAULT 80,
-                provenance  {jb} NOT NULL DEFAULT '{{}}',
-                created_at  {ts} NOT NULL DEFAULT NOW(),
-                UNIQUE(thread_id, item_type, item_id, relation)
-            )"""))
-            conn.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS learning_agents (
-                id          TEXT PRIMARY KEY,
-                name        TEXT NOT NULL,
-                role        TEXT NOT NULL,
-                mode        TEXT NOT NULL DEFAULT 'relevant',
-                goal        TEXT NOT NULL,
-                enabled     SMALLINT NOT NULL DEFAULT 1,
-                created_at  {ts} NOT NULL DEFAULT NOW(),
-                updated_at  {ts} NOT NULL DEFAULT NOW()
-            )"""))
-            conn.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS agent_runs (
-                id          SERIAL PRIMARY KEY,
-                agent_id    TEXT NOT NULL REFERENCES learning_agents(id),
-                target_type TEXT NOT NULL,
-                target_id   INTEGER,
-                trigger     TEXT NOT NULL DEFAULT 'manual',
-                output      {jb} NOT NULL DEFAULT '{{}}',
-                provenance  {jb} NOT NULL DEFAULT '[]',
-                created_at  {ts} NOT NULL DEFAULT NOW()
-            )"""))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_at DESC)"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_entries_status ON entries(status)"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_threads_status ON threads(status)"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_thread_items_thread ON thread_items(thread_id)"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_agent_runs_agent ON agent_runs(agent_id, created_at DESC)"))
-        for agent in _DEFAULT_LEARNING_AGENTS:
-            if sqlite:
-                conn.execute(text("""INSERT OR IGNORE INTO learning_agents (id, name, role, mode, goal, enabled)
-                    VALUES (:id, :name, :role, :mode, :goal, 1)"""), agent)
-            else:
-                conn.execute(text("""INSERT INTO learning_agents (id, name, role, mode, goal, enabled)
-                    VALUES (:id, :name, :role, :mode, :goal, 1)
-                    ON CONFLICT (id) DO NOTHING"""), agent)
-
         # inbox_items / inbox_questions — 从碎片素材生成候选研究问题
         if sqlite:
             conn.execute(text(f"""
@@ -592,7 +453,6 @@ def init_db():
                 title       TEXT,
                 content     TEXT    NOT NULL,
                 source_type TEXT    NOT NULL DEFAULT 'text',
-                entry_id    INTEGER,
                 status      TEXT    NOT NULL DEFAULT 'pending',
                 error_msg   TEXT,
                 created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -607,7 +467,6 @@ def init_db():
                 angle            TEXT,
                 depth            TEXT,
                 related_concepts TEXT    NOT NULL DEFAULT '[]',
-                provenance       TEXT    NOT NULL DEFAULT '{{}}',
                 suggested_type   TEXT    NOT NULL DEFAULT 'question',
                 status           TEXT    NOT NULL DEFAULT 'candidate',
                 session_id       INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
@@ -621,7 +480,6 @@ def init_db():
                 title       TEXT,
                 content     TEXT NOT NULL,
                 source_type TEXT NOT NULL DEFAULT 'text',
-                entry_id    INTEGER,
                 status      TEXT NOT NULL DEFAULT 'pending',
                 error_msg   TEXT,
                 created_at  {ts} NOT NULL DEFAULT NOW(),
@@ -636,7 +494,6 @@ def init_db():
                 angle            TEXT,
                 depth            TEXT,
                 related_concepts {jb} NOT NULL DEFAULT '[]',
-                provenance       {jb} NOT NULL DEFAULT '{{}}',
                 suggested_type   TEXT NOT NULL DEFAULT 'question',
                 status           TEXT NOT NULL DEFAULT 'candidate',
                 session_id       INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
@@ -645,8 +502,6 @@ def init_db():
             )"""))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_items_status_created ON inbox_items(status, created_at DESC)"))
         _ensure_column(conn, "inbox_items", "title", "TEXT")
-        _ensure_column(conn, "inbox_items", "entry_id", "INTEGER")
-        _ensure_column(conn, "inbox_questions", "provenance", _jsonb(), "'{}'")
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_questions_item ON inbox_questions(inbox_item_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_questions_status ON inbox_questions(status)"))
 
@@ -694,15 +549,6 @@ def init_db():
 
 
 _LLM_ROLES = ["title", "answer", "evaluate", "review", "deepen", "question"]
-
-_DEFAULT_LEARNING_AGENTS = [
-    {"id": "question_alchemist", "name": "问题炼金师", "role": "entry_to_questions", "mode": "relevant", "goal": "把素材转化为高质量学习问题、反例和实践切口。"},
-    {"id": "context_detective", "name": "上下文侦探", "role": "related_context", "mode": "relevant", "goal": "发现当前学习与历史素材、会话、薄弱点之间的联系。"},
-    {"id": "feynman_coach", "name": "费曼教练", "role": "feynman", "mode": "relevant", "goal": "根据薄弱点设计检验题和修正建议。"},
-    {"id": "review_scheduler", "name": "复习调度员", "role": "review", "mode": "active", "goal": "从复习排期和薄弱点中挑选最该推进的学习任务。"},
-    {"id": "action_translator", "name": "行动转化器", "role": "action", "mode": "invoked", "goal": "把学习结论转化为可执行动作，但不自动写入外部系统。"},
-]
-
 
 def _migrate_settings():
     p = _fetch_one("SELECT settings FROM profile WHERE id = :id", {"id": PROFILE_ID})
@@ -922,9 +768,7 @@ def _normalize_inbox_question(row: dict | None) -> dict | None:
         return None
     row = dict(row)
     concepts = _jload(row.get("related_concepts") or [])
-    provenance = _jload(row.get("provenance") or {})
     row["related_concepts"] = concepts if isinstance(concepts, list) else []
-    row["provenance"] = provenance if isinstance(provenance, dict) else {}
     return row
 
 
@@ -949,126 +793,20 @@ def _derive_inbox_title(content: str, limit: int = 32) -> str:
     return title[:limit] or "未命名素材"
 
 
-def _normalize_entry(row: dict | None) -> dict | None:
-    if not row:
-        return None
-    row = dict(row)
-    metadata = _jload(row.get("metadata") or {})
-    row["metadata"] = metadata if isinstance(metadata, dict) else {}
-    return row
-
-
-def _normalize_thread(row: dict | None) -> dict | None:
-    if not row:
-        return None
-    row = dict(row)
-    metadata = _jload(row.get("metadata") or {})
-    row["metadata"] = metadata if isinstance(metadata, dict) else {}
-    return row
-
-
-def _normalize_thread_item(row: dict | None) -> dict | None:
-    if not row:
-        return None
-    row = dict(row)
-    provenance = _jload(row.get("provenance") or {})
-    row["provenance"] = provenance if isinstance(provenance, dict) else {}
-    return row
-
-
-def _normalize_agent_run(row: dict | None) -> dict | None:
-    if not row:
-        return None
-    row = dict(row)
-    output = _jload(row.get("output") or {})
-    provenance = _jload(row.get("provenance") or [])
-    row["output"] = output if isinstance(output, dict) else {}
-    row["provenance"] = provenance if isinstance(provenance, list) else []
-    return row
-
-
-def create_entry(content: str, title: str | None = None, kind: str = "note", source_type: str = "text", source_url: str | None = None, metadata: dict | None = None) -> int:
-    content = (content or "").strip()
-    if not content:
-        raise ValueError("entry content cannot be empty")
-    title = (title or _derive_inbox_title(content)).strip()[:120]
-    params = {
-        "title": title,
-        "content": content,
-        "kind": (kind or "note").strip() or "note",
-        "source_type": (source_type or "text").strip() or "text",
-        "source_url": (source_url or "").strip() or None,
-        "metadata": json.dumps(metadata or {}, ensure_ascii=False),
-    }
-    if _is_sqlite():
-        return _insert_returning_id(
-            """INSERT INTO entries (title, content, kind, source_type, source_url, metadata, created_at, updated_at)
-               VALUES (:title, :content, :kind, :source_type, :source_url, :metadata, datetime('now'), datetime('now')) RETURNING id""",
-            params,
-        )
-    return _insert_returning_id(
-        """INSERT INTO entries (title, content, kind, source_type, source_url, metadata)
-           VALUES (:title, :content, :kind, :source_type, :source_url, CAST(:metadata AS jsonb)) RETURNING id""",
-        params,
-    )
-
-
-def get_entry(entry_id: int) -> dict | None:
-    return _normalize_entry(_fetch_one("SELECT * FROM entries WHERE id = :id", {"id": entry_id}))
-
-
-def get_entries(limit: int = 100, q: str | None = None, kind: str | None = None, status: str | None = None) -> list[dict]:
-    clauses = []
-    params = {"limit": int(limit)}
-    if q:
-        clauses.append("(lower(title) LIKE lower(:q) OR lower(content) LIKE lower(:q))")
-        params["q"] = f"%{q.strip()}%"
-    if kind:
-        clauses.append("kind = :kind")
-        params["kind"] = kind
-    if status:
-        clauses.append("status = :status")
-        params["status"] = status
-    where = "WHERE " + " AND ".join(clauses) if clauses else ""
-    rows = _fetch_all(f"SELECT * FROM entries {where} ORDER BY created_at DESC, id DESC LIMIT :limit", params)
-    return [_normalize_entry(r) for r in rows]
-
-
-def update_entry(entry_id: int, **fields) -> dict | None:
-    allowed = {"title", "content", "kind", "source_type", "source_url", "status", "metadata"}
-    parts, params = [], {"id": entry_id}
-    for k, v in fields.items():
-        if k not in allowed:
-            continue
-        if k == "metadata":
-            parts.append("metadata = :metadata" if _is_sqlite() else "metadata = CAST(:metadata AS jsonb)")
-            params["metadata"] = json.dumps(v or {}, ensure_ascii=False)
-        else:
-            parts.append(f"{k} = :{k}")
-            params[k] = v
-    if not parts:
-        return get_entry(entry_id)
-    parts.append("updated_at = datetime('now')" if _is_sqlite() else "updated_at = NOW()")
-    _exec(f"UPDATE entries SET {', '.join(parts)} WHERE id = :id", params)
-    return get_entry(entry_id)
-
-
-def create_inbox_item(content: str, source_type: str = "text", entry_id: int | None = None) -> int:
+def create_inbox_item(content: str, source_type: str = "text") -> int:
     content = (content or "").strip()
     source_type = (source_type or "text").strip() or "text"
     title = _derive_inbox_title(content)
-    if entry_id is None:
-        entry_id = create_entry(content, title=title, kind="inbox", source_type=source_type, metadata={"origin": "inbox"})
     if _is_sqlite():
         return _insert_returning_id(
-            """INSERT INTO inbox_items (title, content, source_type, entry_id, status, created_at, updated_at)
-               VALUES (:title, :content, :source_type, :entry_id, 'pending', datetime('now'), datetime('now')) RETURNING id""",
-            {"title": title, "content": content, "source_type": source_type, "entry_id": entry_id},
+            """INSERT INTO inbox_items (title, content, source_type, status, created_at, updated_at)
+               VALUES (:title, :content, :source_type, 'pending', datetime('now'), datetime('now')) RETURNING id""",
+            {"title": title, "content": content, "source_type": source_type},
         )
     return _insert_returning_id(
-        """INSERT INTO inbox_items (title, content, source_type, entry_id, status)
-           VALUES (:title, :content, :source_type, :entry_id, 'pending') RETURNING id""",
-        {"title": title, "content": content, "source_type": source_type, "entry_id": entry_id},
+        """INSERT INTO inbox_items (title, content, source_type, status)
+           VALUES (:title, :content, :source_type, 'pending') RETURNING id""",
+        {"title": title, "content": content, "source_type": source_type},
     )
 
 
@@ -1146,13 +884,6 @@ def create_inbox_questions(item_id: int, questions: list[dict], replace_candidat
         question = (q.get("question") or "").strip()
         if not question or question in existing_questions:
             continue
-        item = get_inbox_item(item_id) or {}
-        provenance = q.get("provenance") or {
-            "entry_id": item.get("entry_id"),
-            "inbox_item_id": item_id,
-            "source": "inbox_question_generation",
-            "reason": "由 Inbox Entry 素材生成的候选学习问题。",
-        }
         params = {
             "item_id": item_id,
             "question": question,
@@ -1160,22 +891,21 @@ def create_inbox_questions(item_id: int, questions: list[dict], replace_candidat
             "angle": (q.get("angle") or "").strip(),
             "depth": (q.get("depth") or "medium").strip() or "medium",
             "related": json.dumps(q.get("related_concepts") or [], ensure_ascii=False),
-            "provenance": json.dumps(provenance, ensure_ascii=False),
             "suggested_type": (q.get("suggested_type") or "question").strip() or "question",
         }
         if _is_sqlite():
             qid = _insert_returning_id(
                 """INSERT INTO inbox_questions
-                   (inbox_item_id, question, why, angle, depth, related_concepts, provenance, suggested_type, status, created_at)
-                   VALUES (:item_id, :question, :why, :angle, :depth, :related, :provenance, :suggested_type, 'candidate', datetime('now'))
+                   (inbox_item_id, question, why, angle, depth, related_concepts, suggested_type, status, created_at)
+                   VALUES (:item_id, :question, :why, :angle, :depth, :related, :suggested_type, 'candidate', datetime('now'))
                    RETURNING id""",
                 params,
             )
         else:
             qid = _insert_returning_id(
                 """INSERT INTO inbox_questions
-                   (inbox_item_id, question, why, angle, depth, related_concepts, provenance, suggested_type, status)
-                   VALUES (:item_id, :question, :why, :angle, :depth, CAST(:related AS jsonb), CAST(:provenance AS jsonb), :suggested_type, 'candidate')
+                   (inbox_item_id, question, why, angle, depth, related_concepts, suggested_type, status)
+                   VALUES (:item_id, :question, :why, :angle, :depth, CAST(:related AS jsonb), :suggested_type, 'candidate')
                    RETURNING id""",
                 params,
             )
@@ -1232,333 +962,19 @@ def clear_inbox_history() -> int:
     return int(result.rowcount or 0)
 
 
-
-# ── Active Learning Context: threads / related context / agents ────────────────
-
-_STOPWORDS = {
-    "the", "and", "for", "with", "from", "this", "that", "how", "what", "why",
-    "一个", "这个", "那个", "如何", "为什么", "什么", "以及", "进行", "学习", "理解",
-}
-
-
-def _keyword_tokens(text_value: str, limit: int = 12) -> list[str]:
-    text_value = (text_value or "").lower()
-    raw = re.findall(r"[a-zA-Z0-9_+.#-]{2,}|[\u4e00-\u9fff]{2,}", text_value)
-    seen, out = set(), []
-    for tok in raw:
-        tok = tok.strip("-_+.# ")
-        if len(tok) < 2 or tok in _STOPWORDS or tok in seen:
-            continue
-        seen.add(tok)
-        out.append(tok)
-        if len(out) >= limit:
-            break
-    return out
-
-
-def _matches_keywords(text_value: str, keywords: list[str]) -> tuple[int, list[str]]:
-    hay = (text_value or "").lower()
-    matched = [kw for kw in keywords if kw and kw.lower() in hay]
-    return len(matched), matched
-
-
-def _excerpt(text_value: str, keywords: list[str], limit: int = 100) -> str:
-    text_value = re.sub(r"\s+", " ", text_value or "").strip()
-    if not text_value:
-        return ""
-    lower = text_value.lower()
-    idxs = [lower.find(kw.lower()) for kw in keywords if kw and lower.find(kw.lower()) >= 0]
-    start = max(0, min(idxs) - 24) if idxs else 0
-    return text_value[start:start + limit]
-
-
-def create_thread(title: str, kind: str = "topic", summary: str | None = None, metadata: dict | None = None) -> int:
-    title = (title or "").strip()
-    if not title:
-        raise ValueError("thread title cannot be empty")
-    params = {
-        "title": title,
-        "kind": (kind or "topic").strip() or "topic",
-        "summary": (summary or "").strip() or None,
-        "metadata": json.dumps(metadata or {}, ensure_ascii=False),
-    }
-    if _is_sqlite():
-        return _insert_returning_id(
-            """INSERT INTO threads (title, kind, summary, metadata, created_at, updated_at)
-               VALUES (:title, :kind, :summary, :metadata, datetime('now'), datetime('now')) RETURNING id""",
-            params,
-        )
-    return _insert_returning_id(
-        """INSERT INTO threads (title, kind, summary, metadata)
-           VALUES (:title, :kind, :summary, CAST(:metadata AS jsonb)) RETURNING id""",
-        params,
-    )
-
-
-def get_threads(limit: int = 100) -> list[dict]:
-    rows = _fetch_all("SELECT * FROM threads ORDER BY updated_at DESC, created_at DESC, id DESC LIMIT :limit", {"limit": int(limit)})
-    return [_normalize_thread(r) for r in rows]
-
-
-def get_thread(thread_id: int, include_items: bool = False) -> dict | None:
-    thread = _normalize_thread(_fetch_one("SELECT * FROM threads WHERE id = :id", {"id": thread_id}))
-    if thread and include_items:
-        thread["items"] = get_thread_items(thread_id)
-    return thread
-
-
-def add_thread_item(thread_id: int, item_type: str, item_id: int, relation: str = "related", confidence: int = 80, provenance: dict | None = None) -> dict:
-    if not get_thread(thread_id):
-        raise ValueError("thread not found")
-    params = {
-        "thread_id": thread_id,
-        "item_type": item_type,
-        "item_id": int(item_id),
-        "relation": (relation or "related").strip() or "related",
-        "confidence": max(0, min(100, int(confidence or 80))),
-        "provenance": json.dumps(provenance or {"reason": "手动加入 Thread。"}, ensure_ascii=False),
-    }
-    if _is_sqlite():
-        _exec(
-            """INSERT OR IGNORE INTO thread_items (thread_id, item_type, item_id, relation, confidence, provenance, created_at)
-               VALUES (:thread_id, :item_type, :item_id, :relation, :confidence, :provenance, datetime('now'))""",
-            params,
-        )
-    else:
-        _exec(
-            """INSERT INTO thread_items (thread_id, item_type, item_id, relation, confidence, provenance)
-               VALUES (:thread_id, :item_type, :item_id, :relation, :confidence, CAST(:provenance AS jsonb))
-               ON CONFLICT (thread_id, item_type, item_id, relation) DO NOTHING""",
-            params,
-        )
-    row = _fetch_one(
-        """SELECT * FROM thread_items WHERE thread_id = :thread_id AND item_type = :item_type
-           AND item_id = :item_id AND relation = :relation ORDER BY id DESC LIMIT 1""",
-        params,
-    )
-    return _normalize_thread_item(row)
-
-
-def get_thread_items(thread_id: int) -> list[dict]:
-    rows = _fetch_all("SELECT * FROM thread_items WHERE thread_id = :thread_id ORDER BY created_at ASC, id ASC", {"thread_id": thread_id})
-    return [_normalize_thread_item(r) for r in rows]
-
-
-def delete_thread_item(thread_item_id: int) -> bool:
-    result = _exec("DELETE FROM thread_items WHERE id = :id", {"id": thread_item_id})
-    return bool(result.rowcount)
-
-
-def set_session_thread(session_id: int, thread_id: int | None) -> dict | None:
-    if not get_session(session_id):
-        return None
-    if thread_id is not None and not get_thread(thread_id):
-        raise ValueError("thread not found")
-    update_session(session_id, active_thread_id=thread_id)
-    return get_session(session_id)
-
-
-def _context_item(item_type: str, item_id: int, title: str, excerpt: str, reason: str, score: int = 1) -> dict:
-    return {
-        "type": item_type,
-        "id": item_id,
-        "title": title,
-        "excerpt": excerpt,
-        "score": score,
-        "provenance": [{"type": item_type, "id": item_id, "title": title, "excerpt": excerpt, "reason": reason}],
-    }
-
-
-def find_related_context_for_session(session_id: int, limit: int = 8) -> dict:
-    session = get_session(session_id)
-    if not session:
-        return {"session_id": session_id, "items": [], "keywords": []}
-    seed = " ".join(str(session.get(k) or "") for k in ("title", "content", "material"))
-    keywords = _keyword_tokens(seed)
-    items: list[dict] = []
-    seen: set[tuple[str, int]] = set()
-
-    if session.get("active_thread_id"):
-        for ti in get_thread_items(int(session["active_thread_id"])):
-            key = (ti["item_type"], int(ti["item_id"]))
-            if key in seen or (ti["item_type"] == "session" and int(ti["item_id"]) == session_id):
-                continue
-            seen.add(key)
-            reason = (ti.get("provenance") or {}).get("reason") or "来自当前 Thread 的关联项。"
-            items.append(_context_item(ti["item_type"], int(ti["item_id"]), f"Thread item #{ti['item_id']}", "", reason, int(ti.get("confidence") or 80)))
-
-    for e in get_entries(limit=100, status="active"):
-        key = ("entry", int(e["id"]))
-        if key in seen or e.get("id") == session.get("source_entry_id"):
-            continue
-        score, matched = _matches_keywords(" ".join([e.get("title") or "", e.get("content") or ""]), keywords)
-        if score:
-            seen.add(key)
-            items.append(_context_item("entry", int(e["id"]), e.get("title") or f"Entry #{e['id']}", _excerpt(e.get("content") or "", matched), f"命中关键词：{', '.join(matched[:4])}", score))
-
-    for s in get_recent_sessions(limit=100):
-        key = ("session", int(s["id"]))
-        if int(s["id"]) == session_id or key in seen:
-            continue
-        score, matched = _matches_keywords(" ".join([s.get("title") or "", s.get("content") or "", s.get("material") or ""]), keywords)
-        if score:
-            seen.add(key)
-            items.append(_context_item("session", int(s["id"]), s.get("title") or f"Session #{s['id']}", _excerpt(s.get("content") or s.get("material") or "", matched), f"历史学习会话命中关键词：{', '.join(matched[:4])}", score))
-
-    gaps = _fetch_all("SELECT * FROM learning_gaps WHERE status = 'open' ORDER BY created_at DESC LIMIT 100")
-    for g in gaps:
-        key = ("gap", int(g["id"]))
-        if key in seen:
-            continue
-        score, matched = _matches_keywords(g.get("text") or "", keywords)
-        if score:
-            seen.add(key)
-            items.append(_context_item("gap", int(g["id"]), g.get("text") or f"Gap #{g['id']}", _excerpt(g.get("text") or "", matched), f"未解决薄弱点命中关键词：{', '.join(matched[:4])}", score))
-
-    items.sort(key=lambda x: x.get("score", 0), reverse=True)
-    return {"session_id": session_id, "keywords": keywords, "items": items[: max(1, int(limit))]}
-
-
-def get_learning_agents() -> list[dict]:
-    rows = _fetch_all("SELECT * FROM learning_agents ORDER BY id ASC")
-    return [dict(r) for r in rows]
-
-
-def get_learning_agent(agent_id: str) -> dict | None:
-    row = _fetch_one("SELECT * FROM learning_agents WHERE id = :id", {"id": agent_id})
-    return dict(row) if row else None
-
-
-def update_learning_agent(agent_id: str, **fields) -> dict | None:
-    allowed = {"mode", "enabled", "goal"}
-    parts, params = [], {"id": agent_id}
-    for k, v in fields.items():
-        if k not in allowed:
-            continue
-        parts.append(f"{k} = :{k}")
-        params[k] = int(v) if k == "enabled" else v
-    if not parts:
-        return get_learning_agent(agent_id)
-    parts.append("updated_at = datetime('now')" if _is_sqlite() else "updated_at = NOW()")
-    _exec(f"UPDATE learning_agents SET {', '.join(parts)} WHERE id = :id", params)
-    return get_learning_agent(agent_id)
-
-
-def run_learning_agent(agent_id: str, target_type: str, target_id: int | None = None, query: str | None = None, trigger: str = "manual") -> dict:
-    agent = get_learning_agent(agent_id)
-    if not agent:
-        raise ValueError("agent not found")
-    if not int(agent.get("enabled", 1)):
-        raise PermissionError("agent disabled")
-    suggestions: list[dict] = []
-    provenance: list[dict] = []
-    if agent_id == "context_detective" and target_type == "session" and target_id:
-        related = find_related_context_for_session(int(target_id), limit=5)
-        for item in related["items"]:
-            suggestions.append({"title": item["title"], "type": item["type"], "reason": item["provenance"][0]["reason"]})
-            provenance.extend(item["provenance"])
-    elif agent_id == "feynman_coach" and target_type == "session" and target_id:
-        gaps = _fetch_all("SELECT * FROM learning_gaps WHERE session_id = :sid AND status = 'open' ORDER BY created_at DESC LIMIT 5", {"sid": target_id})
-        for g in gaps:
-            suggestions.append({"title": f"用自己的话解释：{g['text']}", "type": "feynman_prompt", "reason": "来自未解决薄弱点。"})
-            provenance.append({"type": "gap", "id": g["id"], "title": g["text"], "excerpt": g["text"], "reason": "费曼教练使用当前 session 的 open gap。"})
-    elif agent_id == "review_scheduler":
-        for item in build_learning_brief("daily")["suggested_focus"][:5]:
-            suggestions.append({"title": item["title"], "type": item["type"], "reason": item["provenance"][0]["reason"]})
-            provenance.extend(item["provenance"])
-    else:
-        target_title = query or (get_session(int(target_id)).get("title") if target_id and target_type == "session" and get_session(int(target_id)) else target_type)
-        suggestions.append({"title": f"围绕 {target_title} 生成下一步学习切口", "type": agent.get("role"), "reason": agent.get("goal")})
-        provenance.append({"type": target_type, "id": target_id, "title": str(target_title), "excerpt": "", "reason": f"由{agent.get('name')}基于目标生成。"})
-    output = {"suggestions": suggestions or [{"title": "暂无足够上下文", "type": "empty", "reason": "未找到可用来源。"}]}
-    params = {
-        "agent_id": agent_id,
-        "target_type": target_type,
-        "target_id": target_id,
-        "trigger": trigger,
-        "output": json.dumps(output, ensure_ascii=False),
-        "provenance": json.dumps(provenance or [{"type": target_type, "id": target_id, "title": target_type, "excerpt": "", "reason": "Agent run target."}], ensure_ascii=False),
-    }
-    if _is_sqlite():
-        run_id = _insert_returning_id("""INSERT INTO agent_runs (agent_id, target_type, target_id, trigger, output, provenance, created_at)
-            VALUES (:agent_id, :target_type, :target_id, :trigger, :output, :provenance, datetime('now')) RETURNING id""", params)
-    else:
-        run_id = _insert_returning_id("""INSERT INTO agent_runs (agent_id, target_type, target_id, trigger, output, provenance)
-            VALUES (:agent_id, :target_type, :target_id, :trigger, CAST(:output AS jsonb), CAST(:provenance AS jsonb)) RETURNING id""", params)
-    return _normalize_agent_run(_fetch_one("SELECT * FROM agent_runs WHERE id = :id", {"id": run_id}))
-
-
-def build_learning_brief(period: str = "daily") -> dict:
-    period = "weekly" if period == "weekly" else "daily"
-    limit = 12 if period == "weekly" else 6
-    focus: list[dict] = []
-    entries = get_entries(limit=limit, status="active")
-    sessions = [s for s in get_recent_sessions(limit=limit) if s.get("status") != "completed"]
-    gaps = _fetch_all("SELECT * FROM learning_gaps WHERE status = 'open' ORDER BY created_at DESC LIMIT :limit", {"limit": limit})
-    for e in entries[:3]:
-        focus.append(_context_item("entry", int(e["id"]), e.get("title") or f"Entry #{e['id']}", _excerpt(e.get("content") or "", []), "最近新增/活跃的学习素材。"))
-    for s in sessions[:3]:
-        focus.append(_context_item("session", int(s["id"]), s.get("title") or f"Session #{s['id']}", _excerpt(s.get("content") or s.get("material") or "", []), "当前还未完成的学习会话。"))
-    for g in gaps[:3]:
-        focus.append(_context_item("gap", int(g["id"]), g.get("text") or f"Gap #{g['id']}", _excerpt(g.get("text") or "", []), "仍然 open 的薄弱点，适合推回学习。"))
-    return {"period": period, "new_entries": entries, "active_sessions": sessions, "open_gaps": gaps, "suggested_focus": focus[:limit]}
-
-
-def synthesize_personal_understanding(query: str) -> dict:
-    query = (query or "").strip()
-    if not query:
-        raise ValueError("query cannot be empty")
-    keywords = _keyword_tokens(query, limit=8) or [query.lower()]
-    evidence: list[dict] = []
-    gaps: list[dict] = []
-    for e in get_entries(limit=100):
-        score, matched = _matches_keywords(" ".join([e.get("title") or "", e.get("content") or ""]), keywords)
-        if score:
-            evidence.append(_context_item("entry", int(e["id"]), e.get("title") or f"Entry #{e['id']}", _excerpt(e.get("content") or "", matched), f"Entry 命中查询关键词：{', '.join(matched[:4])}", score))
-    for s in get_recent_sessions(limit=100):
-        score, matched = _matches_keywords(" ".join([s.get("title") or "", s.get("content") or "", s.get("material") or "", s.get("review_report") or ""]), keywords)
-        if score:
-            evidence.append(_context_item("session", int(s["id"]), s.get("title") or f"Session #{s['id']}", _excerpt(s.get("content") or s.get("material") or "", matched), f"Session 命中查询关键词：{', '.join(matched[:4])}", score))
-    for g in _fetch_all("SELECT * FROM learning_gaps WHERE status = 'open' ORDER BY created_at DESC LIMIT 100"):
-        score, matched = _matches_keywords(g.get("text") or "", keywords)
-        if score:
-            item = _context_item("gap", int(g["id"]), g.get("text") or f"Gap #{g['id']}", _excerpt(g.get("text") or "", matched), f"Open gap 命中查询关键词：{', '.join(matched[:4])}", score)
-            gaps.append(item)
-            evidence.append(item)
-    evidence.sort(key=lambda x: x.get("score", 0), reverse=True)
-    top = evidence[:8]
-    if top:
-        fragments = "；".join([x.get("excerpt") or x.get("title") for x in top[:3]])
-        answer = f"我目前对 {query} 的理解主要来自 {len(top)} 条学习资产：{fragments}。"
-    else:
-        answer = f"我目前还没有足够证据说明自己对 {query} 的稳定理解。"
-    provenance = [p for item in top for p in item.get("provenance", [])]
-    return {
-        "query": query,
-        "answer": answer,
-        "evidence": top,
-        "gaps": gaps[:5],
-        "next_steps": [
-            f"复述 {query} 的核心概念并找一个反例。",
-            f"把 {query} 和最近相关 session 做一次对比整理。",
-            f"补齐 {query} 相关 open gap 中最模糊的一条。",
-        ],
-        "provenance": provenance or [{"type": "query", "id": None, "title": query, "excerpt": "", "reason": "没有匹配到历史证据。"}],
-    }
-
 # ── Sessions ───────────────────────────────────────────────────────────────────
 
-def create_session(title: str, content: str = "", type: str = "question", web_search: bool = False, source_entry_id: int | None = None, active_thread_id: int | None = None) -> int:
+def create_session(title: str, content: str = "", type: str = "question", web_search: bool = False) -> int:
     if _is_sqlite():
         return _insert_returning_id("""
-        INSERT INTO sessions (title, content, type, status, web_search, source_entry_id, active_thread_id)
-        VALUES (:title, :content, :type, 'preparing', :web_search, :source_entry_id, :active_thread_id) RETURNING id
-        """, {"title": title, "content": content, "type": type, "web_search": int(web_search), "source_entry_id": source_entry_id, "active_thread_id": active_thread_id})
+        INSERT INTO sessions (title, content, type, status, web_search)
+        VALUES (:title, :content, :type, 'preparing', :web_search) RETURNING id
+        """, {"title": title, "content": content, "type": type, "web_search": int(web_search)})
     else:
         return _insert_returning_id("""
-        INSERT INTO sessions (title, content, type, status, web_search, source_entry_id, active_thread_id)
-        VALUES (:title, :content, :type, 'preparing', :web_search, :source_entry_id, :active_thread_id) RETURNING id
-        """, {"title": title, "content": content, "type": type, "web_search": int(web_search), "source_entry_id": source_entry_id, "active_thread_id": active_thread_id})
+        INSERT INTO sessions (title, content, type, status, web_search)
+        VALUES (:title, :content, :type, 'preparing', :web_search) RETURNING id
+        """, {"title": title, "content": content, "type": type, "web_search": int(web_search)})
 
 def get_session(session_id: int) -> dict | None:
     return _fetch_one("SELECT * FROM sessions WHERE id = :id", {"id": session_id})
@@ -1581,7 +997,6 @@ def update_session(session_id: int, **kwargs):
     allowed = {
         "title", "content", "type", "status", "material", "score", "review_report",
         "knowledge_node_id", "knowledge_suggestion_ignored", "web_search", "pinned_at", "error_msg",
-        "source_entry_id", "active_thread_id",
     }
     unknown = set(kwargs) - allowed
     if unknown:

@@ -671,209 +671,6 @@ class InboxQuestionSelectRequest(BaseModel):
     knowledge_node_id: str | None = None
 
 
-class EntryCreate(BaseModel):
-    content: str
-    title: str | None = None
-    kind: str = "note"
-    source_type: str = "text"
-    source_url: str | None = None
-    metadata: dict | None = None
-
-    @field_validator("content")
-    @classmethod
-    def entry_content_not_empty(cls, v):
-        if not v or not v.strip():
-            raise ValueError("content cannot be empty")
-        return v.strip()
-
-
-class EntryUpdate(BaseModel):
-    title: str | None = None
-    content: str | None = None
-    kind: str | None = None
-    source_type: str | None = None
-    source_url: str | None = None
-    status: str | None = None
-    metadata: dict | None = None
-
-
-class ThreadCreate(BaseModel):
-    title: str
-    kind: str = "topic"
-    summary: str | None = None
-    metadata: dict | None = None
-
-    @field_validator("title")
-    @classmethod
-    def thread_title_not_empty(cls, v):
-        if not v or not v.strip():
-            raise ValueError("title cannot be empty")
-        return v.strip()
-
-
-class ThreadItemCreate(BaseModel):
-    item_type: str
-    item_id: int
-    relation: str = "related"
-    confidence: int = 80
-    provenance: dict | None = None
-
-
-class SessionThreadUpdate(BaseModel):
-    thread_id: int | None = None
-
-
-class AgentUpdate(BaseModel):
-    mode: str | None = None
-    enabled: bool | None = None
-    goal: str | None = None
-
-
-class AgentRunRequest(BaseModel):
-    target_type: str
-    target_id: int | None = None
-    query: str | None = None
-
-
-class PersonalSynthesisRequest(BaseModel):
-    query: str
-
-    @field_validator("query")
-    @classmethod
-    def query_not_empty(cls, v):
-        if not v or not v.strip():
-            raise ValueError("query cannot be empty")
-        return v.strip()
-
-
-@app.get("/api/entries", dependencies=[Depends(_require_admin)])
-async def list_entries(limit: int = 100, q: str | None = None, kind: str | None = None, status: str | None = None):
-    return db.get_entries(limit=max(1, min(500, limit)), q=q, kind=kind, status=status)
-
-
-@app.post("/api/entries", dependencies=[Depends(_require_admin)])
-async def create_entry(body: EntryCreate):
-    entry_id = db.create_entry(
-        content=body.content,
-        title=body.title,
-        kind=body.kind,
-        source_type=body.source_type,
-        source_url=body.source_url,
-        metadata=body.metadata,
-    )
-    return db.get_entry(entry_id)
-
-
-@app.get("/api/entries/{entry_id}", dependencies=[Depends(_require_admin)])
-async def get_entry(entry_id: int):
-    entry = db.get_entry(entry_id)
-    if not entry:
-        raise HTTPException(404, "Entry not found")
-    return entry
-
-
-@app.patch("/api/entries/{entry_id}", dependencies=[Depends(_require_admin)])
-async def update_entry(entry_id: int, body: EntryUpdate):
-    if not db.get_entry(entry_id):
-        raise HTTPException(404, "Entry not found")
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
-    return db.update_entry(entry_id, **updates)
-
-
-@app.get("/api/threads", dependencies=[Depends(_require_admin)])
-async def list_threads(limit: int = 100):
-    return db.get_threads(limit=max(1, min(500, limit)))
-
-
-@app.post("/api/threads", dependencies=[Depends(_require_admin)])
-async def create_thread(body: ThreadCreate):
-    thread_id = db.create_thread(body.title, kind=body.kind, summary=body.summary, metadata=body.metadata)
-    return db.get_thread(thread_id)
-
-
-@app.get("/api/threads/{thread_id}", dependencies=[Depends(_require_admin)])
-async def get_thread(thread_id: int):
-    thread = db.get_thread(thread_id, include_items=True)
-    if not thread:
-        raise HTTPException(404, "Thread not found")
-    return thread
-
-
-@app.post("/api/threads/{thread_id}/items", dependencies=[Depends(_require_admin)])
-async def add_thread_item(thread_id: int, body: ThreadItemCreate):
-    try:
-        return db.add_thread_item(thread_id, body.item_type, body.item_id, body.relation, body.confidence, body.provenance)
-    except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
-
-
-@app.delete("/api/threads/{thread_id}/items/{thread_item_id}", dependencies=[Depends(_require_admin)])
-async def delete_thread_item(thread_id: int, thread_item_id: int):
-    if not db.get_thread(thread_id):
-        raise HTTPException(404, "Thread not found")
-    if not db.delete_thread_item(thread_item_id):
-        raise HTTPException(404, "Thread item not found")
-    return {"ok": True, "deleted_id": thread_item_id}
-
-
-@app.patch("/api/sessions/{session_id}/thread", dependencies=[Depends(_require_admin)])
-async def update_session_thread(session_id: int, body: SessionThreadUpdate):
-    try:
-        session = db.set_session_thread(session_id, body.thread_id)
-    except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
-    if not session:
-        raise HTTPException(404, "Session not found")
-    return {"ok": True, "session": session}
-
-
-@app.get("/api/sessions/{session_id}/related-context", dependencies=[Depends(_require_admin)])
-async def get_related_context(session_id: int, limit: int = 8):
-    if not db.get_session(session_id):
-        raise HTTPException(404, "Session not found")
-    return db.find_related_context_for_session(session_id, limit=max(1, min(30, limit)))
-
-
-@app.get("/api/agents", dependencies=[Depends(_require_admin)])
-async def list_agents():
-    return db.get_learning_agents()
-
-
-@app.patch("/api/agents/{agent_id}", dependencies=[Depends(_require_admin)])
-async def update_agent(agent_id: str, body: AgentUpdate):
-    if not db.get_learning_agent(agent_id):
-        raise HTTPException(404, "Agent not found")
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
-    if "mode" in updates and updates["mode"] not in {"off", "invoked", "relevant", "active"}:
-        raise HTTPException(400, "mode must be off/invoked/relevant/active")
-    return db.update_learning_agent(agent_id, **updates)
-
-
-@app.post("/api/agents/{agent_id}/run", dependencies=[Depends(_require_admin)])
-async def run_agent(agent_id: str, body: AgentRunRequest):
-    try:
-        return db.run_learning_agent(agent_id, body.target_type, body.target_id, body.query)
-    except PermissionError as exc:
-        raise HTTPException(409, str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
-
-
-@app.get("/api/briefs/learning", dependencies=[Depends(_require_admin)])
-async def get_learning_brief(period: str = "daily"):
-    if period not in {"daily", "weekly"}:
-        raise HTTPException(400, "period must be daily or weekly")
-    return db.build_learning_brief(period)
-
-
-@app.post("/api/me/synthesis", dependencies=[Depends(_require_admin)])
-async def personal_synthesis(body: PersonalSynthesisRequest):
-    try:
-        return db.synthesize_personal_understanding(body.query)
-    except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
-
-
 @app.get("/api/inbox", dependencies=[Depends(_require_admin)])
 async def list_inbox(limit: int = 50):
     return db.get_inbox_items(limit=max(1, min(200, limit)))
@@ -887,7 +684,7 @@ async def create_inbox_item(body: InboxCreate):
         job_type="generate_inbox_questions",
         payload={"inbox_item_id": item_id, "content": body.content, "direction": body.direction, "replace": True},
     )
-    return {"id": item_id, "entry_id": item.get("entry_id"), "title": item.get("title"), "status": "pending"}
+    return {"id": item_id, "title": item.get("title"), "status": "pending"}
 
 
 @app.get("/api/inbox/{item_id}", dependencies=[Depends(_require_admin)])
@@ -953,7 +750,7 @@ async def select_inbox_question(question_id: int, body: InboxQuestionSelectReque
         f"AI 生成问题理由：\n{question.get('why') or '这个问题值得进一步学习和验证。'}"
     )
     temp_title = question["question"][:40].strip()
-    sid = db.create_session(temp_title, content, "question", web_search=body.web_search, source_entry_id=item.get("entry_id"))
+    sid = db.create_session(temp_title, content, "question", web_search=body.web_search)
     db.update_session(sid, status="preparing")
     if body.knowledge_node_id:
         db.set_knowledge_node(sid, body.knowledge_node_id)

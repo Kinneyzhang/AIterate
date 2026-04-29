@@ -1,6 +1,6 @@
 // ── ContextRail.js ── 当前学习上下文右侧栏 ───────────────────────────────
 
-import { defineComponent, computed, ref, watch } from 'vue';
+import { defineComponent, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { store, currentSession, currentRounds, unresolvedGaps, reviewReport, knowledgeNode, getStageMeta, setNotice, askConfirm } from '../store.js';
 import { api } from '../api.js';
@@ -48,43 +48,6 @@ export default defineComponent({
     const contextRoundCount = computed(() => currentRounds.value.filter(r => r.type === 'take' || r.type === 'press').length);
     const pendingReviewCount = computed(() => reviewSchedule.value.filter(r => r.status === 'pending').length);
     const canCompleteEarly = computed(() => ['learning', 'deepening', 'revising', 'feynman'].includes(currentSession.value?.status));
-    const relatedContext = ref({ items: [], keywords: [] });
-    const relatedLoading = ref(false);
-    const synthesisQuery = ref('');
-    const synthesisResult = ref(null);
-    const synthesisLoading = ref(false);
-
-    async function loadRelatedContext() {
-      const sid = store.selectedSessionId;
-      if (!sid) {
-        relatedContext.value = { items: [], keywords: [] };
-        return;
-      }
-      relatedLoading.value = true;
-      try {
-        relatedContext.value = await api.getRelatedContext(sid, 8);
-      } catch (err) {
-        relatedContext.value = { items: [], keywords: [], error: err.message };
-      } finally {
-        relatedLoading.value = false;
-      }
-    }
-
-    async function runSynthesis() {
-      const query = synthesisQuery.value.trim();
-      if (!query) return;
-      synthesisLoading.value = true;
-      synthesisResult.value = null;
-      try {
-        synthesisResult.value = await api.synthesizePersonalUnderstanding(query);
-      } catch (err) {
-        setNotice(`查询失败：${err.message}`, 'error');
-      } finally {
-        synthesisLoading.value = false;
-      }
-    }
-
-    watch(() => store.selectedSessionId, () => loadRelatedContext(), { immediate: true });
 
     function switchTab(tab) {
       const id = store.selectedSessionId;
@@ -140,8 +103,6 @@ export default defineComponent({
       currentSession, currentRounds, unresolvedGaps, knowledgeNode,
       reviewSchedule, hasTakeRound, canEditDeepen, canDeepen, canReview,
       contextScore, contextRoundCount, pendingReviewCount, canCompleteEarly,
-      relatedContext, relatedLoading, synthesisQuery, synthesisResult, synthesisLoading,
-      loadRelatedContext, runSynthesis,
       switchTab, openKnowledgeTree, startFeynman, completeEarly, getStageMeta, icons,
       fillGapAsQuestion,
       route,
@@ -178,37 +139,6 @@ export default defineComponent({
           <button v-if="unresolvedGaps.length > 5" type="button" class="context-more-btn btn" @click="switchTab('deepen')">还有 {{ unresolvedGaps.length - 5 }} 个，去深化页查看</button>
         </template>
         <div v-else class="context-empty">暂无薄弱点，继续写理解或进入费曼。</div>
-      </section>
-
-      <section class="context-card context-related-card">
-        <div class="context-card-title" v-html="icons.bulb + ' 相关上下文'"></div>
-        <div v-if="relatedLoading" class="context-empty">正在找历史关联…</div>
-        <template v-else-if="relatedContext.items?.length">
-          <div v-if="relatedContext.keywords?.length" class="context-meta-line">
-            <span v-for="kw in relatedContext.keywords.slice(0, 4)" :key="kw">{{ kw }}</span>
-          </div>
-          <button v-for="item in relatedContext.items.slice(0, 5)" :key="item.type + '-' + item.id" type="button" class="context-gap-item btn" :title="item.provenance?.[0]?.reason || ''">
-            <span class="context-gap-text">{{ item.title }}</span>
-            <small>{{ item.type }}</small>
-          </button>
-        </template>
-        <div v-else class="context-empty">暂无高置信相关上下文。</div>
-        <button type="button" class="btn btn-sm btn-block" @click="loadRelatedContext">刷新上下文</button>
-      </section>
-
-      <section class="context-card context-synthesis-card">
-        <div class="context-card-title" v-html="icons.book + ' 我怎么看 X？'"></div>
-        <input type="text" v-model="synthesisQuery" placeholder="输入概念，比如 MVCC" @keydown.enter="runSynthesis" />
-        <button type="button" class="btn btn-primary btn-block btn-sm" :disabled="synthesisLoading || !synthesisQuery.trim()" @click="runSynthesis">
-          {{ synthesisLoading ? '查询中…' : '综合我的理解' }}
-        </button>
-        <div v-if="synthesisResult" class="context-empty">
-          {{ synthesisResult.answer }}
-          <div v-if="synthesisResult.evidence?.length" class="context-meta-line">
-            <span>证据 {{ synthesisResult.evidence.length }}</span>
-            <span>来源可追溯</span>
-          </div>
-        </div>
       </section>
 
       <section class="context-card context-actions-card">

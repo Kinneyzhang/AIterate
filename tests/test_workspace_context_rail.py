@@ -29,28 +29,12 @@ def test_context_rail_component_has_expected_cards_and_reuses_workspace_state():
     assert 'context-card context-gaps-card' in src
     assert 'context-card context-actions-card' in src
     assert 'context-card context-nav-card' in src
-    assert 'context-card context-related-card' in src
-    assert 'context-card context-synthesis-card' in src
     assert 'contextScore' in src
     assert 'unresolvedGaps.slice(0, 5)' in src
-    assert 'relatedContext.items.slice(0, 5)' in src
-    assert 'api.getRelatedContext' in src
-    assert 'api.synthesizePersonalUnderstanding' in src
     assert "switchTab('deepen')" in src
     assert "switchTab('review')" in src
     assert 'openKnowledgeTree' in src
     assert 'class="context-gap-text"' in src
-
-
-def test_active_learning_context_api_methods_are_exposed():
-    src = _text(ROOT / "assets/js/vue/api.js")
-    assert 'getEntries:' in src
-    assert 'getThreads:' in src
-    assert 'getRelatedContext:' in src
-    assert 'getLearningAgents:' in src
-    assert 'runLearningAgent:' in src
-    assert 'getLearningBrief:' in src
-    assert 'synthesizePersonalUnderstanding:' in src
 
 
 def test_context_rail_css_is_third_shell_column_and_mobile_fallback():
