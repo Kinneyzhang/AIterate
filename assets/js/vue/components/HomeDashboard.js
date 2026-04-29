@@ -20,24 +20,12 @@ export default defineComponent({
     const loading = ref(false);
     const ready = ref(false);
     const error = ref('');
-    const activeContext = ref({ brief: null, entries: [], threads: [], agents: [] });
-    const activeQuery = ref('');
-    const activeSynthesis = ref(null);
-    const activeSynthesisLoading = ref(false);
 
     async function loadDashboard(force = false, showLoading = false) {
       let loadingTimer = null;
       if (showLoading) loadingTimer = setTimeout(() => { loading.value = true; }, 120);
       try {
-        const [commandCenter, brief, entries, threads, agents] = await Promise.all([
-          api.getCommandCenter(force ? { force: true } : {}),
-          api.getLearningBrief('daily').catch(() => null),
-          api.getEntries({ limit: 20 }).catch(() => []),
-          api.getThreads(20).catch(() => []),
-          api.getLearningAgents().catch(() => []),
-        ]);
-        data.value = commandCenter;
-        activeContext.value = { brief, entries: entries || [], threads: threads || [], agents: agents || [] };
+        data.value = await api.getCommandCenter(force ? { force: true } : {});
         health.value = data.value.health || {};
         ready.value = true;
         error.value = '';
@@ -62,28 +50,6 @@ export default defineComponent({
                  : panel === 'deepen' ? 'session-deepen'
                  : 'session-learn';
       router.push({ name, params: { id } });
-    }
-
-    function openFocus(item) {
-      if (item?.type === 'session' && item.id) gotoSession(item.id, 'learn');
-      if (item?.type === 'gap' && item.provenance?.[0]?.id) {
-        const gap = item.provenance[0];
-        if (gap.session_id) gotoSession(gap.session_id, 'deepen');
-      }
-    }
-
-    async function runActiveSynthesis() {
-      const query = activeQuery.value.trim();
-      if (!query) return;
-      activeSynthesisLoading.value = true;
-      activeSynthesis.value = null;
-      try {
-        activeSynthesis.value = await api.synthesizePersonalUnderstanding(query);
-      } catch (err) {
-        setNotice(`主动查询失败：${err.message}`, 'error');
-      } finally {
-        activeSynthesisLoading.value = false;
-      }
     }
 
     // #3: flashcard quick review
@@ -142,7 +108,6 @@ export default defineComponent({
 
     return {
       data, health, loading, ready, error, icon, gotoSession,
-      activeContext, activeQuery, activeSynthesis, activeSynthesisLoading, openFocus, runActiveSynthesis,
       flashcard, fcAnswer, fcSubmitting, fcDone, openFlashcard, closeFlashcard, submitFlashcard,
       statusLabel, severityLabel, today,
     };
@@ -162,38 +127,6 @@ export default defineComponent({
       <div v-else-if="error" class="cmd-empty notice-error">加载失败：{{ error }}</div>
 
       <template v-else-if="ready">
-        <section class="home-section home-active-context">
-          <div class="home-section-title" v-html="icon('bulb') + ' 主动学习上下文'"></div>
-          <div class="cmd-item">
-            <span class="cmd-badge cmd-badge-review">Entries</span>
-            <span class="cmd-link">{{ activeContext.entries.length }} 条素材已成为长期学习资产</span>
-          </div>
-          <div class="cmd-item">
-            <span class="cmd-badge cmd-badge-review">Threads</span>
-            <span class="cmd-link">{{ activeContext.threads.length }} 个持续主题</span>
-          </div>
-          <div class="cmd-item">
-            <span class="cmd-badge cmd-badge-review">Agents</span>
-            <span class="cmd-link">{{ activeContext.agents.filter(a => a.enabled).length }} 个学习协作者待命</span>
-          </div>
-          <template v-if="activeContext.brief?.suggested_focus?.length">
-            <div class="home-section-title small" v-html="icon('zap') + ' 今日主动简报'"></div>
-            <button v-for="item in activeContext.brief.suggested_focus.slice(0, 3)" :key="'focus-'+item.type+'-'+item.id" type="button" class="cmd-item btn" @click="openFocus(item)">
-              <span class="cmd-badge cmd-badge-gap">{{ item.type }}</span>
-              <span class="cmd-link">{{ item.title }}</span>
-              <span class="cmd-score">可追溯</span>
-            </button>
-          </template>
-          <div class="cmd-item home-synthesis-row">
-            <span class="cmd-badge cmd-badge-feynman">我怎么看 X</span>
-            <input type="text" v-model="activeQuery" placeholder="输入概念，比如 MVCC" @keydown.enter="runActiveSynthesis" />
-            <button type="button" class="btn btn-primary btn-sm" :disabled="activeSynthesisLoading || !activeQuery.trim()" @click="runActiveSynthesis">
-              {{ activeSynthesisLoading ? '查询中…' : '综合' }}
-            </button>
-          </div>
-          <div v-if="activeSynthesis" class="cmd-empty">{{ activeSynthesis.answer }}</div>
-        </section>
-
         <section class="home-section">
           <div class="home-section-title home-urgent" v-html="icon('zap') + ' 先推进这个'"></div>
           <template v-if="(data.feynman_pending?.length || 0) + (data.review_due?.filter(r => r.review_date < today).length || 0) > 0">

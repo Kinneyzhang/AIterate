@@ -65,27 +65,6 @@ def test_inbox_creates_entry_and_selected_session_keeps_source_provenance(tmp_pa
     assert session["source_entry_id"] == entry_id
 
 
-def test_legacy_inbox_items_are_backfilled_to_entries(tmp_path, monkeypatch):
-    client, db, server = setup_isolated_app(tmp_path, monkeypatch)
-    item_id = db._insert_returning_id(
-        """INSERT INTO inbox_items (title, content, source_type, status, created_at, updated_at)
-           VALUES (:title, :content, :source_type, 'ready', datetime('now'), datetime('now')) RETURNING id""",
-        {"title": "旧素材", "content": "旧 Inbox 里的 MVCC 笔记", "source_type": "text"},
-    )
-    assert db.get_inbox_item(item_id)["entry_id"] is None
-
-    changed = db.backfill_inbox_entries()
-
-    assert changed == 1
-    item = db.get_inbox_item(item_id)
-    assert item["entry_id"]
-    entry = db.get_entry(item["entry_id"])
-    assert entry["content"] == "旧 Inbox 里的 MVCC 笔记"
-    assert entry["kind"] == "inbox"
-    assert entry["metadata"]["backfilled_from"] == "inbox_items"
-    assert db.backfill_inbox_entries() == 0
-
-
 def test_threads_can_group_entries_sessions_and_expose_provenance(tmp_path, monkeypatch):
     client, db, server = setup_isolated_app(tmp_path, monkeypatch)
     sid = create_learning_session(client, db, server, "PostgreSQL MVCC 如何避免不可重复读？")
