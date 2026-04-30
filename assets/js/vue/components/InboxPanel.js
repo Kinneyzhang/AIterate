@@ -601,7 +601,7 @@ export default defineComponent({
             <button type="button" class="btn btn-ghost" @click="archiveItem()">完成</button>
           </header>
 
-          <div v-if="item.error_msg" class="inbox-error">{{ item.error_msg }}</div>
+          <div v-if="item.error_msg && !questions.length" class="inbox-error">{{ item.error_msg }}</div>
           <section class="inbox-source-block">
             <div class="ps-label">原始素材</div>
             <div class="inbox-source-text">{{ item.content }}</div>

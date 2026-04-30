@@ -326,7 +326,7 @@ def test_inbox_frontend_contract_files_are_wired():
     assert "'inbox-detail-pane', { 'is-overview': !item }" in inbox_panel
     assert ".inbox-detail-pane.is-overview" in css
     assert inbox_panel.index("inbox-detail-pane") < inbox_panel.index('class="inbox-list-pane"')
-    assert "visibleQuestions" in inbox_panel
+    assert "v-if=\"item.error_msg && !questions.length\"" in inbox_panel
     assert "const visibleQuestions = computed(() => questions.value.slice(0, 5))" in inbox_panel
     assert "v-for=\"q in visibleQuestions\"" in inbox_panel
     assert "pendingItems" in inbox_panel and "completedItems" in inbox_panel
