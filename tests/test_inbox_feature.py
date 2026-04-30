@@ -2,7 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from app_fixture import AUTH_HEADERS, setup_isolated_app
+from app_fixture import AUTH_HEADERS, run_next_answer_job, setup_isolated_app
 
 
 def _fake_questions(content, suffix=""):
@@ -188,6 +188,52 @@ def test_inbox_existing_question_remains_selectable_while_background_generation_
     assert selected.status_code == 200, selected.text
     assert selected.json()["session_id"]
     assert client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).json()["item"]["status"] == "partially_used"
+
+
+def test_inbox_parse_failure_preserves_existing_questions_as_ready(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch)
+
+    r = client.post("/api/inbox", headers=AUTH_HEADERS, json={"content": "大模型的泛化和约束"})
+    assert r.status_code == 200, r.text
+    item_id = r.json()["id"]
+    db.create_inbox_questions(item_id, _fake_questions("大模型的泛化和约束")["questions"])
+    db.update_inbox_item(item_id, status="generating", error_msg="previous failure")
+
+    async def fake_generate_inbox_questions(content: str, direction: str | None = None):
+        return {"questions": [], "parse_failed": True, "raw": "not json"}
+
+    monkeypatch.setattr(server.ai, "generate_inbox_questions", fake_generate_inbox_questions, raising=False)
+    job = db.claim_pending_job()
+    asyncio.run(server._process_generate_inbox_questions(job["id"], job))
+
+    detail = client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).json()
+    assert detail["item"]["status"] == "ready"
+    assert detail["item"].get("error_msg") is None
+    assert len(detail["questions"]) == 2
+    completed_job = db._fetch_one("SELECT status, error_msg, result FROM jobs WHERE id = :id", {"id": job["id"]})
+    assert completed_job["status"] == "completed"
+    assert completed_job["error_msg"] is None
+
+
+def test_session_answer_uses_fallback_title_when_ai_title_is_blank(tmp_path, monkeypatch):
+    client, db, server = setup_isolated_app(tmp_path, monkeypatch)
+
+    async def blank_title(content: str):
+        return "   "
+
+    monkeypatch.setattr(server.ai, "generate_title", blank_title)
+    r = client.post(
+        "/api/sessions",
+        headers=AUTH_HEADERS,
+        json={"content": "问题：Lisp 宏为什么能减少 boilerplate？", "type": "question", "web_search": False},
+    )
+    assert r.status_code == 200, r.text
+    sid = r.json()["session_id"]
+    run_next_answer_job(db, server)
+
+    session = client.get(f"/api/sessions/{sid}", headers=AUTH_HEADERS).json()
+    assert session["status"] == "learning"
+    assert session["title"] == "Lisp 宏为什么能减少 boilerplate"
 
 
 def test_inbox_item_has_short_title_and_history_delete_contract(tmp_path, monkeypatch):

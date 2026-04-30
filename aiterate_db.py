@@ -2109,12 +2109,12 @@ def complete_job(job_id: int, result: dict | None = None):
     r = json.dumps(result) if result is not None else None
     if _is_sqlite():
         _exec(
-            """UPDATE jobs SET status = 'completed', result = :r, completed_at = datetime('now')
+            """UPDATE jobs SET status = 'completed', result = :r, error_msg = NULL, completed_at = datetime('now')
                WHERE id = :id""",
             {"r": r, "id": job_id})
     else:
         _exec(
-            """UPDATE jobs SET status = 'completed', result = CAST(:r AS jsonb), completed_at = NOW()
+            """UPDATE jobs SET status = 'completed', result = CAST(:r AS jsonb), error_msg = NULL, completed_at = NOW()
                WHERE id = :id""",
             {"r": r, "id": job_id})
 

@@ -37,6 +37,32 @@ app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 app.mount("/vendor", StaticFiles(directory=str(VENDOR_DIR)), name="vendor")
 
 
+def _fallback_session_title(content: str, limit: int = 40) -> str:
+    """Derive a safe local session title when AI title generation returns empty."""
+    text = (content or "").strip()
+    if not text:
+        return "未命名"
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    first = lines[0] if lines else text
+    for prefix in ("问题：", "问题:", "标题：", "标题:", "观点：", "观点:"):
+        if first.startswith(prefix):
+            first = first[len(prefix):].strip()
+            break
+    first = re.sub(r"https?://\S+", "", first).strip() or (lines[1] if len(lines) > 1 else text)
+    first = re.sub(r"^[#>*\-\s]+", "", first).strip()
+    first = re.sub(r"\s+", " ", first)
+    title = (re.split(r"[。！？!?；;\n]", first)[0] or first).strip(" \t\"'“”‘’《》")
+    return (title[:limit].strip() or "未命名")
+
+
+def _inbox_status_from_existing(item_id: int) -> str | None:
+    """Return a non-error inbox status if the item already has usable questions."""
+    latest_item = db.get_inbox_item(item_id) or {}
+    if int(latest_item.get("question_count") or 0) <= 0:
+        return None
+    return "partially_used" if int(latest_item.get("selected_count") or 0) > 0 or latest_item.get("status") == "partially_used" else "ready"
+
+
 # ── Auth System (Phase 4.3: Cookie-based session auth) ─────
 
 AUTH_COOKIE_NAME = "aiterate_session"
@@ -749,7 +775,7 @@ async def select_inbox_question(question_id: int, body: InboxQuestionSelectReque
         f"来源素材：\n{item.get('content', '')}\n\n"
         f"AI 生成问题理由：\n{question.get('why') or '这个问题值得进一步学习和验证。'}"
     )
-    temp_title = question["question"][:40].strip()
+    temp_title = _fallback_session_title(question.get("question") or content)
     sid = db.create_session(temp_title, content, "question", web_search=body.web_search)
     db.update_session(sid, status="preparing")
     if body.knowledge_node_id:
@@ -838,7 +864,7 @@ class SessionPinUpdate(BaseModel):
 async def create_session_and_answer(body: SessionCreate):
     """阶段1：创建 session，通过 DB job queue 后台异步生成标题+初始回答"""
     # 先用 content 前 40 字作为临时标题，AI 生成正式标题后更新
-    temp_title = body.content[:40].strip()
+    temp_title = _fallback_session_title(body.content)
     sid = db.create_session(
         title=temp_title,
         content=body.content,
@@ -1402,14 +1428,17 @@ async def _process_generate_session_answer(job_id: int, job: dict):
         tree = db.get_knowledge_tree()
         knowledge_node = db.find_node_by_id(tree, node_id)
 
-    # 并行生成标题和回答
-    title, result = await asyncio.gather(
+    # 并行生成标题和回答；标题为空时用本地兜底，避免侧栏出现“未命名”。
+    title_result, result = await asyncio.gather(
         ai.generate_title(content),
         ai.generate_initial_answer(content, "", stype,
                                    web_search=web_search,
                                    knowledge_node=knowledge_node),
     )
     answer = result["answer"]
+    fallback_title = _fallback_session_title(content)
+    existing_title = (session.get("title") or "").strip()
+    title = (str(title_result or "").strip() or existing_title or fallback_title)[:120]
     db.update_session(sid, title=title, material=answer, error_msg=None, status="learning")
     db.complete_job(job_id, {"title": title, "answer_len": len(answer)})
 
@@ -1435,6 +1464,15 @@ async def _process_generate_inbox_questions(job_id: int, job: dict):
         result = await ai.generate_inbox_questions(content, direction=direction)
         questions = result.get("questions") if isinstance(result, dict) else []
         if not isinstance(questions, list) or not questions:
+            existing_status = _inbox_status_from_existing(item_id)
+            if existing_status:
+                db.update_inbox_item(item_id, status=existing_status, error_msg=None)
+                return db.complete_job(job_id, {
+                    "inbox_item_id": item_id,
+                    "question_count": 0,
+                    "preserved_existing": True,
+                    "warning": "AI did not generate valid new inbox questions",
+                })
             raise RuntimeError("AI did not generate valid inbox questions")
         ids = db.create_inbox_questions(item_id, questions, replace_candidates=replace)
         latest_item = db.get_inbox_item(item_id) or {}
@@ -1443,6 +1481,15 @@ async def _process_generate_inbox_questions(job_id: int, job: dict):
             db.update_inbox_item(item_id, status=next_status, error_msg=None)
         db.complete_job(job_id, {"inbox_item_id": item_id, "question_count": len(ids), "preserved_existing": True})
     except Exception as e:
+        existing_status = _inbox_status_from_existing(item_id)
+        if existing_status:
+            db.update_inbox_item(item_id, status=existing_status, error_msg=None)
+            return db.complete_job(job_id, {
+                "inbox_item_id": item_id,
+                "question_count": 0,
+                "preserved_existing": True,
+                "warning": str(e)[:500],
+            })
         db.update_inbox_item(item_id, status="error", error_msg=str(e)[:500])
         raise
 
@@ -1491,10 +1538,13 @@ async def _retry_preparing_session(session_id: int):
     
     try:
         # Parallel title + answer generation
-        title, result = await asyncio.gather(
+        title_result, result = await asyncio.gather(
             ai.generate_title(content),
             ai.generate_initial_answer(content, "", session_type),
         )
+        fallback_title = _fallback_session_title(content)
+        existing_title = (session.get("title") or "").strip()
+        title = (str(title_result or "").strip() or existing_title or fallback_title)[:120]
         db.update_session(session_id, title=title, material=result["answer"], status="learning")
     except Exception as e:
         db.update_session(session_id, status="error", error_msg=str(e))
