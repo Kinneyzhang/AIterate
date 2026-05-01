@@ -1317,8 +1317,10 @@ async def regenerate_answer(session_id: int):
 
     content = session.get("content", "")
     stype = session.get("type", "question")
+    web_search = session.get("web_search", False)
     try:
-        result = await ai.generate_initial_answer(session.get("title", ""), content, stype)
+        result = await ai.generate_initial_answer(session.get("title", ""), content, stype,
+                                                    web_search=web_search)
         new_answer = result["answer"]
     except Exception as e:
         raise HTTPException(500, f"AI regenerate failed: {e}")
