@@ -111,7 +111,7 @@ def _resolve_llm_config(role: str = "default") -> dict:
     }
 
 
-async def _call_llm(messages: list, temperature: float = 0.7, max_tokens: int = 1500,
+async def _call_llm(messages: list, temperature: float = 0.7, max_tokens: int | None = None,
                     role: str = "default") -> str:
     cfg = _resolve_llm_config(role)
     provider = cfg["provider"]
@@ -130,7 +130,7 @@ async def _call_llm(messages: list, temperature: float = 0.7, max_tokens: int = 
         user_msgs   = [m for m in messages if m["role"] != "system"]
         payload = {
             "model":      model,
-            "max_tokens": max_tokens,
+            "max_tokens": max_tokens or 4096,
             "messages":   user_msgs,
         }
         if system_msgs:
@@ -157,8 +157,9 @@ async def _call_llm(messages: list, temperature: float = 0.7, max_tokens: int = 
         "model":       model,
         "messages":    messages,
         "temperature": temperature,
-        "max_tokens":  max_tokens,
     }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type":  "application/json",
@@ -353,7 +354,7 @@ async def generate_initial_answer(title: str, content: str, type: str = "questio
         {"role": "system", "content": system_prompt},
         {"role": "user",   "content": prompt},
     ]
-    raw = await _call_llm(messages, temperature=0.5, max_tokens=4096, role="answer")
+    raw = await _call_llm(messages, temperature=0.5, role="answer")
     return {"answer": raw}
 
 
@@ -450,7 +451,7 @@ async def answer_followup_question(original_question: str, ai_answer: str, press
         {"role": "system", "content": system_prompt},
         {"role": "user",   "content": prompt},
     ]
-    raw = await _call_llm(messages, temperature=0.5, max_tokens=2048, role="deepen")
+    raw = await _call_llm(messages, temperature=0.5, role="deepen")
     return {"answer": raw}
 
 
