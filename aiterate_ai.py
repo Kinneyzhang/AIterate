@@ -286,7 +286,7 @@ async def generate_inbox_questions(content: str, direction: str | None = None) -
         {"role": "system", "content": INBOX_QUESTION_SYSTEM},
         {"role": "user", "content": prompt},
     ]
-    raw = await _call_llm(messages, temperature=0.65, max_tokens=1200, role="question")
+    raw = await _call_llm(messages, temperature=0.65, max_tokens=2048, role="question")
     result = _extract_json_block(raw)
     if not result or not isinstance(result.get("questions"), list):
         return {"questions": [], "raw": raw, "parse_failed": True}
@@ -353,7 +353,7 @@ async def generate_initial_answer(title: str, content: str, type: str = "questio
         {"role": "system", "content": system_prompt},
         {"role": "user",   "content": prompt},
     ]
-    raw = await _call_llm(messages, temperature=0.5, max_tokens=1200, role="answer")
+    raw = await _call_llm(messages, temperature=0.5, max_tokens=4096, role="answer")
     return {"answer": raw}
 
 
@@ -450,7 +450,7 @@ async def answer_followup_question(original_question: str, ai_answer: str, press
         {"role": "system", "content": system_prompt},
         {"role": "user",   "content": prompt},
     ]
-    raw = await _call_llm(messages, temperature=0.5, max_tokens=800, role="deepen")
+    raw = await _call_llm(messages, temperature=0.5, max_tokens=2048, role="deepen")
     return {"answer": raw}
 
 
@@ -491,7 +491,7 @@ async def generate_review_questions(original_question: str, ai_answer: str, lear
         {"role": "system", "content": REVIEW_GEN_SYSTEM},
         {"role": "user",   "content": prompt},
     ]
-    raw = await _call_llm(messages, temperature=0.5, max_tokens=400, role="review")
+    raw = await _call_llm(messages, temperature=0.5, max_tokens=800, role="review")
     try:
         result = _extract_json_block(raw)
         if result is None:
@@ -531,7 +531,7 @@ async def suggest_deepen_prompts(original_question: str, gaps: list[str]) -> dic
         {"role": "system", "content": SUGGEST_DEEPEN_SYSTEM},
         {"role": "user",   "content": prompt},
     ]
-    raw = await _call_llm(messages, temperature=0.5, max_tokens=300, role="deepen")
+    raw = await _call_llm(messages, temperature=0.5, max_tokens=600, role="deepen")
     try:
         result = _extract_json_block(raw)
         if result is None:
