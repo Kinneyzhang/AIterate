@@ -211,6 +211,20 @@ export const api = {
     invalidateDerived();
     return request(`/api/sessions/${id}/complete`, { method: 'POST' });
   },
+  regenerateAnswer: async (id) => {
+    invalidateWorkspace(id);
+    invalidateDerived();
+    return request(`/api/sessions/${id}/regenerate-answer`, { method: 'POST' });
+  },
+  regeneratePress: async (id, roundId) => {
+    invalidateWorkspace(id);
+    return request(`/api/sessions/${id}/regenerate-press`, { method: 'POST', body: JSON.stringify({ round_id: roundId }) });
+  },
+  regenerateFeynman: async (id) => {
+    invalidateWorkspace(id);
+    invalidateDerived();
+    return request(`/api/sessions/${id}/regenerate-feynman`, { method: 'POST' });
+  },
   getSettings: () => request('/api/settings'),
   saveSettings: (payload) => request('/api/settings', { method: 'PATCH', body: JSON.stringify(payload) }),
   getReady: () => request('/api/ready'),

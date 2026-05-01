@@ -1298,6 +1298,124 @@ async def reopen_session(session_id: int):
     return {"ok": True}
 
 
+# ── Regenerate APIs ──────────────────────────────────────────
+
+class RegeneratePressRequest(BaseModel):
+    round_id: int
+
+
+@app.post("/api/sessions/{session_id}/regenerate-answer", dependencies=[Depends(_require_admin)])
+async def regenerate_answer(session_id: int):
+    """重新生成初始 AI 回答（学习阶段）"""
+    session = db.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    st = session.get("status", "")
+    if st not in ("preparing", "learning", "deepening", "revising"):
+        raise HTTPException(409, f"Cannot regenerate answer in status '{st}'")
+
+    content = session.get("content", "")
+    stype = session.get("type", "question")
+    try:
+        result = await ai.generate_initial_answer(session.get("title", ""), content, stype)
+        new_answer = result["answer"]
+    except Exception as e:
+        raise HTTPException(500, f"AI regenerate failed: {e}")
+
+    db.update_session(session_id, material=new_answer)
+    if st == "preparing":
+        db.update_session(session_id, status="learning")
+
+    return {"ok": True, "answer": new_answer}
+
+
+@app.post("/api/sessions/{session_id}/regenerate-press", dependencies=[Depends(_require_admin)])
+async def regenerate_press(session_id: int, body: RegeneratePressRequest):
+    """重新生成追问回答（深化阶段）"""
+    session = db.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    rounds = db.get_rounds(session_id)
+    target = next((r for r in rounds if r["id"] == body.round_id), None)
+    if not target or target.get("type") != "press":
+        raise HTTPException(404, "Press round not found")
+
+    original_question = session.get("title", "")
+    ai_answer = session.get("material", "")
+    followup_question = target.get("input", "")
+
+    # Build history of press rounds before this one
+    history = [
+        {"question": r.get("input", ""), "answer": r.get("output", "")}
+        for r in rounds if r.get("type") == "press" and r["id"] != body.round_id
+    ]
+
+    try:
+        answer_result = await ai.answer_followup_question(
+            original_question, ai_answer, followup_question, history,
+            web_search=session.get("web_search", False),
+        )
+        new_answer = answer_result["answer"]
+    except Exception as e:
+        raise HTTPException(500, f"AI regenerate failed: {e}")
+
+    db.update_round(body.round_id, output=new_answer)
+    return {"ok": True, "round_id": body.round_id, "answer": new_answer}
+
+
+@app.post("/api/sessions/{session_id}/regenerate-feynman", dependencies=[Depends(_require_admin)])
+async def regenerate_feynman(session_id: int):
+    """重新生成费曼检验题（费曼阶段）"""
+    session = db.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    st = session.get("status", "")
+    if st != "feynman":
+        raise HTTPException(409, f"Cannot regenerate feynman in status '{st}'. Must be 'feynman'.")
+
+    # Cancel existing pending feynman rounds
+    cancelled = db.cancel_pending_feynman_rounds(session_id)
+
+    # Generate new questions
+    original_question = session.get("title", "")
+    ai_answer = session.get("material", "")
+    rounds = db.get_rounds(session_id)
+
+    # Collect take rounds for context
+    take_summaries = [
+        r.get("input", "") for r in rounds if r.get("type") == "take"
+    ]
+
+    knowledge_node_context = None
+    kn_id = session.get("knowledge_node_id")
+    if kn_id:
+        node = db.find_node_by_id(kn_id)
+        if node:
+            knowledge_node_context = f"知识点领域：{node.get('path', node.get('title', ''))}"
+
+    try:
+        questions_result = await ai.generate_review_questions(
+            original_question, ai_answer, take_summaries,
+            knowledge_node_context=knowledge_node_context,
+        )
+        questions = questions_result.get("questions", [])
+    except Exception as e:
+        raise HTTPException(500, f"AI regenerate failed: {e}")
+
+    # Create new feynman rounds
+    gid, rids = db.create_feynman_group(session_id, questions)
+    return {
+        "ok": True,
+        "group_id": gid,
+        "round_ids": rids,
+        "questions": questions,
+        "cancelled_previous": cancelled,
+    }
+
+
 # ── Gaps API ──────────────────────────────────────────────
 
 @app.get("/api/sessions/{session_id}/gaps", dependencies=[Depends(_require_admin)])

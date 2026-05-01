@@ -203,6 +203,52 @@ export default defineComponent({
       }
     }
 
+    // Regenerate
+    async function regenerateAnswer() {
+      const sid = store.selectedSessionId;
+      if (!sid) return;
+      submitting.value = true;
+      try {
+        await api.regenerateAnswer(sid);
+        emit('refresh');
+        setNotice('AI 回答已重新生成。');
+      } catch (err) {
+        setNotice(`重新生成失败：${err.message}`, 'error');
+      } finally {
+        submitting.value = false;
+      }
+    }
+
+    async function regeneratePress(roundId) {
+      const sid = store.selectedSessionId;
+      if (!sid) return;
+      submitting.value = true;
+      try {
+        await api.regeneratePress(sid, roundId);
+        emit('refresh');
+        setNotice('追问回答已重新生成。');
+      } catch (err) {
+        setNotice(`重新生成失败：${err.message}`, 'error');
+      } finally {
+        submitting.value = false;
+      }
+    }
+
+    async function regenerateFeynman() {
+      const sid = store.selectedSessionId;
+      if (!sid) return;
+      submitting.value = true;
+      try {
+        await api.regenerateFeynman(sid);
+        emit('refresh');
+        setNotice('费曼题已重新生成。');
+      } catch (err) {
+        setNotice(`重新生成失败：${err.message}`, 'error');
+      } finally {
+        submitting.value = false;
+      }
+    }
+
     // Feynman
     const correctionPlan = ref(null);   // #8: 费曼失败修正计划
 
@@ -293,6 +339,7 @@ export default defineComponent({
       correctionPlan,
       nodeSuggestion, nodeSuggestionLoading, bindSuggestedNode, ignoreSuggestedNode,
       submitDeepAction, startFeynman, submitFeynman, switchTab,
+      regenerateAnswer, regeneratePress, regenerateFeynman,
       reviewSchedule, completeReviewDirect,
       reviewContents, reviewSubmitting, reviewResults, submitReviewReExplain,
       openKnowledgeTree,
@@ -356,7 +403,10 @@ export default defineComponent({
             </div>
           </div>
           <div v-else-if="currentSession.material" class="panel-section">
-            <div class="ps-label">AI 回答</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="ps-label" style="margin-bottom:0">AI 回答</div>
+              <button class="btn btn-sm btn-text" :disabled="submitting" @click="regenerateAnswer" style="padding:2px 8px;font-size:12px">🔄 重新回答</button>
+            </div>
             <div class="ps-body md-body" v-html="renderMarkdown(currentSession.material)"></div>
           </div>
           <div v-else class="panel-empty">
@@ -394,7 +444,10 @@ export default defineComponent({
               <div v-else-if="r.type === 'press'" class="round-card round-press">
                 <div class="round-user-wrap"><span class="round-label" v-html="icons.search + ' 追问'"></span><span class="round-user">{{ r.input || '' }}</span></div>
                 <div class="round-ai md-body">
-                  <div class="ps-label">AI 回答</div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <div class="ps-label" style="margin-bottom:0">AI 回答</div>
+                    <button class="btn btn-sm btn-text" :disabled="submitting" @click="regeneratePress(r.id)" style="padding:2px 8px;font-size:12px">🔄 重新回答</button>
+                  </div>
                   <div v-html="renderMarkdown(r.output || '')"></div>
                 </div>
               </div>
@@ -494,7 +547,10 @@ export default defineComponent({
 
           <!-- Active Feynman -->
           <div v-if="feynmanGroup.length && currentSession.status === 'feynman'" class="panel-section">
-            <div class="ps-label" v-html="icons.flask + ' 费曼检验'"></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="ps-label" style="margin-bottom:0" v-html="icons.flask + ' 费曼检验'"></div>
+              <button class="btn btn-sm btn-text" :disabled="submitting" @click="regenerateFeynman" style="padding:2px 8px;font-size:12px">🔄 重新出题</button>
+            </div>
             <div class="ps-hint muted small mb12">用自己的话回答，AI 会评估你的掌握程度。</div>
             <div v-for="(q, i) in feynmanGroup" :key="q.id" class="review-q">
               <div class="review-q-title">Q{{ i+1 }}. {{ q.input || '' }}</div>
