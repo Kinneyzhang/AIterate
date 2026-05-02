@@ -32,12 +32,6 @@ export default defineComponent({
       return s && ['learning', 'deepening', 'revising'].includes(s);
     });
 
-    const canFeynman = computed(() => {
-      const s = currentSession.value?.status;
-      return canEdit.value
-        || ['feynman', 'completed'].includes(s)
-        || currentRounds.value.some(r => r.type === 'take' || r.type === 'press');
-    });
 
     // Overlay routes
     const OVERLAY_ROUTES = new Set(['new-session','knowledge-tree','command-center',
@@ -81,11 +75,11 @@ export default defineComponent({
     const hasUserTake = computed(() => currentRounds.value.some(r => r.type === 'take'));
     const showDeepen = computed(() => {
       const s = currentSession.value?.status;
-      return s && ['deepening', 'revising', 'feynman', 'completed'].includes(s);
+      return s && ['deepening', 'revising', 'feynman'].includes(s);
     });
     const showFeynman = computed(() => {
       const s = currentSession.value?.status;
-      return s && ['feynman', 'completed'].includes(s);
+      return s && ['feynman'].includes(s);
     });
     const doneFeynmanGroups = computed(() => {
       const done = currentRounds.value.filter(r => r.type === 'feynman' && r.status === 'completed');
@@ -279,7 +273,7 @@ export default defineComponent({
       currentSession, currentRounds, feynmanGroup, unresolvedGaps, reviewReport, knowledgeNode,
       doneFeynmanGroups, takeEvals, correctionPlan,
       shouldWriteFirst, skipWriteFirst, hasUserTake, showDeepen, showFeynman,
-      canEdit, canFeynman, accordion, toggleAccordion,
+      canEdit, accordion, toggleAccordion,
       takeInput, questionInput, feynmanAnswers, submitting, completingSession,
       submitDeepAction, completeSession, reopenSession, advanceToDeepen,
       startFeynman, submitFeynman,
