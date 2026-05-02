@@ -570,8 +570,7 @@ select {
 
 /* ── Session Header ──────────────────────────────────────────────────── */
 .session-header {
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+  padding: 24px 24px 20px;
 }
 .sh-top {
   display: flex;
@@ -581,33 +580,29 @@ select {
 }
 .sh-left { flex: 1; min-width: 0; }
 .sh-title {
-  margin: 0 0 6px;
-  font-size: 19px;
-  font-weight: 600;
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 700;
   color: var(--fg-0, #eee);
-  line-height: 1.4;
+  line-height: 1.35;
 }
 .sh-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: 13px;
   color: var(--fg-2, #777);
   flex-wrap: wrap;
 }
-.sh-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
 .sh-question {
-  margin-top: 10px;
-  padding: 8px 12px;
+  margin-top: 14px;
+  padding: 10px 14px;
   background: var(--bg-2, rgba(255,255,255,0.04));
   border-radius: 8px;
+  border: 1px solid var(--border, rgba(255,255,255,0.05));
   font-size: 14px;
   color: var(--fg-2, #999);
-  line-height: 1.6;
+  line-height: 1.7;
 }
 
 .btn-end-session {
@@ -619,122 +614,200 @@ select {
 
 /* ── AI Answer Section ──────────────────────────────────────────────── */
 .ai-answer-section {
-  padding: 20px 24px;
+  padding: 24px;
+  margin: 0 24px;
+  background: var(--bg-2, rgba(255,255,255,0.02));
+  border: 1px solid var(--border, rgba(255,255,255,0.05));
+  border-radius: 10px;
 }
 .ai-answer-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.05));
+}
+.ai-answer-collapse-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: var(--fg-1, #ccc);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+}
+.ai-answer-collapse-btn:hover { color: var(--fg-0, #eee); }
+.ai-answer-collapsed-hint {
+  text-align: center;
+  color: var(--fg-2, #777);
+  font-size: 13px;
+  padding: 12px 0;
 }
 
-/* ── Action Bar ──────────────────────────────────────────────────────── */
-.action-bar {
-  display: flex;
-  gap: 4px;
-  padding: 0 24px 20px;
-  flex-wrap: wrap;
+/* ── Round Collapsed Cards ──────────────────────────────────────────── */
+.round-collapsed-card {
+  margin-bottom: 4px;
 }
-.action-chip {
-  display: inline-flex;
+.round-collapsed-bar {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border: 1px solid var(--border, rgba(255,255,255,0.1));
-  border-radius: 20px;
-  background: var(--bg-1, #1a1a1a);
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-2, rgba(255,255,255,0.03));
+  border: 1px solid var(--border, rgba(255,255,255,0.05));
+  border-radius: 8px;
   color: var(--fg-2, #999);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.15s;
 }
-.action-chip:hover { background: var(--bg-2, rgba(255,255,255,0.06)); color: var(--fg-1, #ccc); }
-.action-chip.active {
-  background: var(--accent, #1a6ef5);
-  border-color: var(--accent, #1a6ef5);
-  color: #fff;
+.round-collapsed-bar:hover {
+  background: var(--bg-2, rgba(255,255,255,0.06));
+  border-color: var(--border, rgba(255,255,255,0.1));
+  color: var(--fg-1, #ccc);
 }
-.action-chip svg { width: 14px; height: 14px; }
+.round-collapsed-bar svg { width: 14px; height: 14px; }
+.round-collapsed-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-2, #999);
+}
+.round-collapsed-score {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #1a6ef5);
+  background: var(--accent-bg, rgba(26,110,245,0.1));
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.round-collapsed-body {
+  padding: 12px 0 4px;
+}
+.history-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-1, #ccc);
+}
+.history-section-title svg { width: 14px; height: 14px; }
+
+/* ── Action Bar ──────────────────────────────────────────────────────── */
+.action-bar {
+  display: flex;
+  gap: 10px;
+  padding: 0 24px 20px;
+  flex-wrap: wrap;
+}
+.action-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 16px;
+  min-width: 120px;
+  border: 1px solid var(--border, rgba(255,255,255,0.1));
+  border-radius: 10px;
+  background: var(--bg-1, #1a1a1a);
+  color: var(--fg-2, #999);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex: 0 0 auto;
+}
+.action-chip:hover {
+  background: var(--bg-2, rgba(255,255,255,0.06));
+  border-color: var(--fg-3, rgba(255,255,255,0.2));
+  color: var(--fg-1, #ccc);
+}
+.action-chip.active {
+  background: var(--accent-bg, rgba(26,110,245,0.12));
+  border-color: var(--accent, #1a6ef5);
+  color: var(--accent, #1a6ef5);
+}
+.action-chip svg { width: 18px; height: 18px; opacity: 0.7; }
+.action-chip.active svg { opacity: 1; }
 
 /* ── Expand Card (写理解 / 追问) ────────────────────────────────────── */
 .expand-card {
   margin: 0 24px 20px;
-  padding: 16px;
-  background: var(--bg-2, rgba(255,255,255,0.04));
-  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  padding: 18px 20px;
+  background: var(--bg-2, rgba(255,255,255,0.03));
+  border: 1px solid var(--accent, rgba(26,110,245,0.3));
   border-radius: 10px;
 }
 .expand-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
-  font-size: 14px;
-  font-weight: 500;
+  margin-bottom: 10px;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--fg-1, #ccc);
 }
+.expand-card-header svg { width: 16px; height: 16px; }
 .expand-card .ps-hint {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--fg-2, #777);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  line-height: 1.5;
 }
 .expand-card textarea {
   width: 100%;
-  min-height: 80px;
-  margin-bottom: 10px;
+  min-height: 90px;
+  margin-bottom: 12px;
   resize: vertical;
+  padding: 10px 12px;
+  border-radius: 8px;
 }
 
 /* ── History Section ─────────────────────────────────────────────────── */
 .history-section {
-  padding: 0 24px;
-}
-.history-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 10px 0;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--border, rgba(255,255,255,0.06));
-  color: var(--fg-2, #999);
-  font-size: 13px;
-  cursor: pointer;
-}
-.history-toggle:hover { color: var(--fg-1, #ccc); }
-.history-body {
-  padding-bottom: 16px;
+  padding: 16px 24px 20px;
 }
 
 /* ── Bottom Actions ──────────────────────────────────────────────────── */
 .bottom-actions {
-  padding: 20px 24px 32px;
+  padding: 24px 24px 32px;
   text-align: center;
+  border-top: 1px solid var(--border, rgba(255,255,255,0.06));
+  margin-top: 8px;
 }
 .btn-end-session-bottom {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 24px;
-  border: 1px solid var(--border, rgba(255,255,255,0.12));
-  border-radius: 8px;
-  background: var(--bg-1, #1a1a1a);
+  gap: 8px;
+  padding: 10px 28px;
+  border: 1px solid var(--border, rgba(255,255,255,0.15));
+  border-radius: 10px;
+  background: var(--bg-2, rgba(255,255,255,0.04));
   color: var(--fg-2, #999);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.15s;
 }
 .btn-end-session-bottom:hover {
-  background: var(--bg-2, rgba(255,255,255,0.06));
-  color: var(--fg-0, #eee);
+  background: var(--bg-1, #1a1a1a);
+  border-color: var(--accent, #1a6ef5);
+  color: var(--accent, #1a6ef5);
 }
 
 /* ── Mobile ──────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .session-header { padding: 16px; }
   .sh-title { font-size: 17px; }
-  .ai-answer-section { padding: 16px; }
+  .ai-answer-section { padding: 16px; margin: 0 12px; border-radius: 8px; }
   .action-bar { padding: 0 16px 16px; }
   .expand-card { margin: 0 16px 16px; }
   .history-section { padding: 0 16px; }

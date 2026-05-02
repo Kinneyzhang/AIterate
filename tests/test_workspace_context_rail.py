@@ -33,7 +33,7 @@ def test_context_rail_component_has_expected_cards_and_reuses_workspace_state():
     assert 'unresolvedGaps.slice(0, 5)' in src
     assert "switchTab('deepen')" in src
     assert "switchTab('review')" in src
-    assert 'openKnowledgeTree' in src
+    assert 'fillGapAsQuestion' in src
     assert 'class="context-gap-text"' in src
 
 

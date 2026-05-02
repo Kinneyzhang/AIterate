@@ -2,7 +2,7 @@
 
 import { defineComponent, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { store, currentSession, currentRounds, unresolvedGaps, reviewReport, knowledgeNode, getStageMeta, setNotice, askConfirm } from '../store.js';
+import { store, currentSession, currentRounds, unresolvedGaps, reviewReport, getStageMeta, setNotice, askConfirm } from '../store.js';
 import { api } from '../api.js';
 
 export default defineComponent({
@@ -18,7 +18,6 @@ export default defineComponent({
       refresh: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>',
       flask: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v5l5.45 9.54A2 2 0 0 1 18.73 21H5.27a2 2 0 0 1-1.72-3.46L9 8V3z"/><line x1="9" y1="3" x2="9" y2="8"/><line x1="15" y1="3" x2="15" y2="8"/></svg>',
       chart: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
-      tag: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
       clip: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>',
     };
 
@@ -56,15 +55,10 @@ export default defineComponent({
       router.push({ name: nameMap[tab], params: { id } });
     }
 
-    // #5: gap 一键转追问
     function fillGapAsQuestion(gap) {
       const text = typeof gap === 'string' ? gap : (gap.gap || gap.text || '');
       store.prefillQuestion = '关于这个薄弱点：' + text + ' —— 请帮我理清这个概念。';
       switchTab('deepen');
-    }
-
-    function openKnowledgeTree() {
-      router.push({ name: 'knowledge-tree' });
     }
 
     async function startFeynman() {
@@ -100,10 +94,10 @@ export default defineComponent({
     }
 
     return {
-      currentSession, currentRounds, unresolvedGaps, knowledgeNode,
+      currentSession, currentRounds, unresolvedGaps,
       reviewSchedule, hasTakeRound, canEditDeepen, canDeepen, canReview,
       contextScore, contextRoundCount, pendingReviewCount, canCompleteEarly,
-      switchTab, openKnowledgeTree, startFeynman, completeEarly, getStageMeta, icons,
+      switchTab, startFeynman, completeEarly, getStageMeta, icons,
       fillGapAsQuestion,
       route,
     };
@@ -122,10 +116,6 @@ export default defineComponent({
           <span>深化 {{ contextRoundCount }} 轮</span>
           <span v-if="pendingReviewCount">待复习 {{ pendingReviewCount }}</span>
         </div>
-        <button v-if="knowledgeNode" type="button" class="context-node btn" @click="openKnowledgeTree">
-          <span v-html="icons.tag"></span><span>{{ knowledgeNode.title }}</span>
-        </button>
-        <button v-else type="button" class="context-node context-node-empty btn" @click="openKnowledgeTree" v-html="icons.tag + ' 关联知识节点'"></button>
       </section>
 
       <section class="context-card context-gaps-card">
@@ -150,7 +140,6 @@ export default defineComponent({
           <button v-if="currentSession.status === 'feynman'" type="button" class="btn btn-primary btn-block btn-sm" @click="switchTab('review')">回答费曼题</button>
           <button v-if="canCompleteEarly" type="button" class="btn btn-sm btn-block" @click="completeEarly">提前结束</button>
           <button v-if="pendingReviewCount" type="button" class="btn btn-primary btn-block btn-sm" @click="switchTab('review')">完成今日复习</button>
-          <button type="button" class="btn btn-sm btn-block" @click="openKnowledgeTree">查看知识树</button>
         </div>
       </section>
 

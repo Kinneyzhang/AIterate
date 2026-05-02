@@ -18,10 +18,16 @@ export default defineComponent({
 
     // ── Expanded section state ──────────────────────────────────────────
     const expandedSection = ref(null); // null | 'take' | 'press' | 'feynman'
-    const historyExpanded = ref(false);
+    const expandedRoundIds = ref(new Set());
+    const aiAnswerExpanded = ref(true);
 
     function toggleSection(name) {
       expandedSection.value = expandedSection.value === name ? null : name;
+    }
+    function toggleRound(roundId) {
+      const s = new Set(expandedRoundIds.value);
+      if (s.has(roundId)) s.delete(roundId); else s.add(roundId);
+      expandedRoundIds.value = s;
     }
 
     // ── Session lifecycle ───────────────────────────────────────────────
@@ -68,37 +74,7 @@ export default defineComponent({
       }
     });
 
-    // ── Knowledge node suggestion ──────────────────────────────────────
-    const nodeSuggestion = ref(null);
-    const nodeSuggestionLoading = ref(false);
-    watch(() => store.workspace, async (ws) => {
-      if (!ws || !ws.session) { nodeSuggestion.value = null; return; }
-      if (ws.knowledge_node_id || ws.knowledge_suggestion_ignored) { nodeSuggestion.value = null; return; }
-      if (nodeSuggestionLoading.value || nodeSuggestion.value) return;
-      const sid = ws.session.id;
-      if (!sid) return;
-      nodeSuggestionLoading.value = true;
-      try {
-        const data = await api.suggestKnowledgeNodes(sid);
-        if (data?.suggestions?.length) nodeSuggestion.value = data.suggestions[0];
-      } catch {} finally { nodeSuggestionLoading.value = false; }
-    });
-
-    async function bindSuggestedNode() {
-      if (!nodeSuggestion.value) return;
-      const sid = store.selectedSessionId;
-      if (!sid) return;
-      try { await api.bindKnowledgeNode(sid, nodeSuggestion.value.id); nodeSuggestion.value = null; emit('refresh'); }
-      catch (err) { setNotice(`绑定失败：${err.message}`, 'error'); }
-    }
-    async function ignoreSuggestedNode() {
-      const sid = store.selectedSessionId;
-      if (!sid) return;
-      try { await api.ignoreKnowledgeNodeSuggestion(sid); nodeSuggestion.value = null; emit('refresh'); }
-      catch (err) { setNotice(`忽略失败：${err.message}`, 'error'); }
-    }
-
-    // ── Take evaluations ────────────────────────────────────────────────
+    // ── Submit take / press (unchanged) ─────────────────────────────────
     const takeEvals = computed(() => {
       const map = {};
       for (const e of store.workspace?.take_evaluations || []) {
@@ -108,6 +84,9 @@ export default defineComponent({
     });
 
     const hasUserTake = computed(() => currentRounds.value.some(r => r.type === 'take'));
+    const visibleRounds = computed(() =>
+      currentRounds.value.filter(r => r.type === 'take' || r.type === 'press').reverse()
+    );
     const doneFeynmanGroups = computed(() => {
       const done = currentRounds.value.filter(r => r.type === 'feynman' && r.status === 'completed');
       const byGroup = {};
@@ -281,21 +260,17 @@ export default defineComponent({
       xmark: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     };
 
-    function openKnowledgeTree() { router.push({ name: 'knowledge-tree' }); }
-
     return {
       currentSession, currentRounds, feynmanGroup, unresolvedGaps, reviewReport, knowledgeNode,
       doneFeynmanGroups, takeEvals, correctionPlan,
-      shouldWriteFirst, skipWriteFirst, hasUserTake,
-      canEdit, canFeynman, expandedSection, toggleSection, historyExpanded,
+      shouldWriteFirst, skipWriteFirst, hasUserTake, visibleRounds,
+      canEdit, canFeynman, expandedSection, expandedRoundIds, aiAnswerExpanded, toggleSection, toggleRound,
       takeInput, questionInput, feynmanAnswers, submitting, completingSession,
       submitDeepAction, completeSession, reopenSession,
       startFeynman, submitFeynman,
       regenerateAnswer, regeneratePress, regenerateFeynman,
       reviewSchedule, reviewContents, reviewSubmitting, reviewResults,
       submitReviewReExplain, completeReviewDirect,
-      nodeSuggestion, nodeSuggestionLoading, bindSuggestedNode, ignoreSuggestedNode,
-      openKnowledgeTree,
       getStageMeta, escapeHtml, renderMarkdown, formatDate, icons,
     };
   },
@@ -324,28 +299,12 @@ export default defineComponent({
                   <span v-if="currentSession.score && currentSession.status==='completed'">评分 {{ currentSession.score }}/100</span>
                 </div>
               </div>
-              <div class="sh-actions">
-                <button v-if="canEdit" class="btn btn-text btn-end-session" :disabled="completingSession" @click="completeSession">
-                  {{ completingSession ? '…' : '结束学习' }}
-                </button>
-                <button v-if="currentSession.status==='completed'" class="btn btn-text" :disabled="submitting" @click="reopenSession">重新打开</button>
+              <div v-if="currentSession.status==='completed'" class="sh-actions">
+                <button class="btn btn-text" :disabled="submitting" @click="reopenSession">重新打开</button>
               </div>
             </div>
             <div v-if="currentSession.content && currentSession.content !== currentSession.title" class="sh-question">
               {{ currentSession.content }}
-            </div>
-            <div v-if="knowledgeNode" class="knowledge-node-bar">
-              <span class="kn-label" v-html="icons.tag + ' 知识节点'"></span>
-              <span class="kn-path">{{ knowledgeNode.title }}</span>
-              <span v-if="knowledgeNode.keywords?.length" class="kn-keywords">
-                <template v-for="k in knowledgeNode.keywords.slice(0,3)">#{{ k }} </template>
-              </span>
-            </div>
-            <div v-else class="knowledge-node-bar" style="opacity:0.65; cursor:pointer;" @click="openKnowledgeTree" v-html="icons.tag + ' 未绑定知识节点 — 点击关联'"></div>
-            <div v-if="nodeSuggestion && !knowledgeNode" class="knowledge-node-bar suggest-bar" style="cursor:default;">
-              <span v-html="icons.tag + ' 系统推荐：' + nodeSuggestion.title"></span>
-              <button class="btn btn-sm" @click="bindSuggestedNode" :disabled="nodeSuggestionLoading">确认绑定</button>
-              <button class="btn btn-sm btn-text" @click="ignoreSuggestedNode" :disabled="nodeSuggestionLoading">忽略</button>
             </div>
           </div>
 
@@ -363,19 +322,7 @@ export default defineComponent({
             </div>
           </div>
 
-          <!-- ── Section 3: AI Answer ──────────────────────────────── -->
-          <div v-if="!shouldWriteFirst && currentSession.material" class="ai-answer-section">
-            <div class="ai-answer-header">
-              <div class="ps-label" style="margin:0" v-html="icons.book + ' AI 回答'"></div>
-              <button class="btn btn-sm btn-text" :disabled="submitting" @click="regenerateAnswer">🔄 重新回答</button>
-            </div>
-            <div class="ps-body md-body" v-html="renderMarkdown(currentSession.material)"></div>
-          </div>
-          <div v-else-if="!shouldWriteFirst && !currentSession.material" class="panel-empty">
-            <span class="muted">AI 正在后台回答，稍后刷新查看…</span>
-          </div>
-
-          <!-- ── Section 4: Action Bar (写理解 / 追问 / 费曼) ──────── -->
+          <!-- ── Section 3: Action Bar (写理解 / 追问 / 费曼) ──────── -->
           <div v-if="canEdit && !shouldWriteFirst && currentSession.material" class="action-bar">
             <button :class="['action-chip', { active: expandedSection === 'take' }]" @click="toggleSection('take')">
               <span v-html="icons.edit"></span> 写理解
@@ -411,14 +358,31 @@ export default defineComponent({
             <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('press')">提交追问</button>
           </div>
 
-          <!-- ── Section 5: History ─────────────────────────────────── -->
-          <div v-if="currentRounds.filter(r => r.type === 'take' || r.type === 'press').length" class="history-section">
-            <button class="history-toggle" @click="historyExpanded = !historyExpanded">
-              <span :style="{ transform: historyExpanded ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }">▶</span>
-              历史记录 · {{ currentRounds.filter(r => r.type === 'take' || r.type === 'press').length }} 轮
-            </button>
-            <div v-if="historyExpanded" class="history-body">
-              <template v-for="r in currentRounds.filter(r => r.type === 'take' || r.type === 'press')" :key="r.id">
+          <!-- ── Section 4: AI Answer ──────────────────────────────── -->
+          <div v-if="!shouldWriteFirst && currentSession.material" class="ai-answer-section">
+            <div class="ai-answer-header">
+              <button class="ai-answer-collapse-btn" @click="aiAnswerExpanded = !aiAnswerExpanded">
+                <span :style="{ transform: aiAnswerExpanded ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }">▶</span>
+                <span v-html="icons.book + ' AI 回答'"></span>
+              </button>
+              <button class="btn btn-sm btn-text" :disabled="submitting" @click="regenerateAnswer">🔄 重新回答</button>
+            </div>
+            <div v-if="aiAnswerExpanded" class="ps-body md-body" v-html="renderMarkdown(currentSession.material)"></div>
+            <div v-else class="ai-answer-collapsed-hint">已折叠，点击展开查看</div>
+          </div>
+
+          <!-- ── Section 5: History (individual round cards) ──────── -->
+          <div v-if="visibleRounds.length" class="history-section">
+            <div class="history-section-title" v-html="icons.clip + ' 学习记录 · ' + visibleRounds.length + ' 轮'"></div>
+            <div v-for="r in visibleRounds" :key="r.id" class="round-collapsed-card">
+              <button class="round-collapsed-bar" @click="toggleRound(r.id)">
+                <span :style="{ transform: expandedRoundIds.has(r.id) ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }">▶</span>
+                <span v-if="r.type === 'take'" v-html="icons.edit + ' 理解'"></span>
+                <span v-else v-html="icons.search + ' 追问'"></span>
+                <span class="round-collapsed-preview">{{ (r.input || '').slice(0, 60) }}{{ (r.input || '').length > 60 ? '…' : '' }}</span>
+                <span v-if="r.score" class="round-collapsed-score">{{ r.score }}/100</span>
+              </button>
+              <div v-if="expandedRoundIds.has(r.id)" class="round-collapsed-body">
                 <div v-if="r.type === 'take'" class="round-card round-take">
                   <div class="round-user-wrap"><span class="round-label" v-html="icons.edit + ' 理解'"></span><span class="round-user">{{ r.input || '' }}</span></div>
                   <div class="round-ai md-body">
@@ -429,7 +393,6 @@ export default defineComponent({
                     <div class="gaps-label" v-html="icons.warn + ' 薄弱点'"></div>
                     <ul class="gaps-list"><li v-for="g in takeEvals[r.id].gaps">{{ g }}</li></ul>
                   </div>
-                  <div v-if="r.score" class="round-score">评分 {{ r.score }}/100</div>
                 </div>
                 <div v-else-if="r.type === 'press'" class="round-card round-press">
                   <div class="round-user-wrap"><span class="round-label" v-html="icons.search + ' 追问'"></span><span class="round-user">{{ r.input || '' }}</span></div>
@@ -441,7 +404,7 @@ export default defineComponent({
                     <div v-html="renderMarkdown(r.output || '')"></div>
                   </div>
                 </div>
-              </template>
+              </div>
             </div>
           </div>
 
