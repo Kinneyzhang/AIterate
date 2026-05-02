@@ -317,6 +317,11 @@ export default defineComponent({
               <div v-if="currentSession.status==='completed'" class="sh-actions">
                 <button class="btn btn-text" :disabled="submitting" @click="reopenSession">重新打开</button>
               </div>
+              <div v-if="canEdit" class="sh-actions">
+                <button class="btn btn-end-session" :disabled="completingSession" @click="completeSession">
+                  <span v-html="icons.check"></span> {{ completingSession ? '…' : '结束' }}
+                </button>
+              </div>
             </div>
             <div v-if="currentSession.content && currentSession.content !== currentSession.title" class="sh-question">
               {{ currentSession.content }}
@@ -569,14 +574,6 @@ export default defineComponent({
             <ul class="gaps-summary">
               <li v-for="g in unresolvedGaps.slice(0, 8)">{{ g.gap }} <span class="muted small">→ 第{{ g.seq }}轮</span></li>
             </ul>
-          </div>
-
-          <!-- ── Bottom: End Session ─────────────────────────────────── -->
-          <div v-if="canEdit" class="bottom-actions">
-            <button class="btn btn-end-session-bottom" :disabled="completingSession" @click="completeSession">
-              <span v-html="icons.check"></span> {{ completingSession ? '…' : '结束学习' }}
-            </button>
-            <p class="muted" style="text-align:center;font-size:12px;margin-top:10px">随时可以结束，不需要走完所有阶段</p>
           </div>
 
         </div>
