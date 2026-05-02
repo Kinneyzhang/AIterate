@@ -20,7 +20,9 @@ export default defineComponent({
     const accordion = ref({ learn: true, deepen: false, feynman: false });
 
     function toggleAccordion(key) {
-      accordion.value = { ...accordion.value, [key]: !accordion.value[key] };
+      const wasOpen = accordion.value[key];
+      accordion.value = { learn: false, deepen: false, feynman: false };
+      if (!wasOpen) accordion.value[key] = true;
     }
 
     // ── Session lifecycle ────────────────────────────────────────────
