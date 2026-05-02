@@ -19,6 +19,20 @@ export default defineComponent({
     // ── Accordion state: which sections are expanded ──────────────────
     const accordion = ref({ learn: true, deepen: false, feynman: false });
 
+    // Auto-expand accordion to match current session status on init
+    function syncAccordionToStatus() {
+      const s = currentSession.value?.status;
+      if (!s) return;
+      if (['deepening', 'revising'].includes(s)) {
+        accordion.value = { learn: false, deepen: true, feynman: false };
+      } else if (s === 'feynman') {
+        accordion.value = { learn: false, deepen: false, feynman: true };
+      }
+    }
+    watch(() => store.workspace, () => {
+      syncAccordionToStatus();
+    }, { immediate: true });
+
     function toggleAccordion(key) {
       const wasOpen = accordion.value[key];
       accordion.value = { learn: false, deepen: false, feynman: false };
@@ -434,20 +448,20 @@ export default defineComponent({
                 </template>
               </template>
 
+              <!-- ══ Unresolved gaps ══ -->
+              <div v-if="unresolvedGaps.length" class="gaps-banner">
+                <div class="gaps-banner-title" v-html="icons.clip + ' 待解决薄弱点（' + unresolvedGaps.length + '）'"></div>
+                <ul class="gaps-summary">
+                  <li v-for="g in unresolvedGaps.slice(0, 8)">{{ g.gap }} <span class="muted small">→ 第{{ g.seq }}轮</span></li>
+                </ul>
+              </div>
+
               <!-- Advance to feynman -->
               <div v-if="['deepening', 'revising'].includes(currentSession.status) && hasUserTake" class="advance-section">
                 <button class="btn btn-primary btn-block" :disabled="submitting" @click="startFeynman">
                   完成深化，进入费曼检验 →
                 </button>
                 <p class="ps-hint" style="text-align:center;margin-top:8px;font-size:12px">深化完成后，用费曼检验来验证你的掌握程度</p>
-              </div>
-
-              <!-- ══ Unresolved gaps (inside deepen) ══ -->
-              <div v-if="unresolvedGaps.length" class="gaps-banner">
-                <div class="gaps-banner-title" v-html="icons.clip + ' 待解决薄弱点（' + unresolvedGaps.length + '）'"></div>
-                <ul class="gaps-summary">
-                  <li v-for="g in unresolvedGaps.slice(0, 8)">{{ g.gap }} <span class="muted small">→ 第{{ g.seq }}轮</span></li>
-                </ul>
               </div>
 
             </div>
