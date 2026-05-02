@@ -484,6 +484,7 @@ export default defineComponent({
             <textarea
               class="inbox-page-input"
               v-model="pageContent"
+              @keydown.ctrl.enter.prevent="submitPageCollection"
               rows="4"
               placeholder="粘贴摘录、想法、链接…纯粹记录，不会自动生成问题"
               :disabled="pageSubmitting"

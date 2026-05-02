@@ -117,6 +117,7 @@ export default defineComponent({
             <button :class="['type-btn', { active: selectedType === 'viewpoint' }]" @click="selectedType = 'viewpoint'" v-html="icon('bulb') + ' 观点'"></button>
           </div>
           <textarea v-model="content" @input="onInput" rows="10" class="modal-textarea"
+            @keydown.ctrl.enter.prevent="submit"
             :placeholder="selectedType === 'question' ? '写下你的问题，可以描述得详细一些…\\nAI 会自动生成标题并给出回答。' : '写下你的观点，可以展开说说…\\nAI 会自动生成标题并进行分析。'"></textarea>
           <div v-if="suggestions.length" class="modal-node-suggestions" style="display:block">
             <div class="node-suggest-label" v-html="icon('tag') + ' 推荐知识节点（可选）'"></div>

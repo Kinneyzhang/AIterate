@@ -156,6 +156,7 @@ export default defineComponent({
     // ── Submit take / press ──────────────────────────────────────────
     const deepenModal = ref({ open: false, type: 'take', input: '' });
     const deepenPending = ref(false);  // async indicator — AI 正在回答…
+    const feynmanPending = ref(false); // async indicator — AI 正在生成费曼检验题…
 
     function openDeepenModal(type) {
       deepenModal.value = { open: true, type, input: '' };
@@ -241,10 +242,20 @@ export default defineComponent({
     const correctionPlan = ref(null);
     async function startFeynman() {
       const sid = store.selectedSessionId; if (!sid) return;
-      submitting.value = true;
-      try { await api.startFeynman(sid); emit('refresh'); toggleAccordion('feynman'); setNotice('费曼题已生成，开始检验。'); }
-      catch (err) { setNotice(`启动费曼失败：${err.message}`, 'error'); }
-      finally { submitting.value = false; }
+      // Immediately show feynman section with pending indicator
+      toggleAccordion('feynman');
+      feynmanPending.value = true;
+      try {
+        await api.startFeynman(sid);
+        emit('refresh');
+        setNotice('费曼题已生成，开始检验。');
+      } catch (err) {
+        // On error, collapse back
+        toggleAccordion('learn');
+        setNotice(`启动费曼失败：${err.message}`, 'error');
+      } finally {
+        feynmanPending.value = false;
+      }
     }
     async function submitFeynman() {
       const sid = store.selectedSessionId;
@@ -304,7 +315,7 @@ export default defineComponent({
       shouldWriteFirst, skipWriteFirst, hasUserTake, showDeepen, showFeynman,
       canEdit, accordion, toggleAccordion,
       takeInput, questionInput, feynmanAnswers, submitting, completingSession,
-      deepenModal, openDeepenModal, closeDeepenModal, submitDeepenModal, deepenPending,
+      deepenModal, openDeepenModal, closeDeepenModal, submitDeepenModal, deepenPending, feynmanPending,
       submitDeepAction, completeSession, reopenSession, advanceToDeepen,
       startFeynman, submitFeynman,
       regenerateAnswer, regeneratePress, regenerateFeynman,
@@ -366,7 +377,7 @@ export default defineComponent({
               <div v-if="shouldWriteFirst" class="panel-section write-first-section">
                 <div class="ps-label" v-html="icons.edit + ' 先写你的理解（可选）'\"></div>
                 <p class="ps-hint">用自己的话解释你对这个问题的理解，AI 会对比并指出差距。也可以直接跳过。</p>
-                <textarea v-model="takeInput" rows="5" placeholder="你对这个问题的理解是什么？靠自己的知识来回答…"></textarea>
+                <textarea v-model="takeInput" rows="5" placeholder="你对这个问题的理解是什么？靠自己的知识来回答…" @keydown.ctrl.enter.prevent="submitDeepAction('take')"></textarea>
                 <div class="write-first-actions">
                   <button class="btn btn-primary" :disabled="submitting || currentSession.status === 'preparing'"
                           @click="submitDeepAction('take')">
@@ -479,6 +490,11 @@ export default defineComponent({
             </button>
             <div v-if="accordion.feynman" class="accordion-body">
 
+              <!-- Feynman pending bar -->
+              <div v-if="feynmanPending" class="deepen-pending-bar">
+                <span class="deepen-pending-dot"></span> AI 正在生成费曼检验题…
+              </div>
+
               <!-- Active feynman -->
               <div v-if="feynmanGroup.length && currentSession.status === 'feynman'">
                 <div style="display:flex;align-items:center;gap:8px">
@@ -488,7 +504,7 @@ export default defineComponent({
                 <p class="ps-hint">用自己的话回答，AI 会评估你的掌握程度。</p>
                 <div v-for="(q, i) in feynmanGroup" :key="q.id" class="review-q">
                   <div class="review-q-title">Q{{ i+1 }}. {{ q.input || '' }}</div>
-                  <textarea class="review-answer" rows="4" :placeholder="'用自己的话回答…'" v-model="feynmanAnswers[i]"></textarea>
+                  <textarea class="review-answer" rows="4" :placeholder="'用自己的话回答…'" v-model="feynmanAnswers[i]" @keydown.ctrl.enter.prevent="submitFeynman"></textarea>
                 </div>
                 <button class="btn btn-primary btn-block mt8" :disabled="submitting" @click="submitFeynman" v-html="icons.chart + ' 提交答案'\"></button>
               </div>
@@ -584,6 +600,7 @@ export default defineComponent({
               v-model="deepenModal.input"
               rows="8"
               :placeholder="deepenModal.type === 'take' ? '用自己的话解释…' : '我对…还有疑问…'"
+              @keydown.ctrl.enter.prevent="submitDeepenModal"
               autofocus
             ></textarea>
           </div>

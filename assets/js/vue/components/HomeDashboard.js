@@ -194,7 +194,7 @@ export default defineComponent({
           </div>
           <div v-if="!fcDone" class="flashcard-body">
             <div class="ps-hint muted small mb8">用自己的话重新解释这个概念（3-5分钟）</div>
-            <textarea v-model="fcAnswer" rows="6" placeholder="不看材料，靠自己的理解来解释…"></textarea>
+            <textarea v-model="fcAnswer" rows="6" placeholder="不看材料，靠自己的理解来解释…" @keydown.ctrl.enter.prevent="submitFlashcard"></textarea>
             <button class="btn btn-primary btn-block mt8" :disabled="fcSubmitting" @click="submitFlashcard">
               {{ fcSubmitting ? '提交中…' : '提交解释' }}
             </button>
