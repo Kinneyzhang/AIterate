@@ -132,6 +132,7 @@ export default defineComponent({
       try {
         await api.advanceToDeepen(sid);
         emit('refresh');
+        toggleAccordion('deepen');
         setNotice('已进入深化阶段。');
       } catch (err) {
         setNotice(`操作失败：${err.message}`, 'error');
@@ -155,7 +156,7 @@ export default defineComponent({
       if (!sid) return;
       submitting.value = true;
       try {
-        await api.submitDeepAction(sid, type, input.trim());
+        await api.deepenSession(sid, type, input.trim());
         deepenModal.value = { open: false, type: 'take', input: '' };
         emit('refresh');
         setNotice(type === 'take' ? '理解已提交。' : '追问已提交。');
@@ -179,7 +180,7 @@ export default defineComponent({
       if (!input) { setNotice('请输入内容。', 'error'); return; }
       submitting.value = true;
       try {
-        await api.submitDeepAction(sid, actionType, input);
+        await api.deepenSession(sid, actionType, input);
         if (actionType === 'take') takeInput.value = '';
         else questionInput.value = '';
         emit('refresh');
@@ -217,7 +218,7 @@ export default defineComponent({
     async function startFeynman() {
       const sid = store.selectedSessionId; if (!sid) return;
       submitting.value = true;
-      try { await api.startFeynman(sid); emit('refresh'); setNotice('费曼题已生成，开始检验。'); }
+      try { await api.startFeynman(sid); emit('refresh'); toggleAccordion('feynman'); setNotice('费曼题已生成，开始检验。'); }
       catch (err) { setNotice(`启动费曼失败：${err.message}`, 'error'); }
       finally { submitting.value = false; }
     }
