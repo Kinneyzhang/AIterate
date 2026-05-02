@@ -322,11 +322,20 @@ export default defineComponent({
       }
     });
 
-    // #3: 跳过写理解，直接查看 AI 回答
+    // #3: 跳过写理解，直接查看 AI 回答 — persisted per session
+    function _skipKey(sid) { return 'aiterate_skip_write_' + sid; }
     const writeFirstSkipped = ref(false);
     function skipWriteFirst() {
-      writeFirstSkipped.value = true;
+      const sid = store.selectedSessionId;
+      if (sid) {
+        localStorage.setItem(_skipKey(sid), '1');
+        writeFirstSkipped.value = true;
+      }
     }
+    // Initialize from localStorage when session changes
+    watch(() => store.selectedSessionId, (sid) => {
+      writeFirstSkipped.value = !!(sid && localStorage.getItem(_skipKey(sid)));
+    }, { immediate: true });
     const shouldWriteFirst = computed(() => {
       return ['preparing', 'learning'].includes(currentSession.value?.status) && !hasUserTake.value && !writeFirstSkipped.value;
     });
