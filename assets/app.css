@@ -574,7 +574,7 @@ select {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--bg-body, #1a1a2e);
+  background: inherit;
   border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
 }
 .sh-top {
