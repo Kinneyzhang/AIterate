@@ -21,7 +21,6 @@ export default defineComponent({
       clip: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>',
     };
 
-    const reviewSchedule = computed(() => store.workspace?.review_schedule || []);
     const hasTakeRound = computed(() => currentRounds.value.some(r => r.type === 'take'));
     const canEditDeepen = computed(() => {
       const s = currentSession.value?.status;
@@ -45,7 +44,6 @@ export default defineComponent({
       return score != null ? `${score}/100` : '暂无';
     });
     const contextRoundCount = computed(() => currentRounds.value.filter(r => r.type === 'take' || r.type === 'press').length);
-    const pendingReviewCount = computed(() => reviewSchedule.value.filter(r => r.status === 'pending').length);
     const canCompleteEarly = computed(() => ['learning', 'deepening', 'revising', 'feynman'].includes(currentSession.value?.status));
 
     function switchTab(tab) {
@@ -95,8 +93,8 @@ export default defineComponent({
 
     return {
       currentSession, currentRounds, unresolvedGaps,
-      reviewSchedule, hasTakeRound, canEditDeepen, canDeepen, canReview,
-      contextScore, contextRoundCount, pendingReviewCount, canCompleteEarly,
+      hasTakeRound, canEditDeepen, canDeepen, canReview,
+      contextScore, contextRoundCount, canCompleteEarly,
       switchTab, startFeynman, completeEarly, getStageMeta, icons,
       fillGapAsQuestion,
       route,
@@ -114,7 +112,6 @@ export default defineComponent({
         <div class="context-meta-line">
           <span>{{ currentSession.type === 'viewpoint' ? '观点' : '问题' }}</span>
           <span>深化 {{ contextRoundCount }} 轮</span>
-          <span v-if="pendingReviewCount">待复习 {{ pendingReviewCount }}</span>
         </div>
       </section>
 
@@ -139,7 +136,6 @@ export default defineComponent({
           <button v-if="canEditDeepen && hasTakeRound" type="button" class="btn btn-success btn-block btn-sm" @click="startFeynman">开始费曼检验</button>
           <button v-if="currentSession.status === 'feynman'" type="button" class="btn btn-primary btn-block btn-sm" @click="switchTab('review')">回答费曼题</button>
           <button v-if="canCompleteEarly" type="button" class="btn btn-sm btn-block" @click="completeEarly">提前结束</button>
-          <button v-if="pendingReviewCount" type="button" class="btn btn-primary btn-block btn-sm" @click="switchTab('review')">完成今日复习</button>
         </div>
       </section>
 

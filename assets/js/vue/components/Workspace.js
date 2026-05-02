@@ -63,6 +63,15 @@ export default defineComponent({
       }
     });
 
+    // Route → accordion sync (so ContextRail "建议动作" clicks expand the right section)
+    watch(activeTab, (tab) => {
+      const map = { learn: 'learn', deepen: 'deepen', review: 'feynman' };
+      const key = map[tab];
+      if (key && !accordion.value[key]) {
+        toggleAccordion(key);
+      }
+    });
+
     // ── Take evaluations ─────────────────────────────────────────────
     const takeEvals = computed(() => {
       const map = {};
