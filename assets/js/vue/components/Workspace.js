@@ -308,6 +308,7 @@ export default defineComponent({
       submitDeepAction, completeSession, reopenSession, advanceToDeepen,
       startFeynman, submitFeynman,
       regenerateAnswer, regeneratePress, regenerateFeynman,
+      roundCount, feynmanDoneCount,
       getStageMeta, escapeHtml, renderMarkdown, formatDate, icons,
     };
   },
