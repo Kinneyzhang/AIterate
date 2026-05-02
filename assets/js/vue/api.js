@@ -240,15 +240,16 @@ export const api = {
   // Inbox
   getInboxItems: (limit = 50) => request(`/api/inbox?limit=${encodeURIComponent(limit)}`),
   extractInboxUrl: (url) => request('/api/inbox/extract-url', { method: 'POST', body: JSON.stringify({ url }) }),
-  createInboxItem: async (content, sourceType = 'text', options = {}) => {
+  createInboxItem: async (content, sourceType = 'text') => {
     invalidateDerived();
-    return request('/api/inbox', { method: 'POST', body: JSON.stringify({ content, source_type: sourceType, direction: options.direction || null }) });
+    return request('/api/inbox', { method: 'POST', body: JSON.stringify({ content, source_type: sourceType }) });
   },
   getInboxItem: (id) => request(`/api/inbox/${id}`),
   regenerateInboxQuestions: (id, direction = null) => request(`/api/inbox/${id}/regenerate`, {
     method: 'POST',
     body: JSON.stringify({ direction }),
   }),
+  generateInboxQuestions: (id) => request(`/api/inbox/${id}/generate`, { method: 'POST' }),
   archiveInboxItem: (id) => request(`/api/inbox/${id}/archive`, { method: 'POST' }),
   deleteInboxItem: (id) => request(`/api/inbox/${id}`, { method: 'DELETE' }),
   clearInboxHistory: () => request('/api/inbox/history', { method: 'DELETE' }),

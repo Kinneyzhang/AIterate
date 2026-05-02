@@ -21,8 +21,7 @@ export default defineComponent({
         const created = await api.createInboxItem(text, 'text');
         content.value = '';
         emit('created', created);
-        setNotice('已放入收集箱，AI 正在生成问题。');
-        router.push({ name: 'inbox-item', params: { id: created.id } });
+        setNotice('已保存。');
       } catch (err) {
         setNotice(`收集失败：${err.message}`, 'error');
       } finally {
@@ -54,9 +53,9 @@ export default defineComponent({
         :disabled="submitting"
         @keydown="handleKeydown"></textarea>
       <div class="inbox-actions-row">
-        <span class="inbox-hint">用完即走，只处理未完成素材</span>
+        <span class="inbox-hint">纯记录，不自动生成问题</span>
         <button type="button" class="btn btn-sm inbox-submit" :disabled="!content.trim() || submitting" @click="submit">
-          {{ submitting ? '提交中' : '生成' }}
+          {{ submitting ? '保存中' : '收集' }}
         </button>
       </div>
     </section>

@@ -705,12 +705,30 @@ async def list_inbox(limit: int = 50):
 @app.post("/api/inbox", dependencies=[Depends(_require_admin)])
 async def create_inbox_item(body: InboxCreate):
     item_id = db.create_inbox_item(body.content, body.source_type)
+    # No longer auto-generate questions — items are stored as reference notes.
+    # Use POST /api/inbox/{item_id}/generate to manually generate questions.
+    db.update_inbox_item(item_id, status="stored")
     item = db.get_inbox_item(item_id) or {"id": item_id, "title": body.content[:32]}
+    return {"id": item_id, "title": item.get("title"), "status": "stored"}
+
+
+@app.post("/api/inbox/{item_id}/generate", dependencies=[Depends(_require_admin)])
+async def generate_inbox_item_questions(item_id: int, body: InboxRegenerateRequest = InboxRegenerateRequest()):
+    """Manually trigger question generation for an inbox item."""
+    item = db.get_inbox_item(item_id)
+    if not item:
+        raise HTTPException(404, "Inbox item not found")
+    db.update_inbox_item(item_id, status="generating", error_msg=None)
     db.create_job(
         job_type="generate_inbox_questions",
-        payload={"inbox_item_id": item_id, "content": body.content, "direction": body.direction, "replace": True},
+        payload={
+            "inbox_item_id": item_id,
+            "content": item.get("content", ""),
+            "direction": body.direction,
+            "replace": False,
+        },
     )
-    return {"id": item_id, "title": item.get("title"), "status": "pending"}
+    return {"ok": True, "id": item_id, "status": "generating"}
 
 
 # ── Inbox Recommendations ──────────────────────────────────────────────────────

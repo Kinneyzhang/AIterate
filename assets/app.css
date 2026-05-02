@@ -2739,3 +2739,18 @@ select {
   gap: 8px;
 }
 .inbox-rec-actions .btn { font-size: 13px; padding: 5px 12px; }
+
+/* ∎∎∎ btn-accent (生成问题) ∎∎∎ */
+.btn-accent {
+  background: var(--accent, #6366f1);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-accent:hover { opacity: 0.88; }
+.btn-accent:disabled { opacity: 0.4; cursor: default; }
