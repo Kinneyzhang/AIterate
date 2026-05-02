@@ -89,7 +89,8 @@ def test_manual_completion_is_allowed_from_learning_deepening_and_feynman(tmp_pa
     learning_done = client.post(f"/api/sessions/{learning_sid}/complete", headers=AUTH_HEADERS)
     assert learning_done.status_code == 200, learning_done.text
     assert client.get(f"/api/sessions/{learning_sid}", headers=AUTH_HEADERS).json()["status"] == "completed"
-    assert db.get_session_review_schedule(learning_sid)
+    # 学习阶段直接完成 → 无分数 → 无复习排期
+    assert not db.get_session_review_schedule(learning_sid)
 
     deepening_sid = create_learning_session(client, db, server, "什么是 B 树？")
     take = client.post(

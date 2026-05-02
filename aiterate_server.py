@@ -1406,8 +1406,9 @@ async def complete_session(session_id: int):
 
     db.update_session(session_id, status="completed")
 
-    # 自动创建复习排期（如果有分数）
-    db.schedule_review(session_id, session.get("score"))
+    # 自动创建复习排期（仅当有分数，即完成了费曼检验）
+    if session.get("score"):
+        db.schedule_review(session_id, session.get("score"))
 
     return {"ok": True, "cancelled_feynman_rounds": cancelled_feynman_rounds}
 

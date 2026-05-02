@@ -912,6 +912,29 @@ select {
 
 /* ── completed summary ──────────────────────────────────────────────────────── */
 .completed-summary { gap: 10px; }
+
+/* ── review schedule ────────────────────────────────────────────────────────── */
+.review-schedule-section {
+  padding: 0 24px 24px;
+}
+.rs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rs-item {
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent, #4f8ef7);
+  background: transparent;
+  border-radius: 0;
+}
+.rs-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-1, #ccc);
+  display: block;
+  margin-bottom: 6px;
+}
 .final-score-row { display: flex; align-items: center; gap: 12px; }
 .final-score-num { font-size: 28px; font-weight: 800; color: var(--accent, #4f8ef7); }
 
