@@ -1,4 +1,4 @@
-// ── Workspace.js ── 单列流式布局，无三 Tab 压力 ───────────────────────────
+// ── Workspace.js ── 三节手风琴布局 ─────────────────────────────────────
 
 import { defineComponent, ref, watch, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
@@ -16,21 +16,14 @@ export default defineComponent({
     const feynmanAnswers = ref({});
     const submitting = ref(false);
 
-    // ── Expanded section state ──────────────────────────────────────────
-    const expandedSection = ref(null); // null | 'take' | 'press' | 'feynman'
-    const expandedRoundIds = ref(new Set());
-    const aiAnswerExpanded = ref(true);
+    // ── Accordion state: which sections are expanded ──────────────────
+    const accordion = ref({ learn: true, deepen: false, feynman: false });
 
-    function toggleSection(name) {
-      expandedSection.value = expandedSection.value === name ? null : name;
-    }
-    function toggleRound(roundId) {
-      const s = new Set(expandedRoundIds.value);
-      if (s.has(roundId)) s.delete(roundId); else s.add(roundId);
-      expandedRoundIds.value = s;
+    function toggleAccordion(key) {
+      accordion.value = { ...accordion.value, [key]: !accordion.value[key] };
     }
 
-    // ── Session lifecycle ───────────────────────────────────────────────
+    // ── Session lifecycle ────────────────────────────────────────────
 
     const canEdit = computed(() => {
       const s = currentSession.value?.status;
@@ -74,7 +67,7 @@ export default defineComponent({
       }
     });
 
-    // ── Submit take / press (unchanged) ─────────────────────────────────
+    // ── Take evaluations ─────────────────────────────────────────────
     const takeEvals = computed(() => {
       const map = {};
       for (const e of store.workspace?.take_evaluations || []) {
@@ -84,9 +77,6 @@ export default defineComponent({
     });
 
     const hasUserTake = computed(() => currentRounds.value.some(r => r.type === 'take'));
-    const visibleRounds = computed(() =>
-      currentRounds.value.filter(r => r.type === 'take' || r.type === 'press').reverse()
-    );
     const doneFeynmanGroups = computed(() => {
       const done = currentRounds.value.filter(r => r.type === 'feynman' && r.status === 'completed');
       const byGroup = {};
@@ -97,7 +87,7 @@ export default defineComponent({
       return Object.values(byGroup).reverse().map(grp => grp.sort((a, b) => a.seq - b.seq));
     });
 
-    // ── Complete session ────────────────────────────────────────────────
+    // ── Complete session ─────────────────────────────────────────────
     const completingSession = ref(false);
     async function completeSession() {
       const sid = store.selectedSessionId;
@@ -122,7 +112,7 @@ export default defineComponent({
       } catch (err) { setNotice(`重新打开失败：${err.message}`, 'error'); }
     }
 
-    // ── Submit take / press (unchanged) ─────────────────────────────────
+    // ── Submit take / press ──────────────────────────────────────────
     async function submitDeepAction(actionType) {
       const sid = store.selectedSessionId;
       if (!sid || submitting.value) return;
@@ -134,14 +124,13 @@ export default defineComponent({
         if (actionType === 'take') takeInput.value = '';
         else questionInput.value = '';
         emit('refresh');
-        expandedSection.value = null;
         setNotice(actionType === 'take' ? '理解已提交。' : '追问已提交。');
       } catch (err) {
         setNotice(`提交失败：${err.message}`, 'error');
       } finally { submitting.value = false; }
     }
 
-    // ── Regenerate (unchanged) ──────────────────────────────────────────
+    // ── Regenerate ───────────────────────────────────────────────────
     async function regenerateAnswer() {
       const sid = store.selectedSessionId; if (!sid) return;
       submitting.value = true;
@@ -164,7 +153,7 @@ export default defineComponent({
       finally { submitting.value = false; }
     }
 
-    // ── Feynman (unchanged) ─────────────────────────────────────────────
+    // ── Feynman ──────────────────────────────────────────────────────
     const correctionPlan = ref(null);
     async function startFeynman() {
       const sid = store.selectedSessionId; if (!sid) return;
@@ -191,7 +180,7 @@ export default defineComponent({
       finally { submitting.value = false; }
     }
 
-    // ── Review (unchanged) ──────────────────────────────────────────────
+    // ── Review ───────────────────────────────────────────────────────
     const reviewSchedule = ref([]);
     const reviewContents = ref({});
     const reviewSubmitting = ref({});
@@ -230,7 +219,7 @@ export default defineComponent({
       finally { if (btn) btn.disabled = false; }
     }
 
-    // ── Write-first (unchanged, persisted) ──────────────────────────────
+    // ── Write-first ──────────────────────────────────────────────────
     function _skipKey(sid) { return 'aiterate_skip_write_' + sid; }
     const writeFirstSkipped = ref(false);
     function skipWriteFirst() {
@@ -244,7 +233,7 @@ export default defineComponent({
       return ['preparing', 'learning'].includes(currentSession.value?.status) && !hasUserTake.value && !writeFirstSkipped.value;
     });
 
-    // ── Icons ───────────────────────────────────────────────────────────
+    // ── Icons ────────────────────────────────────────────────────────
     const icons = {
       bulb: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>',
       book: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
@@ -255,16 +244,19 @@ export default defineComponent({
       edit: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
       chart: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
       warn: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-      tag: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
       clip: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>',
-      xmark: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+      chevron: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
     };
+
+    // Helpers for accordion summary text
+    const roundCount = computed(() => currentRounds.value.filter(r => r.type === 'take' || r.type === 'press').length);
+    const feynmanDoneCount = computed(() => currentRounds.value.filter(r => r.type === 'feynman' && r.status === 'completed').length);
 
     return {
       currentSession, currentRounds, feynmanGroup, unresolvedGaps, reviewReport, knowledgeNode,
       doneFeynmanGroups, takeEvals, correctionPlan,
-      shouldWriteFirst, skipWriteFirst, hasUserTake, visibleRounds,
-      canEdit, canFeynman, expandedSection, expandedRoundIds, aiAnswerExpanded, toggleSection, toggleRound,
+      shouldWriteFirst, skipWriteFirst, hasUserTake, roundCount,
+      canEdit, canFeynman, accordion, toggleAccordion,
       takeInput, questionInput, feynmanAnswers, submitting, completingSession,
       submitDeepAction, completeSession, reopenSession,
       startFeynman, submitFeynman,
@@ -287,7 +279,7 @@ export default defineComponent({
       <template v-else>
         <div class="panel-content single-flow">
 
-          <!-- ── Section 1: Header ───────────────────────────────── -->
+          <!-- ── Header ────────────────────────────────────────────── -->
           <div class="session-header">
             <div class="sh-top">
               <div class="sh-left">
@@ -296,7 +288,7 @@ export default defineComponent({
                   <span :class="['stage-badge', getStageMeta(currentSession.status).cls]">{{ getStageMeta(currentSession.status).label }}</span>
                   <span>{{ currentSession.type === 'viewpoint' ? '观点' : '问题' }}</span>
                   <span>{{ formatDate(currentSession.created_at) }}</span>
-                  <span v-if="currentSession.score && currentSession.status==='completed'">评分 {{ currentSession.score }}/100</span>
+                  <span v-if="currentSession.score && currentSession.status==='completed'\">评分 {{ currentSession.score }}/100</span>
                 </div>
               </div>
               <div v-if="currentSession.status==='completed'" class="sh-actions">
@@ -308,165 +300,175 @@ export default defineComponent({
             </div>
           </div>
 
-          <!-- ── Section 2: Write-First (above AI answer) ──────────── -->
-          <div v-if="shouldWriteFirst" class="panel-section write-first-section">
-            <div class="ps-label" v-html="icons.edit + ' 先写你的理解（可选）'"></div>
-            <p class="ps-hint">用自己的话解释你对这个问题的理解，AI 会对比并指出差距。也可以直接跳过。</p>
-            <textarea v-model="takeInput" rows="5" placeholder="你对这个问题的理解是什么？靠自己的知识来回答…"></textarea>
-            <div class="write-first-actions">
-              <button class="btn btn-primary" :disabled="submitting || currentSession.status === 'preparing'"
-                      @click="submitDeepAction('take')">
-                {{ currentSession.status === 'preparing' ? 'AI 回答生成中，可先写' : '提交理解，查看 AI 对比' }}
-              </button>
-              <button class="btn btn-text" @click="skipWriteFirst">跳过，直接看 AI 回答</button>
-            </div>
-          </div>
-
-          <!-- ── Section 3: Action Bar (写理解 / 追问 / 费曼) ──────── -->
-          <div v-if="canEdit && !shouldWriteFirst && currentSession.material" class="action-bar">
-            <button :class="['action-chip', { active: expandedSection === 'take' }]" @click="toggleSection('take')">
-              <span v-html="icons.edit"></span> 写理解
+          <!-- ══════════════════════════════════════════════════════════
+               Section 1: 学习
+               ══════════════════════════════════════════════════════════ -->
+          <div class="accordion-section" :class="{ open: accordion.learn }">
+            <button class="accordion-header" @click="toggleAccordion('learn')">
+              <span class="accordion-chevron" :class="{ open: accordion.learn }" v-html="icons.chevron"></span>
+              <span class="accordion-title" v-html="icons.book + ' 学习'\"></span>
+              <span class="accordion-summary" v-if="!accordion.learn">AI 回答</span>
             </button>
-            <button :class="['action-chip', { active: expandedSection === 'press' }]" @click="toggleSection('press')">
-              <span v-html="icons.search"></span> 追问
-            </button>
-            <button v-if="canFeynman" :class="['action-chip', { active: expandedSection === 'feynman' }]"
-                    @click="toggleSection('feynman')">
-              <span v-html="icons.flask"></span> 费曼检验
-            </button>
-          </div>
+            <div v-if="accordion.learn" class="accordion-body">
 
-          <!-- ── Expanded: 写理解 ──────────────────────────────────── -->
-          <div v-if="expandedSection === 'take'" class="expand-card">
-            <div class="expand-card-header">
-              <span v-html="icons.edit + ' 写理解'"></span>
-              <button class="btn btn-text btn-sm" @click="expandedSection = null" v-html="icons.xmark"></button>
-            </div>
-            <p class="ps-hint">用自己的话说说你对 AI 回答的理解，有没有偏差 AI 会告诉你。</p>
-            <textarea v-model="takeInput" rows="4" placeholder="用自己的话解释…"></textarea>
-            <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('take')">提交理解</button>
-          </div>
-
-          <!-- ── Expanded: 追问 ────────────────────────────────────── -->
-          <div v-if="expandedSection === 'press'" class="expand-card">
-            <div class="expand-card-header">
-              <span v-html="icons.search + ' 追问'"></span>
-              <button class="btn btn-text btn-sm" @click="expandedSection = null" v-html="icons.xmark"></button>
-            </div>
-            <p class="ps-hint">追问某个细节、反例、边界条件…</p>
-            <textarea v-model="questionInput" rows="4" placeholder="我对…还有疑问…"></textarea>
-            <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('press')">提交追问</button>
-          </div>
-
-          <!-- ── Section 4: AI Answer ──────────────────────────────── -->
-          <div v-if="!shouldWriteFirst && currentSession.material" class="ai-answer-section">
-            <div class="ai-answer-header">
-              <button class="ai-answer-collapse-btn" @click="aiAnswerExpanded = !aiAnswerExpanded">
-                <span :style="{ transform: aiAnswerExpanded ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }">▶</span>
-                <span v-html="icons.book + ' AI 回答'"></span>
-              </button>
-              <button class="btn btn-sm btn-text" :disabled="submitting" @click="regenerateAnswer">🔄 重新回答</button>
-            </div>
-            <div v-if="aiAnswerExpanded" class="ps-body md-body" v-html="renderMarkdown(currentSession.material)"></div>
-            <div v-else class="ai-answer-collapsed-hint">已折叠，点击展开查看</div>
-          </div>
-
-          <!-- ── Section 5: History (individual round cards) ──────── -->
-          <div v-if="visibleRounds.length" class="history-section">
-            <div class="history-section-title" v-html="icons.clip + ' 学习记录 · ' + visibleRounds.length + ' 轮'"></div>
-            <div v-for="r in visibleRounds" :key="r.id" class="round-collapsed-card">
-              <button class="round-collapsed-bar" @click="toggleRound(r.id)">
-                <span :style="{ transform: expandedRoundIds.has(r.id) ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }">▶</span>
-                <span v-if="r.type === 'take'" v-html="icons.edit + ' 理解'"></span>
-                <span v-else v-html="icons.search + ' 追问'"></span>
-                <span class="round-collapsed-preview">{{ (r.input || '').slice(0, 60) }}{{ (r.input || '').length > 60 ? '…' : '' }}</span>
-                <span v-if="r.score" class="round-collapsed-score">{{ r.score }}/100</span>
-              </button>
-              <div v-if="expandedRoundIds.has(r.id)" class="round-collapsed-body">
-                <div v-if="r.type === 'take'" class="round-card round-take">
-                  <div class="round-user-wrap"><span class="round-label" v-html="icons.edit + ' 理解'"></span><span class="round-user">{{ r.input || '' }}</span></div>
-                  <div class="round-ai md-body">
-                    <div class="ps-label">AI 评价</div>
-                    <div v-html="renderMarkdown(r.output || '')"></div>
-                  </div>
-                  <div v-if="takeEvals[r.id]?.gaps?.length" class="gaps-section">
-                    <div class="gaps-label" v-html="icons.warn + ' 薄弱点'"></div>
-                    <ul class="gaps-list"><li v-for="g in takeEvals[r.id].gaps">{{ g }}</li></ul>
-                  </div>
+              <!-- Write-first -->
+              <div v-if="shouldWriteFirst" class="panel-section write-first-section">
+                <div class="ps-label" v-html="icons.edit + ' 先写你的理解（可选）'\"></div>
+                <p class="ps-hint">用自己的话解释你对这个问题的理解，AI 会对比并指出差距。也可以直接跳过。</p>
+                <textarea v-model="takeInput" rows="5" placeholder="你对这个问题的理解是什么？靠自己的知识来回答…"></textarea>
+                <div class="write-first-actions">
+                  <button class="btn btn-primary" :disabled="submitting || currentSession.status === 'preparing'"
+                          @click="submitDeepAction('take')">
+                    {{ currentSession.status === 'preparing' ? 'AI 回答生成中，可先写' : '提交理解，查看 AI 对比' }}
+                  </button>
+                  <button class="btn btn-text" @click="skipWriteFirst">跳过，直接看 AI 回答</button>
                 </div>
-                <div v-else-if="r.type === 'press'" class="round-card round-press">
-                  <div class="round-user-wrap"><span class="round-label" v-html="icons.search + ' 追问'"></span><span class="round-user">{{ r.input || '' }}</span></div>
-                  <div class="round-ai md-body">
-                    <div style="display:flex;align-items:center;gap:8px">
-                      <div class="ps-label" style="margin-bottom:0">AI 回答</div>
-                      <button class="btn btn-sm btn-text" :disabled="submitting" @click="regeneratePress(r.id)" style="padding:2px 8px;font-size:12px">🔄</button>
+              </div>
+
+              <!-- AI Answer -->
+              <div v-if="currentSession.material" class="ai-answer-section">
+                <div class="ai-answer-header">
+                  <div class="ps-label" style="margin:0" v-html="icons.book + ' AI 回答'\"></div>
+                  <button class="btn btn-sm btn-text" :disabled="submitting" @click="regenerateAnswer">🔄 重新回答</button>
+                </div>
+                <div class="ps-body md-body" v-html="renderMarkdown(currentSession.material)"></div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ══════════════════════════════════════════════════════════
+               Section 2: 深化
+               ══════════════════════════════════════════════════════════ -->
+          <div class="accordion-section" :class="{ open: accordion.deepen }">
+            <button class="accordion-header" @click="toggleAccordion('deepen')">
+              <span class="accordion-chevron" :class="{ open: accordion.deepen }" v-html="icons.chevron"></span>
+              <span class="accordion-title" v-html="icons.edit + ' 深化'\"></span>
+              <span class="accordion-summary" v-if="!accordion.deepen">{{ roundCount ? roundCount + ' 轮' : '写理解 / 追问' }}</span>
+            </button>
+            <div v-if="accordion.deepen" class="accordion-body">
+
+              <!-- 写理解 (if not write-first mode, or after write-first done) -->
+              <div v-if="canEdit && !shouldWriteFirst && currentSession.material" class="panel-section">
+                <div class="ps-label" v-html="icons.edit + ' 写理解'\"></div>
+                <p class="ps-hint">用自己的话说说你对 AI 回答的理解，有没有偏差 AI 会告诉你。</p>
+                <textarea v-model="takeInput" rows="4" placeholder="用自己的话解释…"></textarea>
+                <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('take')">提交理解</button>
+              </div>
+
+              <!-- 追问 -->
+              <div v-if="canEdit && !shouldWriteFirst && currentSession.material" class="panel-section">
+                <div class="ps-label" v-html="icons.search + ' 追问'\"></div>
+                <p class="ps-hint">追问某个细节、反例、边界条件…</p>
+                <textarea v-model="questionInput" rows="4" placeholder="我对…还有疑问…"></textarea>
+                <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('press')">提交追问</button>
+              </div>
+
+              <!-- History rounds -->
+              <template v-if="roundCount">
+                <div class="ps-label" style="margin-bottom:12px" v-html="icons.clip + ' 历史记录 · ' + roundCount + ' 轮'\"></div>
+                <template v-for="r in currentRounds.filter(r => r.type === 'take' || r.type === 'press')" :key="r.id">
+                  <div v-if="r.type === 'take'" class="round-card round-take">
+                    <div class="round-user-wrap"><span class="round-label" v-html="icons.edit + ' 理解'\"></span><span class="round-user">{{ r.input || '' }}</span></div>
+                    <div class="round-ai md-body">
+                      <div class="ps-label">AI 评价</div>
+                      <div v-html="renderMarkdown(r.output || '')"></div>
                     </div>
-                    <div v-html="renderMarkdown(r.output || '')"></div>
+                    <div v-if="takeEvals[r.id]?.gaps?.length" class="gaps-section">
+                      <div class="gaps-label" v-html="icons.warn + ' 薄弱点'\"></div>
+                      <ul class="gaps-list"><li v-for="g in takeEvals[r.id].gaps">{{ g }}</li></ul>
+                    </div>
+                    <div v-if="r.score" class="round-score">评分 {{ r.score }}/100</div>
+                  </div>
+                  <div v-else-if="r.type === 'press'" class="round-card round-press">
+                    <div class="round-user-wrap"><span class="round-label" v-html="icons.search + ' 追问'\"></span><span class="round-user">{{ r.input || '' }}</span></div>
+                    <div class="round-ai md-body">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <div class="ps-label" style="margin-bottom:0">AI 回答</div>
+                        <button class="btn btn-sm btn-text" :disabled="submitting" @click="regeneratePress(r.id)" style="padding:2px 8px;font-size:12px">🔄</button>
+                      </div>
+                      <div v-html="renderMarkdown(r.output || '')"></div>
+                    </div>
+                  </div>
+                </template>
+              </template>
+
+            </div>
+          </div>
+
+          <!-- ══════════════════════════════════════════════════════════
+               Section 3: 费曼检验
+               ══════════════════════════════════════════════════════════ -->
+          <div v-if="canFeynman" class="accordion-section" :class="{ open: accordion.feynman }">
+            <button class="accordion-header" @click="toggleAccordion('feynman')">
+              <span class="accordion-chevron" :class="{ open: accordion.feynman }" v-html="icons.chevron"></span>
+              <span class="accordion-title" v-html="icons.flask + ' 费曼检验'\"></span>
+              <span class="accordion-summary" v-if="!accordion.feynman">{{ currentSession.status === 'feynman' ? '进行中' : feynmanDoneCount ? feynmanDoneCount + ' 题已完成' : '待检验' }}</span>
+            </button>
+            <div v-if="accordion.feynman" class="accordion-body">
+
+              <!-- Active feynman -->
+              <div v-if="feynmanGroup.length && currentSession.status === 'feynman'" class="panel-section">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div class="ps-label" style="margin-bottom:0" v-html="icons.flask + ' 费曼检验'\"></div>
+                  <button class="btn btn-sm btn-text" :disabled="submitting" @click="regenerateFeynman" style="padding:2px 8px;font-size:12px">🔄 重新出题</button>
+                </div>
+                <p class="ps-hint">用自己的话回答，AI 会评估你的掌握程度。</p>
+                <div v-for="(q, i) in feynmanGroup" :key="q.id" class="review-q">
+                  <div class="review-q-title">Q{{ i+1 }}. {{ q.input || '' }}</div>
+                  <textarea class="review-answer" rows="4" :placeholder="'用自己的话回答…'" v-model="feynmanAnswers[i]"></textarea>
+                </div>
+                <button class="btn btn-primary btn-block mt8" :disabled="submitting" @click="submitFeynman" v-html="icons.chart + ' 提交答案'\"></button>
+              </div>
+
+              <!-- Start feynman -->
+              <div v-else-if="canEdit && !feynmanGroup.length" class="panel-section">
+                <button class="btn btn-primary btn-block" :disabled="submitting" @click="startFeynman">开始费曼检验</button>
+              </div>
+
+              <!-- Correction plan -->
+              <div v-if="correctionPlan && currentSession.status !== 'completed'" class="correction-plan-section">
+                <div class="ps-label" v-html="icons.warn + ' 修正计划'\"></div>
+                <div v-if="correctionPlan.weak_concepts?.length" class="cp-block">
+                  <div class="cp-subtitle">薄弱概念</div>
+                  <ul class="cp-list weak"><li v-for="c in correctionPlan.weak_concepts">{{ c }}</li></ul>
+                </div>
+                <div v-if="correctionPlan.failed_items?.length" class="cp-block">
+                  <div class="cp-subtitle">失败题目</div>
+                  <div v-for="(fi, i) in correctionPlan.failed_items" :key="i" class="cp-failed-item">
+                    <div class="cp-failed-q">{{ fi.question }}</div>
+                    <span :class="['item-score', fi.score >= 60 ? 'pass' : 'fail']">{{ fi.score }}分 — {{ fi.comment }}</span>
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Section 6: Feynman ─────────────────────────────────── -->
-          <div v-if="feynmanGroup.length && currentSession.status === 'feynman'" class="panel-section">
-            <div style="display:flex;align-items:center;gap:8px">
-              <div class="ps-label" style="margin-bottom:0" v-html="icons.flask + ' 费曼检验'"></div>
-              <button class="btn btn-sm btn-text" :disabled="submitting" @click="regenerateFeynman" style="padding:2px 8px;font-size:12px">🔄 重新出题</button>
-            </div>
-            <p class="ps-hint">用自己的话回答，AI 会评估你的掌握程度。</p>
-            <div v-for="(q, i) in feynmanGroup" :key="q.id" class="review-q">
-              <div class="review-q-title">Q{{ i+1 }}. {{ q.input || '' }}</div>
-              <textarea class="review-answer" rows="4" :placeholder="'用自己的话回答…'" v-model="feynmanAnswers[i]"></textarea>
-            </div>
-            <button class="btn btn-primary btn-block mt8" :disabled="submitting" @click="submitFeynman" v-html="icons.chart + ' 提交答案'"></button>
-          </div>
-
-          <!-- Feynman correction plan -->
-          <div v-if="correctionPlan && currentSession.status !== 'completed'" class="correction-plan-section">
-            <div class="ps-label" v-html="icons.warn + ' 修正计划'"></div>
-            <div v-if="correctionPlan.weak_concepts?.length" class="cp-block">
-              <div class="cp-subtitle">薄弱概念</div>
-              <ul class="cp-list weak"><li v-for="c in correctionPlan.weak_concepts">{{ c }}</li></ul>
-            </div>
-            <div v-if="correctionPlan.failed_items?.length" class="cp-block">
-              <div class="cp-subtitle">失败题目</div>
-              <div v-for="(fi, i) in correctionPlan.failed_items" :key="i" class="cp-failed-item">
-                <div class="cp-failed-q">{{ fi.question }}</div>
-                <span :class="['item-score', fi.score >= 60 ? 'pass' : 'fail']">{{ fi.score }}分 — {{ fi.comment }}</span>
-              </div>
-            </div>
-            <div v-if="correctionPlan.recommended_actions?.length" class="cp-block">
-              <div class="cp-subtitle">建议动作</div>
-              <ul class="cp-list"><li v-for="a in correctionPlan.recommended_actions">{{ a }}</li></ul>
-            </div>
-            <div v-if="correctionPlan.next_feynman_prerequisites?.length" class="cp-block">
-              <div class="cp-subtitle">下次费曼前置条件</div>
-              <ul class="cp-list"><li v-for="p in correctionPlan.next_feynman_prerequisites">✅ {{ p }}</li></ul>
-            </div>
-          </div>
-
-          <!-- ── Section 7: Done Feynman History ────────────────────── -->
-          <template v-if="doneFeynmanGroups.length">
-            <div v-for="(grp, gi) in doneFeynmanGroups" :key="gi" class="round-card round-review">
-              <div class="round-label" v-html="icons.flask + ' 费曼记录 · '
-                + Math.round(grp.reduce((s,r) => s + (r.score||0), 0) / grp.length) + '/100'"></div>
-              <div class="qa-list">
-                <div v-for="(r, i) in grp" :key="r.id" class="qa-pair">
-                  <div class="qa-q">Q{{ i+1 }} {{ r.input || '' }}
-                    <span v-if="r.score != null" :class="['item-score', r.score >= 60 ? 'pass' : 'fail']">{{ r.score }}分</span>
-                  </div>
-                  <div class="qa-a">{{ r.output || '（未作答）' }}</div>
-                  <div v-if="r.score_comment" style="margin-top:6px">
-                    <div class="ps-label">AI 评价</div>
-                    <div class="item-comment">{{ r.score_comment }}</div>
-                  </div>
+                <div v-if="correctionPlan.recommended_actions?.length" class="cp-block">
+                  <div class="cp-subtitle">建议动作</div>
+                  <ul class="cp-list"><li v-for="a in correctionPlan.recommended_actions">{{ a }}</li></ul>
                 </div>
               </div>
-            </div>
-          </template>
 
-          <!-- ── Section 8: Completed Summary ───────────────────────── -->
+              <!-- Done feynman history -->
+              <template v-if="doneFeynmanGroups.length">
+                <div v-for="(grp, gi) in doneFeynmanGroups" :key="gi" class="round-card round-review">
+                  <div class="round-label" v-html="icons.flask + ' 费曼记录 · '\n                    + Math.round(grp.reduce((s,r) => s + (r.score||0), 0) / grp.length) + '/100'"></div>
+                  <div class="qa-list">
+                    <div v-for="(r, i) in grp" :key="r.id" class="qa-pair">
+                      <div class="qa-q">Q{{ i+1 }} {{ r.input || '' }}
+                        <span v-if="r.score != null" :class="['item-score', r.score >= 60 ? 'pass' : 'fail']">{{ r.score }}分</span>
+                      </div>
+                      <div class="qa-a">{{ r.output || '（未作答）' }}</div>
+                      <div v-if="r.score_comment" style="margin-top:6px">
+                        <div class="ps-label">AI 评价</div>
+                        <div class="item-comment">{{ r.score_comment }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+            </div>
+          </div>
+
+          <!-- ── Completed summary ───────────────────────────────────── -->
           <div v-if="currentSession.status === 'completed'" class="panel-section completed-summary">
             <div class="final-score-row">
               <span class="final-score-num" v-if="currentSession.score">{{ currentSession.score }}/100</span>
@@ -480,19 +482,19 @@ export default defineComponent({
               <div class="report-row"><span class="report-label">掌握度</span><span class="report-value">{{ reviewReport.mastery_level || '—' }}</span></div>
               <div v-if="reviewReport.final_summary" class="report-summary md-body" v-html="renderMarkdown(reviewReport.final_summary)"></div>
               <div v-if="reviewReport.strong_points?.length" class="report-section">
-                <div class="report-label" v-html="icons.check + ' 理解到位的点'"></div>
+                <div class="report-label" v-html="icons.check + ' 理解到位的点'\"></div>
                 <ul class="report-list good"><li v-for="p in reviewReport.strong_points">{{ p }}</li></ul>
               </div>
               <div v-if="reviewReport.weak_points?.length" class="report-section">
-                <div class="report-label" v-html="icons.edit + ' 还需加强'"></div>
+                <div class="report-label" v-html="icons.edit + ' 还需加强'\"></div>
                 <ul class="report-list weak"><li v-for="p in reviewReport.weak_points">{{ p }}</li></ul>
               </div>
             </div>
           </div>
 
-          <!-- ── Section 9: Review Schedule ─────────────────────────── -->
+          <!-- ── Review schedule ─────────────────────────────────────── -->
           <div v-if="reviewSchedule.length" class="review-schedule-section">
-            <div class="ps-label" v-html="icons.refresh + ' 复习排期'"></div>
+            <div class="ps-label" v-html="icons.refresh + ' 复习排期'\"></div>
             <div class="rs-list">
               <div v-for="rs in reviewSchedule" :key="rs.id"
                    :class="['rs-item', rs.status === 'completed' ? 'rs-done' : 'rs-pending']">
@@ -527,21 +529,22 @@ export default defineComponent({
             </div>
           </div>
 
-          <!-- ── Unresolved Gaps ────────────────────────────────────── -->
+          <!-- ── Unresolved gaps ─────────────────────────────────────── -->
           <div v-if="unresolvedGaps.length" class="gaps-banner">
-            <div class="gaps-banner-title" v-html="icons.clip + ' 待解决薄弱点（' + unresolvedGaps.length + '）'"></div>
+            <div class="gaps-banner-title" v-html="icons.clip + ' 待解决薄弱点（' + unresolvedGaps.length + '）'\"></div>
             <ul class="gaps-summary">
               <li v-for="g in unresolvedGaps.slice(0, 8)">{{ g.gap }} <span class="muted small">→ 第{{ g.seq }}轮</span></li>
             </ul>
           </div>
 
-          <!-- ── Bottom: End Session ────────────────────────────────── -->
+          <!-- ── Bottom: End Session ─────────────────────────────────── -->
           <div v-if="canEdit" class="bottom-actions">
             <button class="btn btn-end-session-bottom" :disabled="completingSession" @click="completeSession">
               <span v-html="icons.check"></span> {{ completingSession ? '…' : '结束学习' }}
             </button>
             <p class="muted" style="text-align:center;font-size:12px;margin-top:4px">随时可以结束，不需要走完所有阶段</p>
           </div>
+
         </div>
       </template>
     </div>
