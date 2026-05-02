@@ -692,17 +692,17 @@ select {
 /* ── Deepen actions row (写理解 + 提追问 buttons) ────────────────── */
 .deepen-actions-row {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 16px;
 }
-.deepen-actions-row .btn {
+.deepen-action-btn {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 12px 16px;
-  font-size: 15px;
+  gap: 5px;
+  padding: 8px 14px;
+  font-size: 13px;
 }
 
 /* ── Deepen Modal ──────────────────────────────────────────────────── */
@@ -716,23 +716,25 @@ select {
   justify-content: center;
 }
 .deepen-modal {
-  background: var(--bg, #fff);
-  border: 1px solid var(--border, #ddd);
-  border-radius: 8px;
-  width: min(560px, 92vw);
-  max-height: 90vh;
+  background: var(--bg-1, #1a1a1a);
+  border: none;
+  border-radius: 16px;
+  width: 100%;
+  max-width: min(760px, calc(100vw - 48px));
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
 }
 .deepen-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border, #333);
 }
 .deepen-modal-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -742,16 +744,28 @@ select {
   font-size: 20px;
   padding: 4px 8px;
   line-height: 1;
+  opacity: 0.5;
 }
 .deepen-modal-body {
-  padding: 12px 20px;
+  padding: 16px 20px;
   flex: 1;
   overflow-y: auto;
 }
+.deepen-modal-question {
+  font-size: 14px;
+  color: var(--text-muted, #999);
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--bg-2, #222);
+  border-radius: 6px;
+  line-height: 1.5;
+}
 .deepen-modal-body textarea {
   width: 100%;
-  min-height: 180px;
+  min-height: 200px;
   resize: vertical;
+  font-size: 15px;
+  line-height: 1.7;
 }
 .deepen-modal-footer {
   display: flex;

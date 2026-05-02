@@ -383,10 +383,10 @@ export default defineComponent({
 
               <!-- Deepen actions -->
               <div class="deepen-actions-row">
-                <button class="btn btn-primary" @click="openDeepenModal('take')">
+                <button class="btn btn-primary deepen-action-btn" @click="openDeepenModal('take')">
                   <span v-html="icons.edit"></span> 写理解
                 </button>
-                <button class="btn btn-primary" @click="openDeepenModal('press')">
+                <button class="btn deepen-action-btn" @click="openDeepenModal('press')">
                   <span v-html="icons.search"></span> 提追问
                 </button>
               </div>
@@ -546,6 +546,9 @@ export default defineComponent({
             <button class="btn btn-text deepen-modal-close" @click="closeDeepenModal">&times;</button>
           </div>
           <div class="deepen-modal-body">
+            <div class="deepen-modal-question" v-if="currentSession">
+              {{ currentSession.title || currentSession.content || '（无标题）' }}
+            </div>
             <p class="ps-hint" v-if="deepenModal.type === 'take'">用自己的话说说你对 AI 回答的理解。</p>
             <p class="ps-hint" v-else>追问细节、反例、边界条件。</p>
             <textarea
