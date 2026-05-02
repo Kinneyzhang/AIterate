@@ -505,6 +505,40 @@ def init_db():
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_questions_item ON inbox_questions(inbox_item_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_questions_status ON inbox_questions(status)"))
 
+        # inbox_recommendations — 每日智能推荐
+        if sqlite:
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS inbox_recommendations (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                recommendation_batch TEXT    NOT NULL,
+                question             TEXT    NOT NULL,
+                why                  TEXT,
+                angle                TEXT,
+                depth                TEXT    NOT NULL DEFAULT 'medium',
+                related_concepts     TEXT    NOT NULL DEFAULT '[]',
+                status               TEXT    NOT NULL DEFAULT 'active',
+                session_id           INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+                created_at           TEXT    NOT NULL DEFAULT (datetime('now')),
+                selected_at          TEXT
+            )"""))
+        else:
+            conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS inbox_recommendations (
+                id                   SERIAL PRIMARY KEY,
+                recommendation_batch TEXT NOT NULL,
+                question             TEXT NOT NULL,
+                why                  TEXT,
+                angle                TEXT,
+                depth                TEXT NOT NULL DEFAULT 'medium',
+                related_concepts     {jb} NOT NULL DEFAULT '[]',
+                status               TEXT NOT NULL DEFAULT 'active',
+                session_id           INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+                created_at           {ts} NOT NULL DEFAULT NOW(),
+                selected_at          {ts}
+            )"""))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_recs_batch ON inbox_recommendations(recommendation_batch)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inbox_recs_status ON inbox_recommendations(status)"))
+
         # jobs — Phase 4: DB-backed async job queue
         if sqlite:
             conn.execute(text(f"""
@@ -960,6 +994,177 @@ def clear_inbox_history() -> int:
            WHERE status IN ('partially_used', 'archived', 'ignored')"""
     )
     return int(result.rowcount or 0)
+
+
+# ── Inbox Recommendations ──────────────────────────────────────────────────────
+
+def _today_batch_key() -> str:
+    """Return today's date as a recommendation batch key."""
+    from datetime import date
+    return date.today().isoformat()
+
+
+def get_inbox_recommendations(batch_key: str | None = None) -> list[dict]:
+    """Get recommendations for a batch, defaulting to today."""
+    key = batch_key or _today_batch_key()
+    rows = _fetch_all(
+        """SELECT * FROM inbox_recommendations
+           WHERE recommendation_batch = :batch
+           ORDER BY id ASC""",
+        {"batch": key},
+    )
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["related_concepts"] = _jload(d.get("related_concepts")) or []
+        out.append(d)
+    return out
+
+
+def create_inbox_recommendations(batch_key: str, questions: list[dict]) -> list[int]:
+    """Insert a batch of recommendations. Returns list of new IDs."""
+    ids = []
+    for q in questions:
+        question = (q.get("question") or "").strip()
+        if not question:
+            continue
+        params = {
+            "batch": batch_key,
+            "question": question,
+            "why": (q.get("why") or "").strip(),
+            "angle": (q.get("angle") or "").strip(),
+            "depth": (q.get("depth") or "medium").strip() or "medium",
+            "related": json.dumps(q.get("related_concepts") or [], ensure_ascii=False),
+        }
+        if _is_sqlite():
+            row_id = _insert_returning_id(
+                """INSERT INTO inbox_recommendations
+                   (recommendation_batch, question, why, angle, depth, related_concepts)
+                   VALUES (:batch, :question, :why, :angle, :depth, :related) RETURNING id""",
+                params,
+            )
+        else:
+            row_id = _insert_returning_id(
+                """INSERT INTO inbox_recommendations
+                   (recommendation_batch, question, why, angle, depth, related_concepts)
+                   VALUES (:batch, :question, :why, :angle, :depth, CAST(:related AS jsonb)) RETURNING id""",
+                params,
+            )
+        ids.append(row_id)
+    return ids
+
+
+def select_inbox_recommendation(rec_id: int, session_id: int) -> dict | None:
+    """Mark a recommendation as selected and link to a session."""
+    if _is_sqlite():
+        _exec(
+            """UPDATE inbox_recommendations
+               SET status = 'selected', session_id = :sid, selected_at = datetime('now')
+               WHERE id = :id""",
+            {"id": rec_id, "sid": session_id},
+        )
+    else:
+        _exec(
+            """UPDATE inbox_recommendations
+               SET status = 'selected', session_id = :sid, selected_at = NOW()
+               WHERE id = :id""",
+            {"id": rec_id, "sid": session_id},
+        )
+    return _fetch_one("SELECT * FROM inbox_recommendations WHERE id = :id", {"id": rec_id})
+
+
+def ignore_inbox_recommendation(rec_id: int) -> None:
+    """Mark a recommendation as ignored."""
+    _exec(
+        "UPDATE inbox_recommendations SET status = 'ignored' WHERE id = :id",
+        {"id": rec_id},
+    )
+
+
+def clear_recommendation_batch(batch_key: str) -> int:
+    """Remove all recommendations for a batch (used before refresh)."""
+    result = _exec(
+        "DELETE FROM inbox_recommendations WHERE recommendation_batch = :batch",
+        {"batch": batch_key},
+    )
+    return int(result.rowcount or 0)
+
+
+def build_user_interest_profile() -> dict:
+    """Build a compact interest profile from session/gap/knowledge-node history."""
+    # Active knowledge nodes with stats
+    node_rows = _fetch_all("""
+        SELECT s.knowledge_node_id,
+               COUNT(*) AS session_count,
+               AVG(s.score) AS avg_score,
+               (SELECT COUNT(*) FROM learning_gaps lg
+                WHERE lg.session_id IN (SELECT id FROM sessions s2 WHERE s2.knowledge_node_id = s.knowledge_node_id)
+                  AND lg.status = 'open') AS open_gaps,
+               MAX(s.updated_at) AS last_active
+        FROM sessions s
+        WHERE s.knowledge_node_id IS NOT NULL
+        GROUP BY s.knowledge_node_id
+        ORDER BY session_count DESC, last_active DESC
+        LIMIT 10
+    """)
+
+    # Recently selected inbox question angles
+    angle_rows = _fetch_all("""
+        SELECT iq.angle, COUNT(*) AS cnt
+        FROM inbox_questions iq
+        WHERE iq.status = 'selected'
+        GROUP BY iq.angle
+        ORDER BY cnt DESC
+        LIMIT 5
+    """)
+
+    # Recent session titles (for topic context)
+    recent = _fetch_all("""
+        SELECT title, status, score, knowledge_node_id
+        FROM sessions
+        ORDER BY updated_at DESC
+        LIMIT 15
+    """)
+
+    # Build knowledge tree lookup for titles
+    tree_nodes = {}
+    try:
+        tree = get_knowledge_tree()
+        if isinstance(tree, list):
+            def _walk(nodes):
+                for n in nodes:
+                    tree_nodes[n.get("id", "")] = n.get("title", "")
+                    _walk(n.get("children", []))
+            _walk(tree)
+    except Exception:
+        pass
+
+    nodes = []
+    for r in node_rows:
+        nid = r.get("knowledge_node_id", "") or ""
+        nodes.append({
+            "id": nid,
+            "title": tree_nodes.get(nid, nid),
+            "session_count": int(r.get("session_count") or 0),
+            "avg_score": round(float(r.get("avg_score") or 0), 1),
+            "open_gaps": int(r.get("open_gaps") or 0),
+        })
+
+    recent_titles = []
+    for r in recent:
+        recent_titles.append({
+            "title": r.get("title", ""),
+            "status": r.get("status", ""),
+            "score": r.get("score"),
+            "node": tree_nodes.get(r.get("knowledge_node_id", "") or "", ""),
+        })
+
+    return {
+        "active_nodes": nodes,
+        "preferred_angles": [{"angle": r.get("angle", ""), "count": r.get("cnt", 0)} for r in angle_rows],
+        "recent_sessions": recent_titles[:10],
+        "total_sessions": sum(int(r.get("session_count") or 0) for r in node_rows),
+    }
 
 
 # ── Sessions ───────────────────────────────────────────────────────────────────

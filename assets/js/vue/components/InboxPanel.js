@@ -76,6 +76,9 @@ export default defineComponent({
     ];
     let pollTimer = null;
     let lastProcessingNoticeKey = '';
+    let recsPollTimer = null;
+    const recommendations = ref([]);
+    const recsGenerating = ref(false);
 
     const isInboxRoute = computed(() => route.name === 'inbox' || route.name === 'inbox-item');
     const itemId = computed(() => route.name === 'inbox-item' && route.params.id ? Number(route.params.id) : null);
@@ -297,6 +300,76 @@ export default defineComponent({
       store.inboxItems = items.value;
     }
 
+    // ── Recommendations ──────────────────────────────────────────────────────
+
+    async function loadRecommendations() {
+      try {
+        const data = await api.getInboxRecommendations();
+        recommendations.value = data.recommendations || [];
+        recsGenerating.value = data.status === 'generating';
+        if (recsGenerating.value) {
+          startRecsPolling();
+        } else {
+          stopRecsPolling();
+        }
+      } catch (_) { /* recommendations are optional */ }
+    }
+
+    function startRecsPolling() {
+      if (recsPollTimer) return;
+      recsPollTimer = setInterval(loadRecommendations, 8000);
+    }
+
+    function stopRecsPolling() {
+      if (recsPollTimer) {
+        clearInterval(recsPollTimer);
+        recsPollTimer = null;
+      }
+    }
+
+    async function refreshRecommendations() {
+      recsGenerating.value = true;
+      recommendations.value = [];
+      try {
+        await api.refreshInboxRecommendations();
+        startRecsPolling();
+      } catch (err) {
+        setNotice(`刷新推荐失败：${err.message}`, 'error');
+        recsGenerating.value = false;
+      }
+    }
+
+    async function selectRecommendation(rec) {
+      if (!rec?.id || actionBusy.value[`rec-${rec.id}`]) return;
+      actionBusy.value[`rec-${rec.id}`] = true;
+      try {
+        const result = await api.selectInboxRecommendation(rec.id);
+        emit('refresh');
+        router.push({ name: 'session-learn', params: { id: result.session_id } });
+      } catch (err) {
+        setNotice(`创建学习失败：${err.message}`, 'error');
+      } finally {
+        actionBusy.value[`rec-${rec.id}`] = false;
+      }
+    }
+
+    async function ignoreRecommendation(rec) {
+      if (!rec?.id || actionBusy.value[`rec-ignore-${rec.id}`]) return;
+      actionBusy.value[`rec-ignore-${rec.id}`] = true;
+      try {
+        await api.ignoreInboxRecommendation(rec.id);
+        recommendations.value = recommendations.value.map(x => x.id === rec.id ? { ...x, status: 'ignored' } : x);
+      } catch (err) {
+        setNotice(`忽略失败：${err.message}`, 'error');
+      } finally {
+        actionBusy.value[`rec-ignore-${rec.id}`] = false;
+      }
+    }
+
+    const activeRecommendations = computed(() =>
+      (recommendations.value || []).filter(r => r.status === 'active')
+    );
+
     function syncGenerationNotice(currentItem) {
       if (!currentItem?.id) return;
       const key = `${currentItem.id}:${currentItem.status}`;
@@ -324,6 +397,7 @@ export default defineComponent({
         } else {
           item.value = null;
           questions.value = [];
+          loadRecommendations();
         }
         // 只在打开具体素材（等 AI 生成问题）时才轮询，列表页不刷新
         syncGenerationNotice(item.value);
@@ -464,7 +538,7 @@ export default defineComponent({
       loadDomainOptions();
       loadCurrent();
     });
-    onUnmounted(stopPolling);
+    onUnmounted(() => { stopPolling(); stopRecsPolling(); });
 
     return {
       items, pendingItems, completedItems, visibleItems, readyItems, generatingItems, errorItems, selectedBatchItems,
@@ -474,6 +548,7 @@ export default defineComponent({
       statusLabel, depthLabel, toggleDomain, toggleBatchItem, clearBatchSelection, archiveSelectedBatch, mergeSelectedBatch, buildPageDirection, loadDomainOptions,
       importUrlToComposer, startVoiceInput, handleImageInput, handlePagePaste, submitPageCollection, handlePageKeydown,
       openItem, regenerate, selectQuestion, ignoreQuestion, archiveItem, deleteHistoryItem, clearHistory, displayInboxTitle,
+      recommendations, activeRecommendations, recsGenerating, loadRecommendations, refreshRecommendations, selectRecommendation, ignoreRecommendation,
     };
   },
 
@@ -485,6 +560,33 @@ export default defineComponent({
           <div class="inbox-overview-kicker">INBOX</div>
           <h2>收集箱</h2>
           <p>零碎素材先放这里，处理成问题后进入学习；没价值的直接点「完成」。</p>
+
+          <section v-if="activeRecommendations.length || recsGenerating" class="inbox-recs-section">
+            <div class="inbox-section-head">
+              <div class="home-section-title" v-html="icon('bulb') + ' 为你推荐'"></div>
+              <button type="button" class="btn btn-ghost" :disabled="recsGenerating" @click="refreshRecommendations">换一批</button>
+            </div>
+            <p class="inbox-recs-desc">基于你的学习轨迹自动推荐，每天换一批。随心选择。</p>
+            <div v-if="recsGenerating" class="inbox-recs-generating">
+              <span class="inbox-recs-dot"></span>AI 正在为你推荐…
+            </div>
+            <div v-else class="inbox-recs-grid">
+              <article v-for="rec in activeRecommendations.slice(0,4)" :key="'rec-'+rec.id" class="inbox-rec-card">
+                <div class="inbox-rec-body">
+                  <div class="inbox-rec-question">{{ rec.question }}</div>
+                  <p v-if="rec.why" class="inbox-rec-why">{{ rec.why }}</p>
+                  <div class="inbox-rec-meta">
+                    <span class="inbox-rec-angle">{{ rec.angle || '跨学科' }}</span>
+                    <span class="inbox-rec-depth">{{ {low:'浅',medium:'中',high:'深'}[rec.depth] || rec.depth || '中' }}</span>
+                  </div>
+                </div>
+                <div class="inbox-rec-actions">
+                  <button type="button" class="btn btn-primary" :disabled="actionBusy['rec-'+rec.id]" @click="selectRecommendation(rec)">开始学习</button>
+                  <button type="button" class="btn btn-ghost" :disabled="actionBusy['rec-ignore-'+rec.id]" @click="ignoreRecommendation(rec)">不感兴趣</button>
+                </div>
+              </article>
+            </div>
+          </section>
 
           <section class="inbox-page-composer">
             <div class="inbox-page-composer-head">

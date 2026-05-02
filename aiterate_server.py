@@ -713,6 +713,96 @@ async def create_inbox_item(body: InboxCreate):
     return {"id": item_id, "title": item.get("title"), "status": "pending"}
 
 
+# ── Inbox Recommendations ──────────────────────────────────────────────────────
+
+class RecommendationSelectRequest(BaseModel):
+    web_search: bool = False
+    knowledge_node_id: str | None = None
+
+
+@app.get("/api/inbox/recommendations", dependencies=[Depends(_require_admin)])
+async def get_inbox_recommendations():
+    """Get today's recommendation batch. Auto-generates if none exists."""
+    batch = db._today_batch_key()
+    recs = db.get_inbox_recommendations(batch)
+
+    # If no recommendations exist for today, kick off async generation
+    if not recs:
+        profile = db.build_user_interest_profile()
+        # Check if a generation job is already pending/running
+        existing = db._fetch_one(
+            """SELECT id FROM jobs
+               WHERE job_type = 'generate_inbox_recommendations'
+                 AND status IN ('pending', 'running')
+               ORDER BY id DESC LIMIT 1"""
+        )
+        if not existing:
+            db.create_job(
+                job_type="generate_inbox_recommendations",
+                payload={"batch": batch, "profile": profile},
+            )
+        return {"batch": batch, "recommendations": [], "status": "generating"}
+
+    active = [r for r in recs if r.get("status") == "active"]
+    return {
+        "batch": batch,
+        "recommendations": recs,
+        "active_count": len(active),
+        "total": len(recs),
+    }
+
+
+@app.post("/api/inbox/recommendations/refresh", dependencies=[Depends(_require_admin)])
+async def refresh_inbox_recommendations():
+    """Manually refresh today's recommendations. Clears old batch and regenerates."""
+    batch = db._today_batch_key()
+    db.clear_recommendation_batch(batch)
+    profile = db.build_user_interest_profile()
+    db.create_job(
+        job_type="generate_inbox_recommendations",
+        payload={"batch": batch, "profile": profile},
+    )
+    return {"batch": batch, "status": "generating"}
+
+
+@app.post("/api/inbox/recommendations/{rec_id}/select",
+          dependencies=[Depends(_require_admin)])
+async def select_inbox_recommendation(rec_id: int, body: RecommendationSelectRequest = RecommendationSelectRequest()):
+    """Select a recommendation → create learning session."""
+    rec = db._fetch_one("SELECT * FROM inbox_recommendations WHERE id = :id", {"id": rec_id})
+    if not rec:
+        raise HTTPException(404, "Recommendation not found")
+    if rec.get("status") == "selected":
+        sid = rec.get("session_id")
+        if sid:
+            return {"session_id": sid, "recommendation_id": rec_id, "reused": True}
+
+    # Create session from recommendation
+    question = rec.get("question", "")
+    title = _fallback_session_title(question)
+    sid = db.create_session(title=title, content=question, type="question",
+                            web_search=body.web_search)
+    if body.knowledge_node_id:
+        db.set_knowledge_node(sid, body.knowledge_node_id)
+    db.select_inbox_recommendation(rec_id, sid)
+    db.create_job(
+        job_type="generate_session_answer",
+        payload={"session_id": sid, "web_search": body.web_search},
+    )
+    return {"session_id": sid, "recommendation_id": rec_id}
+
+
+@app.post("/api/inbox/recommendations/{rec_id}/ignore",
+          dependencies=[Depends(_require_admin)])
+async def ignore_inbox_recommendation(rec_id: int):
+    """Ignore a recommendation."""
+    rec = db._fetch_one("SELECT id FROM inbox_recommendations WHERE id = :id", {"id": rec_id})
+    if not rec:
+        raise HTTPException(404, "Recommendation not found")
+    db.ignore_inbox_recommendation(rec_id)
+    return {"ok": True, "recommendation_id": rec_id}
+
+
 @app.get("/api/inbox/{item_id}", dependencies=[Depends(_require_admin)])
 async def get_inbox_item(item_id: int):
     item = db.get_inbox_item(item_id)
@@ -1514,6 +1604,8 @@ async def _process_job(job: dict):
             await _process_generate_session_answer(job_id, job)
         elif job_type == "generate_inbox_questions":
             await _process_generate_inbox_questions(job_id, job)
+        elif job_type == "generate_inbox_recommendations":
+            await _process_generate_inbox_recommendations(job_id, job)
         else:
             db.fail_job(job_id, f"Unknown job_type: {job_type}", rescind=True)
     except Exception as e:
@@ -1612,6 +1704,24 @@ async def _process_generate_inbox_questions(job_id: int, job: dict):
             })
         db.update_inbox_item(item_id, status="error", error_msg=str(e)[:500])
         raise
+
+
+async def _process_generate_inbox_recommendations(job_id: int, job: dict):
+    """Process a 'generate_inbox_recommendations' job: generate daily smart recommendations."""
+    payload = db._jload(job.get("payload")) if job.get("payload") else {}
+    batch = payload.get("batch") or db._today_batch_key()
+    profile = payload.get("profile") or db.build_user_interest_profile()
+
+    try:
+        result = await ai.generate_inbox_recommendations(profile)
+        questions = result.get("questions") if isinstance(result, dict) else []
+        if not isinstance(questions, list) or not questions:
+            raise RuntimeError("AI did not generate valid recommendations")
+
+        ids = db.create_inbox_recommendations(batch, questions)
+        db.complete_job(job_id, {"batch": batch, "recommendation_count": len(ids)})
+    except Exception as e:
+        db.fail_job(job_id, f"{type(e).__name__}: {str(e)}")
 
 
 # ── Maintenance ────────────────────────────────────────────

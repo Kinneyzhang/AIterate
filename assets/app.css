@@ -2660,3 +2660,82 @@ select {
 
 /* #7: similar session tags */
 .similar-session-tag { display: inline-block; padding: 2px 8px; margin: 2px; background: var(--bg-2); border-radius: 4px; font-size: 12px; color: var(--fg-1); }
+
+/* ∎∎∎ Inbox: Smart Recommendations ∎∎∎ */
+.inbox-recs-section {
+  margin-bottom: 24px;
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--bg-1, rgba(255,255,255,0.02));
+}
+.inbox-recs-desc {
+  font-size: 13px;
+  color: var(--muted, #888);
+  margin: 4px 0 12px;
+  line-height: 1.5;
+}
+.inbox-recs-generating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0;
+  font-size: 14px;
+  color: var(--muted, #888);
+}
+.inbox-recs-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent, #6366f1);
+  animation: recs-pulse 1.2s ease-in-out infinite;
+}
+@keyframes recs-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+.inbox-recs-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.inbox-rec-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, rgba(255,255,255,0.06));
+  border-radius: 10px;
+  background: var(--bg-0, transparent);
+  transition: border-color 0.15s;
+}
+.inbox-rec-card:hover { border-color: var(--accent, #6366f1); }
+.inbox-rec-body { display: flex; flex-direction: column; gap: 6px; }
+.inbox-rec-question {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.55;
+  color: var(--fg-0, #e5e5e5);
+}
+.inbox-rec-why {
+  font-size: 12px;
+  color: var(--muted, #888);
+  line-height: 1.5;
+  margin: 0;
+}
+.inbox-rec-meta {
+  display: flex;
+  gap: 6px;
+}
+.inbox-rec-angle,
+.inbox-rec-depth {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--bg-2, rgba(255,255,255,0.06));
+  color: var(--muted, #888);
+}
+.inbox-rec-actions {
+  display: flex;
+  gap: 8px;
+}
+.inbox-rec-actions .btn { font-size: 13px; padding: 5px 12px; }

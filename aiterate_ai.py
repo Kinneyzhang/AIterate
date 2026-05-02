@@ -240,33 +240,43 @@ async def generate_title(content: str) -> str:
     return raw.strip().strip('"').strip('《》').strip()[:40]
 
 
-INBOX_QUESTION_SYSTEM = """你是一个“问题生成教练”，不是问答助手。
+INBOX_QUESTION_SYSTEM = """你是一个"问题教练"，帮助用户把碎片素材转化为可探究的问题。
 
-用户会给你一个词、短语、句子、摘录、聊天片段或临时想法。这些素材可能很零散，用户自己还没有形成明确问题。
+你的核心原则：
+- 问题是为了帮用户理解素材，不是给用户布置任务
+- 问题应该像好奇心引导，不像考试题
+- 选不选都行，不要给用户压力
 
-你的任务：
-1. 从素材中识别值得深入研究的概念、矛盾、假设和边界。
-2. 生成 5 个高质量研究问题。
-3. 每个问题都要能进入后续学习、深化和费曼检验。
-4. 问题要具体、可探究、有张力，避免空泛。
-5. 不要直接回答问题。
-6. 不要生成鸡汤式问题。
+## 默认模式（用户没指定领域）
 
-好问题标准：
-- 能揭示概念背后的机制
-- 能连接多个知识域
-- 能挑战用户原有假设
-- 能引出可验证的理解
-- 能推动用户形成更稳定的认知结构
+只围绕素材本身生成 3~4 个问题，聚焦理解：
+1. **What** — 素材涉及的核心概念是什么？怎么定义？
+2. **Why** — 为什么这个概念/现象成立？背后的机制或原理是什么？
+3. **How** — 它是怎么工作的？关键步骤或逻辑是什么？
+4. （如果有）素材关联的重要讨论、争议或工程实践
 
-尽量覆盖不同问题类型：概念澄清型、机制解释型、边界条件型、反常识型、连接迁移型。
-输出严格 JSON：
+**不要做的事**：
+- 不要强行把素材扯到不相关的领域（比如把技术问题扯到哲学/心理学）
+- 不要生成"鸡汤式"或"人生感悟式"问题
+- 不要为了凑数生成空泛问题
+- 不要直接回答问题
+
+## 领域模式（用户指定了领域）
+
+在用户指定的领域内生成 3~4 个深化问题：
+- 围绕该领域的视角审视素材
+- 可以适当关联领域内的相邻概念
+- 仍然聚焦在理解层面，不要过度发散
+
+## 输出格式
+
+严格 JSON：
 {
   "questions": [
     {
       "question": "问题文本",
-      "why": "为什么这个问题值得研究",
-      "angle": "哲学 / 心理学 / 技术 / 写作 / 生活 / 跨学科",
+      "why": "为什么这个问题值得研究（简短）",
+      "angle": "技术 / 写作 / 心理学 / 哲学 / 跨学科",
       "depth": "low / medium / high",
       "related_concepts": ["概念1", "概念2"],
       "suggested_type": "question"
@@ -274,17 +284,39 @@ INBOX_QUESTION_SYSTEM = """你是一个“问题生成教练”，不是问答�
   ]
 }"""
 
+INBOX_QUESTION_SYSTEM_DEFAULT = INBOX_QUESTION_SYSTEM + """
+
+当前模式：**默认模式**。只围绕素材本身生成 what/why/how 类问题，不要跨领域发散。"""
+
+INBOX_QUESTION_SYSTEM_DOMAIN = INBOX_QUESTION_SYSTEM + """
+
+当前模式：**领域模式**。在用户指定的领域内深化，可以关联相邻概念但不要跳太远。"""
+
 
 async def generate_inbox_questions(content: str, direction: str | None = None) -> dict:
-    """把用户随手收集的碎片素材转化为候选研究问题。"""
-    direction_line = f"\n用户希望这次问题更偏向：{direction}" if direction else ""
+    """把用户随手收集的碎片素材转化为候选研究问题。
+
+    两种模式：
+    - 默认（无 direction）：只围绕素材本身，what/why/how，最多 4 个问题
+    - 领域模式（有 direction）：在指定方向内深化，最多 4 个问题
+    """
+    direction_line = f"\n用户指定领域/方向：{direction}" if direction else ""
+
+    if direction:
+        system = INBOX_QUESTION_SYSTEM_DOMAIN
+        count_hint = "请生成 3~4 个在指定领域内的问题。"
+    else:
+        system = INBOX_QUESTION_SYSTEM_DEFAULT
+        count_hint = "请生成 3~4 个围绕素材本身的 what/why/how 问题，不要跨领域发散。"
+
     prompt = f"""用户素材：
 {content}
 {direction_line}
 
-请生成 5 个值得研究的问题。"""
+{count_hint}"""
+
     messages = [
-        {"role": "system", "content": INBOX_QUESTION_SYSTEM},
+        {"role": "system", "content": system},
         {"role": "user", "content": prompt},
     ]
     raw = await _call_llm(messages, temperature=0.65, max_tokens=2048, role="question")
@@ -293,7 +325,7 @@ async def generate_inbox_questions(content: str, direction: str | None = None) -
         return {"questions": [], "raw": raw, "parse_failed": True}
 
     normalized = []
-    for item in result.get("questions", [])[:8]:
+    for item in result.get("questions", [])[:6]:  # cap at 6, AI asked for 3-4
         if not isinstance(item, dict):
             continue
         question = str(item.get("question") or "").strip()
@@ -309,6 +341,82 @@ async def generate_inbox_questions(content: str, direction: str | None = None) -
             "depth": str(item.get("depth") or "medium").strip() or "medium",
             "related_concepts": [str(c).strip() for c in concepts if str(c).strip()][:8],
             "suggested_type": str(item.get("suggested_type") or "question").strip() or "question",
+        })
+    return {"questions": normalized, "raw": raw, "parse_failed": False}
+
+
+RECOMMENDATION_SYSTEM = """你是一个"学习推荐教练"，了解用户的兴趣和学习轨迹。
+
+用户会给你一份"用户兴趣档案"，包含：
+- 活跃的知识领域和学习次数
+- 偏好的问题角度
+- 最近的学习记录
+- 薄弱点（开放中的 learning gaps）
+
+你的任务：生成 4 个推荐研究问题，这些问题要：
+1. 基于用户现有的学习轨迹，自然延展到相关但未深入的概念
+2. 针对用户的薄弱点（低分 session、open gaps）提出修复性问题
+3. 适度引入相邻领域的新话题，帮用户拓展认知边界
+4. 问题要有挑战性但不晦涩，能立刻进入学习流程
+
+风格要求：
+- 语言自然，像朋友聊天时的好奇提问，不像考试
+- 每个问题后面给一句简短的"为什么推荐这个"
+- 不要太泛——要有具体的技术/概念锚点
+
+输出严格 JSON：
+{
+  "questions": [
+    {
+      "question": "问题文本",
+      "why": "为什么推荐这个问题（简短，关联用户学习轨迹）",
+      "angle": "技术 / 写作 / 心理学 / 哲学 / 跨学科",
+      "depth": "low / medium / high",
+      "related_concepts": ["概念1", "概念2"]
+    }
+  ]
+}"""
+
+
+async def generate_inbox_recommendations(interest_profile: dict) -> dict:
+    """基于用户兴趣档案生成每日推荐问题。
+
+    Args:
+        interest_profile: build_user_interest_profile() 的返回结果
+    """
+    import json as _json
+    profile_json = _json.dumps(interest_profile, ensure_ascii=False, indent=2)
+
+    prompt = f"""用户的兴趣档案：
+{profile_json}
+
+请基于以上档案生成 4 个推荐研究问题。"""
+
+    messages = [
+        {"role": "system", "content": RECOMMENDATION_SYSTEM},
+        {"role": "user", "content": prompt},
+    ]
+    raw = await _call_llm(messages, temperature=0.7, max_tokens=2048, role="question")
+    result = _extract_json_block(raw)
+    if not result or not isinstance(result.get("questions"), list):
+        return {"questions": [], "raw": raw, "parse_failed": True}
+
+    normalized = []
+    for item in result.get("questions", [])[:6]:
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("question") or "").strip()
+        if not question:
+            continue
+        concepts = item.get("related_concepts") or []
+        if not isinstance(concepts, list):
+            concepts = []
+        normalized.append({
+            "question": question,
+            "why": str(item.get("why") or "").strip(),
+            "angle": str(item.get("angle") or "跨学科").strip() or "跨学科",
+            "depth": str(item.get("depth") or "medium").strip() or "medium",
+            "related_concepts": [str(c).strip() for c in concepts if str(c).strip()][:8],
         })
     return {"questions": normalized, "raw": raw, "parse_failed": False}
 

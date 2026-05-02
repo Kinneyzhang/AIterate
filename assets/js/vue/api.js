@@ -259,6 +259,16 @@ export const api = {
   },
   ignoreInboxQuestion: (id) => request(`/api/inbox/questions/${id}/ignore`, { method: 'POST' }),
 
+  // Recommendations
+  getInboxRecommendations: () => request('/api/inbox/recommendations'),
+  refreshInboxRecommendations: () => request('/api/inbox/recommendations/refresh', { method: 'POST' }),
+  selectInboxRecommendation: async (id, payload = {}) => {
+    invalidateWorkspace();
+    invalidateDerived();
+    return request(`/api/inbox/recommendations/${id}/select`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  ignoreInboxRecommendation: (id) => request(`/api/inbox/recommendations/${id}/ignore`, { method: 'POST' }),
+
   getDbConfig: () => request('/api/db-config'),
   completeReview: async (rid) => {
     invalidateWorkspace();

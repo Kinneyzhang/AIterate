@@ -383,3 +383,110 @@ def test_inbox_frontend_contract_files_are_wired():
     assert "image:" in (root / "assets/js/vue/icons.js").read_text(encoding="utf-8")
     assert ".inbox-source-tool-btn svg" in css and "gap: 6px;" in css
     assert "@media (max-width: 620px)" in css and ".inbox-page-compose-grid" in css and "grid-template-columns: 1fr;" in css
+
+
+# ── Tests: Inbox Recommendations ───────────────────────────────────────────────────
+
+def test_recommendation_table_exists():
+    root = Path(__file__).resolve().parents[1]
+    db_src = (root / "aiterate_db.py").read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS inbox_recommendations" in db_src
+    assert "idx_inbox_recs_batch" in db_src
+    assert "idx_inbox_recs_status" in db_src
+
+
+def test_build_interest_profile_function():
+    root = Path(__file__).resolve().parents[1]
+    db_src = (root / "aiterate_db.py").read_text(encoding="utf-8")
+    assert "def build_user_interest_profile()" in db_src
+    assert "active_nodes" in db_src
+    assert "preferred_angles" in db_src
+
+
+def test_recommendation_crud_functions():
+    root = Path(__file__).resolve().parents[1]
+    db_src = (root / "aiterate_db.py").read_text(encoding="utf-8")
+    assert "def create_inbox_recommendations" in db_src
+    assert "def get_inbox_recommendations" in db_src
+    assert "def select_inbox_recommendation" in db_src
+    assert "def ignore_inbox_recommendation" in db_src
+    assert "def clear_recommendation_batch" in db_src
+
+
+def test_recommendation_api_endpoints():
+    root = Path(__file__).resolve().parents[1]
+    server = (root / "aiterate_server.py").read_text(encoding="utf-8")
+    assert '"/api/inbox/recommendations"' in server
+    assert '"/api/inbox/recommendations/refresh"' in server
+    assert '"/api/inbox/recommendations/{rec_id}/select"' in server
+    assert '"/api/inbox/recommendations/{rec_id}/ignore"' in server
+
+
+def test_recommendation_api_routes_before_item_id():
+    """Recommendation routes must be defined before /api/inbox/{item_id} route."""
+    root = Path(__file__).resolve().parents[1]
+    server = (root / "aiterate_server.py").read_text(encoding="utf-8")
+    rec_route_pos = server.index('"/api/inbox/recommendations"')
+    item_route_pos = server.index('"/api/inbox/{item_id}"')
+    assert rec_route_pos < item_route_pos, \
+        "Recommendation route must come before {item_id} to avoid route collision"
+
+
+def test_recommendation_ai_prompt():
+    root = Path(__file__).resolve().parents[1]
+    ai = (root / "aiterate_ai.py").read_text(encoding="utf-8")
+    assert "RECOMMENDATION_SYSTEM" in ai
+    assert "def generate_inbox_recommendations" in ai
+    assert "interest_profile" in ai
+
+
+def test_recommendation_job_processor():
+    root = Path(__file__).resolve().parents[1]
+    server = (root / "aiterate_server.py").read_text(encoding="utf-8")
+    assert '"generate_inbox_recommendations"' in server
+    assert "def _process_generate_inbox_recommendations" in server
+
+
+def test_recommendation_frontend_state():
+    root = Path(__file__).resolve().parents[1]
+    inbox = (root / "assets/js/vue/components/InboxPanel.js").read_text(encoding="utf-8")
+    assert "recommendations" in inbox
+    assert "recsGenerating" in inbox
+    assert "activeRecommendations" in inbox
+    assert "loadRecommendations" in inbox
+    assert "refreshRecommendations" in inbox
+
+
+def test_recommendation_frontend_template():
+    root = Path(__file__).resolve().parents[1]
+    inbox = (root / "assets/js/vue/components/InboxPanel.js").read_text(encoding="utf-8")
+    assert "为你推荐" in inbox
+    assert "换一批" in inbox
+    assert "inbox-recs-section" in inbox
+    assert "inbox-rec-card" in inbox
+
+
+def test_recommendation_css():
+    root = Path(__file__).resolve().parents[1]
+    css = (root / "assets/app.css").read_text(encoding="utf-8")
+    assert ".inbox-recs-section" in css
+    assert ".inbox-rec-card" in css
+    assert ".inbox-rec-question" in css
+
+
+def test_recommendation_api_methods():
+    root = Path(__file__).resolve().parents[1]
+    api = (root / "assets/js/vue/api.js").read_text(encoding="utf-8")
+    assert "getInboxRecommendations" in api
+    assert "refreshInboxRecommendations" in api
+    assert "selectInboxRecommendation" in api
+    assert "ignoreInboxRecommendation" in api
+
+
+def test_inbox_question_system_rewritten():
+    root = Path(__file__).resolve().parents[1]
+    ai = (root / "aiterate_ai.py").read_text(encoding="utf-8")
+    assert "默认模式（用户没指定领域）" in ai
+    assert "不要强行把素材扯到不相关的领域" in ai
+    assert "INBOX_QUESTION_SYSTEM_DEFAULT" in ai
+    assert "INBOX_QUESTION_SYSTEM_DOMAIN" in ai
