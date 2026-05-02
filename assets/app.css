@@ -695,6 +695,29 @@ select {
   gap: 10px;
   margin-bottom: 16px;
 }
+/* Pending indicator */
+.deepen-pending-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  background: var(--bg-2, #222);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-muted, #999);
+}
+.deepen-pending-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent, #1a6ef5);
+  animation: deepen-pulse 1.2s ease-in-out infinite;
+}
+@keyframes deepen-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
 .deepen-action-btn {
   flex: 1;
   display: flex;

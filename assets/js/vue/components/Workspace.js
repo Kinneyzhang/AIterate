@@ -141,6 +141,7 @@ export default defineComponent({
 
     // ── Submit take / press ──────────────────────────────────────────
     const deepenModal = ref({ open: false, type: 'take', input: '' });
+    const deepenPending = ref(false);  // async indicator — AI 正在回答…
 
     function openDeepenModal(type) {
       deepenModal.value = { open: true, type, input: '' };
@@ -154,15 +155,20 @@ export default defineComponent({
       if (submitting.value) return;
       const sid = store.selectedSessionId;
       if (!sid) return;
+      // Close modal immediately, show pending
+      deepenModal.value = { open: false, type: 'take', input: '' };
+      deepenPending.value = true;
       submitting.value = true;
       try {
         await api.deepenSession(sid, type, input.trim());
-        deepenModal.value = { open: false, type: 'take', input: '' };
         emit('refresh');
-        setNotice(type === 'take' ? '理解已提交。' : '追问已提交。');
+        setNotice(type === 'take' ? '理解已提交。' : '追问已提交，AI 回答已生成。');
       } catch (err) {
         setNotice(`提交失败：${err.message}`, 'error');
-      } finally { submitting.value = false; }
+      } finally {
+        submitting.value = false;
+        deepenPending.value = false;
+      }
     }
 
     // Auto-open from ContextRail trigger
@@ -178,16 +184,20 @@ export default defineComponent({
       if (!sid || submitting.value) return;
       const input = actionType === 'take' ? takeInput.value.trim() : questionInput.value.trim();
       if (!input) { setNotice('请输入内容。', 'error'); return; }
+      deepenPending.value = true;
       submitting.value = true;
       try {
         await api.deepenSession(sid, actionType, input);
         if (actionType === 'take') takeInput.value = '';
         else questionInput.value = '';
         emit('refresh');
-        setNotice(actionType === 'take' ? '理解已提交。' : '追问已提交。');
+        setNotice(actionType === 'take' ? '理解已提交。' : '追问已提交，AI 回答已生成。');
       } catch (err) {
         setNotice(`提交失败：${err.message}`, 'error');
-      } finally { submitting.value = false; }
+      } finally {
+        submitting.value = false;
+        deepenPending.value = false;
+      }
     }
 
     // ── Regenerate ───────────────────────────────────────────────────
@@ -280,7 +290,7 @@ export default defineComponent({
       shouldWriteFirst, skipWriteFirst, hasUserTake, showDeepen, showFeynman,
       canEdit, accordion, toggleAccordion,
       takeInput, questionInput, feynmanAnswers, submitting, completingSession,
-      deepenModal, openDeepenModal, closeDeepenModal, submitDeepenModal,
+      deepenModal, openDeepenModal, closeDeepenModal, submitDeepenModal, deepenPending,
       submitDeepAction, completeSession, reopenSession, advanceToDeepen,
       startFeynman, submitFeynman,
       regenerateAnswer, regeneratePress, regenerateFeynman,
@@ -383,7 +393,10 @@ export default defineComponent({
             <div v-if="accordion.deepen" class="accordion-body">
 
               <!-- Deepen actions -->
-              <div class="deepen-actions-row">
+              <div v-if="deepenPending" class="deepen-pending-bar">
+                <span class="deepen-pending-dot"></span> AI 正在回答…
+              </div>
+              <div v-else class="deepen-actions-row">
                 <button class="btn btn-primary deepen-action-btn" @click="openDeepenModal('take')">
                   <span v-html="icons.edit"></span> 写理解
                 </button>
@@ -427,6 +440,14 @@ export default defineComponent({
                   完成深化，进入费曼检验 →
                 </button>
                 <p class="ps-hint" style="text-align:center;margin-top:8px;font-size:12px">深化完成后，用费曼检验来验证你的掌握程度</p>
+              </div>
+
+              <!-- ══ Unresolved gaps (inside deepen) ══ -->
+              <div v-if="unresolvedGaps.length" class="gaps-banner">
+                <div class="gaps-banner-title" v-html="icons.clip + ' 待解决薄弱点（' + unresolvedGaps.length + '）'"></div>
+                <ul class="gaps-summary">
+                  <li v-for="g in unresolvedGaps.slice(0, 8)">{{ g.gap }} <span class="muted small">→ 第{{ g.seq }}轮</span></li>
+                </ul>
               </div>
 
             </div>
@@ -521,14 +542,6 @@ export default defineComponent({
                 <ul class="report-list weak"><li v-for="p in reviewReport.weak_points">{{ p }}</li></ul>
               </div>
             </div>
-          </div>
-
-          <!-- ── Unresolved gaps ─────────────────────────────────────── -->
-          <div v-if="unresolvedGaps.length" class="gaps-banner">
-            <div class="gaps-banner-title" v-html="icons.clip + ' 待解决薄弱点（' + unresolvedGaps.length + '）'\"></div>
-            <ul class="gaps-summary">
-              <li v-for="g in unresolvedGaps.slice(0, 8)">{{ g.gap }} <span class="muted small">→ 第{{ g.seq }}轮</span></li>
-            </ul>
           </div>
 
         </div>
