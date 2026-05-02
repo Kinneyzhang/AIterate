@@ -83,7 +83,10 @@ export default defineComponent({
       const s = currentSession.value?.status;
       return s && ['deepening', 'revising', 'feynman', 'completed'].includes(s);
     });
-    const showFeynman = computed(() => canFeynman.value && hasUserTake.value);
+    const showFeynman = computed(() => {
+      const s = currentSession.value?.status;
+      return s && ['feynman', 'completed'].includes(s);
+    });
     const doneFeynmanGroups = computed(() => {
       const done = currentRounds.value.filter(r => r.type === 'feynman' && r.status === 'completed');
       const byGroup = {};
@@ -421,6 +424,14 @@ export default defineComponent({
                 </template>
               </template>
 
+              <!-- Advance to feynman -->
+              <div v-if="['deepening', 'revising'].includes(currentSession.status) && hasUserTake" class="advance-section">
+                <button class="btn btn-primary btn-block" :disabled="submitting" @click="startFeynman">
+                  完成深化，进入费曼检验 →
+                </button>
+                <p class="ps-hint" style="text-align:center;margin-top:8px;font-size:12px">深化完成后，用费曼检验来验证你的掌握程度</p>
+              </div>
+
             </div>
           </div>
 
@@ -447,11 +458,6 @@ export default defineComponent({
                   <textarea class="review-answer" rows="4" :placeholder="'用自己的话回答…'" v-model="feynmanAnswers[i]"></textarea>
                 </div>
                 <button class="btn btn-primary btn-block mt8" :disabled="submitting" @click="submitFeynman" v-html="icons.chart + ' 提交答案'\"></button>
-              </div>
-
-              <!-- Start feynman -->
-              <div v-else-if="canEdit && !feynmanGroup.length">
-                <button class="btn btn-primary btn-block" :disabled="submitting" @click="startFeynman">开始费曼检验</button>
               </div>
 
               <!-- Correction plan -->
