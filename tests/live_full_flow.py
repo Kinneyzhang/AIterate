@@ -793,18 +793,17 @@ def test_edge_invalid_theme():
             raise
 
 def test_edge_reopen():
-    """reopen 端点：revising → deepening"""
-    # 用 flow2 的 session（如果还在 revising 状态）
+    """reopen 端点：completed → learning"""
     if len(SESSION_IDS) >= 3:
-        sid = SESSION_IDS[2]  # flow2 session
+        sid = SESSION_IDS[2]
         try:
             r = api("POST", f"/api/sessions/{sid}/reopen")
             assert_eq(r["ok"], True)
             ws = api("GET", f"/api/sessions/{sid}/workspace")
-            assert_eq(ws["session"]["status"], "deepening", "reopened to deepening")
+            assert_eq(ws["session"]["status"], "learning", "reopened to learning")
         except RuntimeError as e:
             if "404" in str(e):
-                pass  # session 可能已经被删，跳过
+                pass
             else:
                 raise
 

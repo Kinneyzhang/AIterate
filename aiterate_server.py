@@ -1415,17 +1415,16 @@ async def complete_session(session_id: int):
 
 @app.post("/api/sessions/{session_id}/reopen", dependencies=[Depends(_require_admin)])
 async def reopen_session(session_id: int):
-    """费曼检验未通过，回到深化阶段"""
+    """重新打开已完成的 session，回到学习阶段"""
     session = db.get_session(session_id)
     if not session:
         raise HTTPException(404, "Session not found")
 
-    # Phase 5: state transition guard
     st = session.get("status", "")
     if st not in ("completed", "revising"):
         raise HTTPException(409, f"Cannot reopen in status '{st}'. Allowed: completed, revising.")
 
-    db.update_session(session_id, status="deepening")
+    db.update_session(session_id, status="learning")
     return {"ok": True}
 
 

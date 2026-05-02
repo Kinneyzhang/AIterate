@@ -987,6 +987,16 @@ def delete_inbox_item(item_id: int) -> bool:
     _exec("DELETE FROM inbox_items WHERE id = :id", {"id": item_id})
     return True
 
+def delete_inbox_items(ids: list[int]) -> int:
+    """Batch delete inbox items. Returns count of deleted items."""
+    if not ids:
+        return 0
+    rows = _exec(
+        f"DELETE FROM inbox_items WHERE id IN ({','.join(['?'] * len(ids))})",
+        [*ids]
+    )
+    return int(rows.rowcount or 0)
+
 
 def clear_inbox_history() -> int:
     result = _exec(
