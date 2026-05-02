@@ -167,11 +167,12 @@ def test_inbox_regenerate_appends_without_replacing_visible_candidates(tmp_path,
     asyncio.run(server._process_generate_inbox_questions(job["id"], job))
 
     refreshed = client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).json()["questions"]
-    # Old candidates are cleared by regenerate — only new questions remain
-    refreshed_ids = [q["id"] for q in refreshed]
-    assert all(oid not in refreshed_ids for oid in original_ids), "Old candidates should be cleared"
-    assert any("更偏技术一点" in q["question"] for q in refreshed)
-    assert len(refreshed) <= 3, f"Should cap at 3, got {len(refreshed)}"
+    # Old candidates are marked 'replaced' instead of deleted (preserves IDs for ongoing selects)
+    replaced = [q for q in refreshed if q["status"] == "replaced"]
+    assert len(replaced) > 0, "Old candidates should be marked replaced"
+    new_candidates = [q for q in refreshed if q["status"] == "candidate"]
+    assert any("更偏技术一点" in q["question"] for q in new_candidates)
+    assert len(new_candidates) <= 3, f"Should cap at 3, got {len(new_candidates)}"
 
 
 def test_inbox_existing_question_remains_selectable_while_background_generation_finishes(tmp_path, monkeypatch):
@@ -353,7 +354,7 @@ def test_inbox_frontend_contract_files_are_wired():
     assert ".inbox-detail-pane.is-overview" in css
     assert inbox_panel.index("inbox-detail-pane") < inbox_panel.index('class="inbox-list-pane"')
     assert "v-if=\"item.error_msg && !questions.length\"" in inbox_panel
-    assert "const visibleQuestions = computed(() => questions.value.slice(0, 5))" in inbox_panel
+    assert "const visibleQuestions = computed(() => questions.value.filter(q => q.status !== 'replaced').slice(0, 5))" in inbox_panel
     assert "v-for=\"q in visibleQuestions\"" in inbox_panel
     assert "pendingItems" in inbox_panel
     assert "收集箱" in inbox_panel

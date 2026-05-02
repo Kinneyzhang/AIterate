@@ -1764,9 +1764,13 @@ async def _process_generate_inbox_questions(job_id: int, job: dict):
                     "warning": "AI did not generate valid new inbox questions",
                 })
             raise RuntimeError("AI did not generate valid inbox questions")
-        # Replace mode: clear old candidates before inserting new ones
+        # Replace mode: mark old candidates as replaced instead of deleting.
+        # Deleting caused users clicking visible questions to hit 404.
         if replace:
-            db._exec("DELETE FROM inbox_questions WHERE inbox_item_id = :id AND status = 'candidate'", {"id": item_id})
+            db._exec(
+                "UPDATE inbox_questions SET status = 'replaced' WHERE inbox_item_id = :id AND status = 'candidate'",
+                {"id": item_id}
+            )
         ids = db.create_inbox_questions(item_id, questions, replace_candidates=replace)
         latest_item = db.get_inbox_item(item_id) or {}
         next_status = "partially_used" if int(latest_item.get("selected_count") or 0) > 0 or latest_item.get("status") == "partially_used" else "ready"

@@ -72,7 +72,7 @@ export default defineComponent({
     const itemId = computed(() => route.name === 'inbox-item' && route.params.id ? Number(route.params.id) : null);
     const pendingItems = computed(() => items.value.filter(x => ['stored', 'pending', 'generating', 'ready', 'error', 'partially_used'].includes(x.status)));
     const visibleItems = pendingItems;
-    const visibleQuestions = computed(() => questions.value.slice(0, 5));
+    const visibleQuestions = computed(() => questions.value.filter(q => q.status !== 'replaced').slice(0, 5));
 
     function statusLabel(status) {
       return {
