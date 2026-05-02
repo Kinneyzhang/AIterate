@@ -502,7 +502,7 @@ export default defineComponent({
           </div>
 
           <!-- ── Completed summary ───────────────────────────────────── -->
-          <div v-if="currentSession.status === 'completed'" class="panel-section completed-summary">
+          <div v-if="currentSession.status === 'completed' && (currentSession.score || doneFeynmanGroups.length || reviewReport)" class="panel-section completed-summary">
             <div class="final-score-row">
               <span class="final-score-num" v-if="currentSession.score">{{ currentSession.score }}/100</span>
               <span class="final-score-num muted" v-else>未评分</span>
