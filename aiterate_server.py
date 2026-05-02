@@ -719,6 +719,8 @@ async def generate_inbox_item_questions(item_id: int, body: InboxRegenerateReque
     if not item:
         raise HTTPException(404, "Inbox item not found")
     db.update_inbox_item(item_id, status="generating", error_msg=None)
+    # Replace old candidates — manual trigger means user wants fresh questions
+    db._exec("DELETE FROM inbox_questions WHERE inbox_item_id = :id AND status = 'candidate'", {"id": item_id})
     db.create_job(
         job_type="generate_inbox_questions",
         payload={
@@ -835,6 +837,8 @@ async def regenerate_inbox_questions(item_id: int, body: InboxRegenerateRequest 
     if not item:
         raise HTTPException(404, "Inbox item not found")
     db.update_inbox_item(item_id, status="pending", error_msg=None)
+    # Replace old candidates since this is a manual re-generate
+    db._exec("DELETE FROM inbox_questions WHERE inbox_item_id = :id AND status = 'candidate'", {"id": item_id})
     db.create_job(
         job_type="generate_inbox_questions",
         payload={
