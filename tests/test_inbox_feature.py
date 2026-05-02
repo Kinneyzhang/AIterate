@@ -355,7 +355,7 @@ def test_inbox_frontend_contract_files_are_wired():
     assert "v-if=\"item.error_msg && !questions.length\"" in inbox_panel
     assert "const visibleQuestions = computed(() => questions.value.slice(0, 5))" in inbox_panel
     assert "v-for=\"q in visibleQuestions\"" in inbox_panel
-    assert "pendingItems" in inbox_panel and "completedItems" in inbox_panel
+    assert "pendingItems" in inbox_panel
     assert "收集箱" in inbox_panel
     assert "class=\"inbox-page-composer\"" in inbox_panel
     assert "pageContent" in inbox_panel and "submitPageCollection" in inbox_panel and "generateQuestions" in inbox_panel
@@ -363,13 +363,12 @@ def test_inbox_frontend_contract_files_are_wired():
     assert "loadDomainOptions" in inbox_panel and "api.getKnowledgeTree()" in inbox_panel
     assert "可选领域" in inbox_panel  # simplified composer, modeOptions removed
     assert "class=\"inbox-overview-stats\"" not in inbox_panel
-    assert "最近收集" in inbox_panel and "已完成" in inbox_panel
-    assert "displayInboxTitle" in inbox_panel and "deleteHistoryItem" in inbox_panel and "clearHistory" in inbox_panel
+    assert "最近收集" in inbox_panel
+    assert "displayInboxTitle" in inbox_panel and "archiveItem" in inbox_panel
     assert "inbox-material-card" in inbox_panel
     # batchable class removed with batch checkboxes
     assert "class=\"inbox-material-line\"" in inbox_panel
-    assert "v-html=\"icon('clip') + ' 最近收集'\"" in inbox_panel
-    assert "v-html=\"icon('check') + ' 已完成'\"" in inbox_panel
+    assert "icon('clip')" in inbox_panel and "最近收集" in inbox_panel
     assert ".inbox-page-composer" in css and ".inbox-page-compose-grid" in css and ".inbox-compose-option-row" in css
     assert ".inbox-compose-domain-grid" in css and ".inbox-chip.active" in css
     assert ".inbox-compose-source" not in css
@@ -381,9 +380,6 @@ def test_inbox_frontend_contract_files_are_wired():
     assert ".inbox-material-line" in css and "display: flex;" in css and "gap: 8px;" in css
     assert ".inbox-material-line .inbox-list-status" in css and "flex-shrink: 0;" in css
     assert "justify-self: end;" not in css and "text-align: right;" not in css
-    assert "@click.stop=\"archiveItem(x)\"" in inbox_panel and ">完成</button>" in inbox_panel
-    # batchable class removed
-    assert "class=\"inbox-material-card done clickable\"" not in inbox_panel
     assert "@keydown.enter.prevent=\"openItem(x)\"" not in inbox_panel
     assert "inbox-material-title-button" in inbox_panel
     assert "@click.stop=\"openItem(x)\"" in inbox_panel

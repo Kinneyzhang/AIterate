@@ -35,13 +35,8 @@ export default defineComponent({
 
     const isInboxRoute = computed(() => route.name === 'inbox' || route.name === 'inbox-item');
     const itemId = computed(() => route.name === 'inbox-item' && route.params.id ? Number(route.params.id) : null);
-    const pendingItems = computed(() => items.value.filter(x => ['stored', 'pending', 'generating', 'ready', 'error'].includes(x.status)));
-    const completedItems = computed(() => items.value.filter(x => ['partially_used', 'archived', 'ignored'].includes(x.status)));
+    const pendingItems = computed(() => items.value.filter(x => ['stored', 'pending', 'generating', 'ready', 'error', 'partially_used'].includes(x.status)));
     const visibleItems = pendingItems;
-    const readyItems = computed(() => pendingItems.value.filter(x => x.status === 'ready'));
-    const generatingItems = computed(() => pendingItems.value.filter(x => ['stored', 'pending', 'generating'].includes(x.status)));
-    const errorItems = computed(() => pendingItems.value.filter(x => x.status === 'error'));
-    const activeItems = computed(() => pendingItems.value.some(x => ['stored', 'pending', 'generating'].includes(x.status)) || ['stored', 'pending', 'generating'].includes(item.value?.status));
     const visibleQuestions = computed(() => questions.value.slice(0, 5));
 
     function statusLabel(status) {
@@ -50,8 +45,7 @@ export default defineComponent({
         generating: '生成中',
         stored: '已存储',
         ready: '有候选',
-        partially_used: '已完成',
-        archived: '已完成',
+        partially_used: '有候选',
         ignored: '已忽略',
         error: '失败',
       }[status] || status || '未知';
@@ -374,62 +368,7 @@ export default defineComponent({
     }
 
     async function archiveItem(target = null) {
-      const targetItem = target || item.value;
-      if (!targetItem?.id || actionBusy.value[`archive-${targetItem.id}`]) return;
-      actionBusy.value[`archive-${targetItem.id}`] = true;
-      try {
-        await api.archiveInboxItem(targetItem.id);
-        setNotice('已标记完成。');
-        if (item.value?.id === targetItem.id) router.push({ name: 'inbox' });
-        await loadCurrent();
-      } catch (err) {
-        setNotice(`标记完成失败：${err.message}`, 'error');
-      } finally {
-        actionBusy.value[`archive-${targetItem.id}`] = false;
-      }
-    }
-
-    async function deleteHistoryItem(target) {
-      if (!target?.id || actionBusy.value[`delete-${target.id}`]) return;
-      actionBusy.value[`delete-${target.id}`] = true;
-      try {
-        await api.deleteInboxItem(target.id);
-        if (item.value?.id === target.id) router.push({ name: 'inbox' });
-        await loadCurrent();
-        emit('refresh');
-        setNotice('已删除这条历史素材。');
-      } catch (err) {
-        setNotice(`删除失败：${err.message}`, 'error');
-      } finally {
-        actionBusy.value[`delete-${target.id}`] = false;
-      }
-    }
-
-    async function clearHistory() {
-      if (!completedItems.value.length || actionBusy.value.clearHistory) return;
-      const ok = await askConfirm({
-        title: '清空已完成素材',
-        message: `确定清空 ${completedItems.value.length} 条已完成素材？`,
-        details: '只会清理已完成/已忽略的素材，不影响最近收集。',
-        confirmText: '清空',
-        cancelText: '取消',
-        tone: 'danger',
-      });
-      if (!ok) return;
-      actionBusy.value.clearHistory = true;
-      try {
-        const result = await api.clearInboxHistory();
-        if (item.value && ['partially_used', 'archived', 'ignored'].includes(item.value.status)) {
-          router.push({ name: 'inbox' });
-        }
-        await loadCurrent();
-        emit('refresh');
-        setNotice(`已清空 ${result.deleted || 0} 条已完成素材。`);
-      } catch (err) {
-        setNotice(`清空失败：${err.message}`, 'error');
-      } finally {
-        actionBusy.value.clearHistory = false;
-      }
+      // Kept for API compatibility; no-op now. Inbox has no "done" concept.
     }
 
     watch(() => route.fullPath, loadCurrent);
@@ -440,13 +379,13 @@ export default defineComponent({
     onUnmounted(() => { stopPolling(); stopRecsPolling(); });
 
     return {
-      items, pendingItems, completedItems, visibleItems, readyItems, generatingItems, errorItems,
+      items, pendingItems, visibleItems,
       item, questions, visibleQuestions, loading, actionBusy, direction, router, icon,
       pageContent, pageSubmitting, selectedDomains,
       sourceUrl, urlFetching, voiceListening, imagePreview, imageName, domainOptions,
       statusLabel, depthLabel, loadDomainOptions,
       importUrlToComposer, startVoiceInput, handleImageInput, handlePagePaste, submitPageCollection, handlePageKeydown, generateQuestions,
-      openItem, regenerate, selectQuestion, ignoreQuestion, archiveItem, deleteHistoryItem, clearHistory, displayInboxTitle,
+      openItem, regenerate, selectQuestion, ignoreQuestion, archiveItem, displayInboxTitle,
       recommendations, activeRecommendations, recsGenerating, loadRecommendations, refreshRecommendations, selectRecommendation, ignoreRecommendation,
     };
   },
@@ -458,7 +397,7 @@ export default defineComponent({
         <div v-else-if="!item" class="inbox-overview">
           <div class="inbox-overview-kicker">INBOX</div>
           <h2>收集箱</h2>
-          <p>随手记录碎片想法，感兴趣的点「生成问题」让 AI 帮你提炼；也可以直接「完成」忽略。</p>
+          <p>随手记录碎片想法。感兴趣的点「生成问题」让 AI 帮你提炼。</p>
 
           <section v-if="activeRecommendations.length || recsGenerating" class="inbox-recs-section">
             <div class="inbox-section-head">
@@ -542,31 +481,9 @@ export default defineComponent({
               <div class="inbox-material-actions">
                 <button v-if="!x.question_count && !['generating'].includes(x.status)" type="button" class="btn btn-accent" :disabled="actionBusy['gen-' + x.id]" @click.stop="generateQuestions(x)">生成问题</button>
                 <button v-if="x.question_count" type="button" class="btn btn-primary" @click.stop="openItem(x)">查看</button>
-                <button type="button" class="btn btn-ghost" :disabled="actionBusy['archive-' + x.id]" @click.stop="archiveItem(x)">完成</button>
               </div>
             </article>
             <div v-if="!pendingItems.length" class="inbox-overview-empty">暂无收集的素材。上方粘贴或左侧输入框快速记录。</div>
-          </section>
-
-          <section class="inbox-overview-section inbox-completed-section">
-            <div class="inbox-section-head">
-              <div class="home-section-title" v-html="icon('check') + ' 已完成'"></div>
-              <span>共 {{ completedItems.length }} 条</span>
-              <button v-if="completedItems.length" type="button" class="btn btn-ghost inbox-clear-history" :disabled="actionBusy.clearHistory" @click="clearHistory">清空已完成</button>
-            </div>
-            <article v-for="x in completedItems" :key="'done-'+x.id" class="inbox-material-card done">
-              <div class="inbox-material-main">
-                <div class="inbox-material-line">
-                  <button type="button" class="inbox-material-title inbox-material-title-button" @click.stop="openItem(x)">{{ displayInboxTitle(x) }}</button>
-                  <span :class="['inbox-list-status', 'is-' + x.status]">{{ statusLabel(x.status) }} · {{ x.question_count || 0 }} 个问题</span>
-                </div>
-              </div>
-              <div class="inbox-material-actions">
-                <button type="button" class="btn btn-ghost" @click.stop="openItem(x)">查看</button>
-                <button type="button" class="btn btn-ghost" :disabled="actionBusy['delete-' + x.id]" @click.stop="deleteHistoryItem(x)">删除</button>
-              </div>
-            </article>
-            <div v-if="!completedItems.length" class="inbox-overview-empty">暂无已完成的素材。</div>
           </section>
         </div>
         <template v-else>
@@ -578,7 +495,6 @@ export default defineComponent({
               </div>
               <h2>{{ displayInboxTitle(item) }}</h2>
             </div>
-            <button type="button" class="btn btn-ghost" @click="archiveItem()">完成</button>
           </header>
 
           <div v-if="item.error_msg && !questions.length" class="inbox-error">{{ item.error_msg }}</div>
@@ -632,7 +548,6 @@ export default defineComponent({
           <div class="inbox-rail-note">
             <p><strong>生成问题</strong><span>对感兴趣的素材点击生成，AI 帮你提炼问题。</span></p>
             <p><strong>查看</strong><span>打开已生成问题的素材，选择一个进入学习。</span></p>
-            <p><strong>完成</strong><span>不再需要的素材移到已完成。</span></p>
           </div>
         </template>
       </aside>
