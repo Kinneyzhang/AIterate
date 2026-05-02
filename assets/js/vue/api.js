@@ -261,7 +261,13 @@ export const api = {
   }),
   generateInboxQuestions: (id) => request(`/api/inbox/${id}/generate`, { method: 'POST' }),
   archiveInboxItem: (id) => request(`/api/inbox/${id}/archive`, { method: 'POST' }),
-  deleteInboxItem: (id) => request(`/api/inbox/${id}`, { method: 'DELETE' }),
+  deleteInboxItem: async (id) => {
+    // Invalidate so list refreshes
+    return request(`/api/inbox/${id}`, { method: 'DELETE' });
+  },
+  batchDeleteInboxItems: async (ids) => {
+    return request('/api/inbox/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) });
+  },
   clearInboxHistory: () => request('/api/inbox/history', { method: 'DELETE' }),
   selectInboxQuestion: async (id, payload = {}) => {
     invalidateWorkspace();

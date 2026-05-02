@@ -888,6 +888,14 @@ async def delete_inbox_item(item_id: int):
         raise HTTPException(404, "Inbox item not found")
     return {"ok": True, "deleted_id": item_id}
 
+class InboxBatchDelete(BaseModel):
+    ids: list[int]
+
+@app.post("/api/inbox/batch-delete", dependencies=[Depends(_require_admin)])
+async def batch_delete_inbox(body: InboxBatchDelete):
+    count = db.delete_inbox_items(body.ids)
+    return {"ok": True, "deleted": count}
+
 
 @app.post("/api/inbox/questions/{question_id}/select", dependencies=[Depends(_require_admin)])
 async def select_inbox_question(question_id: int, body: InboxQuestionSelectRequest = InboxQuestionSelectRequest()):

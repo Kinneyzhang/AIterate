@@ -1,6 +1,6 @@
 // ── InboxPanel.js ── 收集箱工作区 ────────────────────────────────────────
 
-import { defineComponent, ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { defineComponent, ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '../api.js';
 import { icon } from '../icons.js';
@@ -32,6 +32,41 @@ export default defineComponent({
     let recsPollTimer = null;
     const recommendations = ref([]);
     const recsGenerating = ref(false);
+
+    // ── Batch selection ─────────────────────────────────────────────────
+    const selectedIds = reactive(new Set());
+    const selectAll = computed({
+      get: () => pendingItems.value.length > 0 && pendingItems.value.every(x => selectedIds.has(x.id)),
+      set: (v) => {
+        if (v) pendingItems.value.forEach(x => selectedIds.add(x.id));
+        else selectedIds.clear();
+      }
+    });
+
+    function toggleSelect(id) {
+      if (selectedIds.has(id)) selectedIds.delete(id);
+      else selectedIds.add(id);
+    }
+
+    async function deleteOne(item) {
+      try {
+        await api.deleteInboxItem(item.id);
+        setNotice('已删除');
+        selectedIds.delete(item.id);
+        await loadList();
+      } catch (err) { setNotice(`删除失败：${err.message}` , 'error'); }
+    }
+
+    async function deleteSelected() {
+      const ids = [...selectedIds];
+      if (!ids.length) return;
+      try {
+        await api.batchDeleteInboxItems(ids);
+        setNotice(`已删除 ${ids.length} 条`);
+        selectedIds.clear();
+        await loadList();
+      } catch (err) { setNotice(`删除失败：${err.message}` , 'error'); }
+    }
 
     const isInboxRoute = computed(() => route.name === 'inbox' || route.name === 'inbox-item');
     const itemId = computed(() => route.name === 'inbox-item' && route.params.id ? Number(route.params.id) : null);
@@ -387,6 +422,7 @@ export default defineComponent({
       importUrlToComposer, startVoiceInput, handleImageInput, handlePagePaste, submitPageCollection, handlePageKeydown, generateQuestions,
       openItem, regenerate, selectQuestion, ignoreQuestion, archiveItem, displayInboxTitle,
       recommendations, activeRecommendations, recsGenerating, loadRecommendations, refreshRecommendations, selectRecommendation, ignoreRecommendation,
+      selectedIds, selectAll, toggleSelect, deleteOne, deleteSelected,
     };
   },
 
@@ -470,8 +506,13 @@ export default defineComponent({
             <div class="inbox-section-head">
               <div class="home-section-title" v-html="icon('clip') + ' 最近收集'"></div>
               <span>{{ pendingItems.length }} 条</span>
+              <label v-if="pendingItems.length" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-2,#999);cursor:pointer">
+                <input type="checkbox" v-model="selectAll" style="margin:0"> 全选
+              </label>
+              <button v-if="selectedIds.size" type="button" class="btn btn-sm" style="color:#e55;border-color:#e55" @click="deleteSelected">删除选中 ({{ selectedIds.size }})</button>
             </div>
             <article v-for="x in pendingItems" :key="'pending-'+x.id" class="inbox-material-card">
+              <input type="checkbox" :checked="selectedIds.has(x.id)" @change="toggleSelect(x.id)" style="margin-right:10px;flex-shrink:0">
               <div class="inbox-material-main">
                 <div class="inbox-material-line">
                   <button type="button" class="inbox-material-title inbox-material-title-button" @click.stop="openItem(x)">{{ displayInboxTitle(x) }}</button>
@@ -481,6 +522,7 @@ export default defineComponent({
               <div class="inbox-material-actions">
                 <button v-if="!x.question_count && !['generating'].includes(x.status)" type="button" class="btn btn-accent" :disabled="actionBusy['gen-' + x.id]" @click.stop="generateQuestions(x)">生成问题</button>
                 <button v-if="x.question_count" type="button" class="btn btn-primary" @click.stop="openItem(x)">查看</button>
+                <button type="button" class="btn btn-sm" style="color:var(--fg-3,#888)" title="删除" @click.stop="deleteOne(x)">🗑</button>
               </div>
             </article>
             <div v-if="!pendingItems.length" class="inbox-overview-empty">暂无收集的素材。上方粘贴或左侧输入框快速记录。</div>
