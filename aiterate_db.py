@@ -916,7 +916,7 @@ def create_inbox_questions(item_id: int, questions: list[dict], replace_candidat
     ids: list[int] = []
     for q in questions:
         question = (q.get("question") or "").strip()
-        if not question or question in existing_questions:
+        if not question or question in existing_questions or len(ids) >= 3:
             continue
         params = {
             "item_id": item_id,

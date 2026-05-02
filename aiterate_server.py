@@ -718,16 +718,36 @@ async def generate_inbox_item_questions(item_id: int, body: InboxRegenerateReque
     item = db.get_inbox_item(item_id)
     if not item:
         raise HTTPException(404, "Inbox item not found")
+
+    # Guard: refuse if a job is already pending/running for this item
+    existing_job = db._fetch_one(
+        """SELECT id FROM jobs
+           WHERE job_type = 'generate_inbox_questions'
+             AND CAST(payload AS TEXT) LIKE :pat
+             AND status IN ('pending', 'running')
+           LIMIT 1""",
+        {"pat": f"%\"inbox_item_id\": {item_id}%"},
+    )
+    if existing_job:
+        raise HTTPException(409, "已有生成任务在进行中，请等待完成后再试")
+
+    # Guard: refuse if item already has enough questions (manual cap)
+    existing_count = db._fetch_one(
+        "SELECT COUNT(*) AS n FROM inbox_questions WHERE inbox_item_id = :id AND status = 'candidate'",
+        {"id": item_id},
+    )
+    if existing_count and existing_count["n"] >= 6:
+        return {"ok": True, "id": item_id, "status": item.get("status", "ready"),
+                "question_count": existing_count["n"], "note": "已有足够候选问题，无需重新生成"}
+
     db.update_inbox_item(item_id, status="generating", error_msg=None)
-    # Replace old candidates — manual trigger means user wants fresh questions
-    db._exec("DELETE FROM inbox_questions WHERE inbox_item_id = :id AND status = 'candidate'", {"id": item_id})
     db.create_job(
         job_type="generate_inbox_questions",
         payload={
             "inbox_item_id": item_id,
             "content": item.get("content", ""),
             "direction": body.direction,
-            "replace": False,
+            "replace": True,  # worker will clear old candidates only on success
         },
     )
     return {"ok": True, "id": item_id, "status": "generating"}
@@ -837,15 +857,13 @@ async def regenerate_inbox_questions(item_id: int, body: InboxRegenerateRequest 
     if not item:
         raise HTTPException(404, "Inbox item not found")
     db.update_inbox_item(item_id, status="pending", error_msg=None)
-    # Replace old candidates since this is a manual re-generate
-    db._exec("DELETE FROM inbox_questions WHERE inbox_item_id = :id AND status = 'candidate'", {"id": item_id})
     db.create_job(
         job_type="generate_inbox_questions",
         payload={
             "inbox_item_id": item_id,
             "content": item.get("content", ""),
             "direction": body.direction,
-            "replace": False,
+            "replace": True,  # worker will clear old candidates only on success
         },
     )
     return {"ok": True, "id": item_id, "status": "pending"}
@@ -1693,6 +1711,21 @@ async def _process_generate_inbox_questions(job_id: int, job: dict):
     content = payload.get("content") or item.get("content", "")
     direction = payload.get("direction")
     replace = bool(payload.get("replace", True))
+
+    # Guard: if item already has enough questions, don't generate more
+    existing_count = db._fetch_one(
+        "SELECT COUNT(*) AS n FROM inbox_questions WHERE inbox_item_id = :id AND status = 'candidate'",
+        {"id": item_id},
+    )
+    if existing_count and existing_count["n"] >= 6:
+        db.update_inbox_item(item_id, status="ready", error_msg=None)
+        return db.complete_job(job_id, {
+            "inbox_item_id": item_id,
+            "question_count": existing_count["n"],
+            "skipped": True,
+            "reason": "Already has enough candidate questions",
+        })
+
     db.update_inbox_item(item_id, status="generating", error_msg=None)
     try:
         result = await ai.generate_inbox_questions(content, direction=direction)
@@ -1708,6 +1741,9 @@ async def _process_generate_inbox_questions(job_id: int, job: dict):
                     "warning": "AI did not generate valid new inbox questions",
                 })
             raise RuntimeError("AI did not generate valid inbox questions")
+        # Replace mode: clear old candidates before inserting new ones
+        if replace:
+            db._exec("DELETE FROM inbox_questions WHERE inbox_item_id = :id AND status = 'candidate'", {"id": item_id})
         ids = db.create_inbox_questions(item_id, questions, replace_candidates=replace)
         latest_item = db.get_inbox_item(item_id) or {}
         next_status = "partially_used" if int(latest_item.get("selected_count") or 0) > 0 or latest_item.get("status") == "partially_used" else "ready"

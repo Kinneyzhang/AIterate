@@ -325,7 +325,7 @@ async def generate_inbox_questions(content: str, direction: str | None = None) -
         return {"questions": [], "raw": raw, "parse_failed": True}
 
     normalized = []
-    for item in result.get("questions", [])[:6]:  # cap at 6, AI asked for 3-4
+    for item in result.get("questions", [])[:4]:  # cap at 4, AI asked for 3-4
         if not isinstance(item, dict):
             continue
         question = str(item.get("question") or "").strip()

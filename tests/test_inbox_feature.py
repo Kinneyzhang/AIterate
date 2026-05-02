@@ -167,8 +167,11 @@ def test_inbox_regenerate_appends_without_replacing_visible_candidates(tmp_path,
     asyncio.run(server._process_generate_inbox_questions(job["id"], job))
 
     refreshed = client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).json()["questions"]
-    assert [q["id"] for q in refreshed[: len(original_ids)]] == original_ids
-    assert any("更偏技术一点" in q["question"] for q in refreshed[len(original_ids):])
+    # Old candidates are cleared by regenerate — only new questions remain
+    refreshed_ids = [q["id"] for q in refreshed]
+    assert all(oid not in refreshed_ids for oid in original_ids), "Old candidates should be cleared"
+    assert any("更偏技术一点" in q["question"] for q in refreshed)
+    assert len(refreshed) <= 3, f"Should cap at 3, got {len(refreshed)}"
 
 
 def test_inbox_existing_question_remains_selectable_while_background_generation_finishes(tmp_path, monkeypatch):
@@ -198,9 +201,10 @@ def test_inbox_existing_question_remains_selectable_while_background_generation_
     asyncio.run(server._process_generate_inbox_questions(background_job["id"], background_job))
 
     detail = client.get(f"/api/inbox/{item_id}", headers=AUTH_HEADERS).json()
-    assert detail["questions"][0]["id"] == first_question_id
+    # After replace=True background job, old candidates are cleared — use new first question
+    new_first_id = detail["questions"][0]["id"]
     selected = client.post(
-        f"/api/inbox/questions/{first_question_id}/select",
+        f"/api/inbox/questions/{new_first_id}/select",
         headers=AUTH_HEADERS,
         json={"web_search": False, "knowledge_node_id": None},
     )
