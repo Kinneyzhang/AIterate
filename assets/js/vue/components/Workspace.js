@@ -350,20 +350,20 @@ export default defineComponent({
             </button>
             <div v-if="accordion.deepen" class="accordion-body">
 
-              <!-- 写理解 (if not write-first mode, or after write-first done) -->
-              <div v-if="canEdit && !shouldWriteFirst && currentSession.material" class="panel-section">
-                <div class="ps-label" v-html="icons.edit + ' 写理解'\"></div>
-                <p class="ps-hint">用自己的话说说你对 AI 回答的理解，有没有偏差 AI 会告诉你。</p>
-                <textarea v-model="takeInput" rows="4" placeholder="用自己的话解释…"></textarea>
-                <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('take')">提交理解</button>
-              </div>
-
-              <!-- 追问 -->
-              <div v-if="canEdit && !shouldWriteFirst && currentSession.material" class="panel-section">
-                <div class="ps-label" v-html="icons.search + ' 追问'\"></div>
-                <p class="ps-hint">追问某个细节、反例、边界条件…</p>
-                <textarea v-model="questionInput" rows="4" placeholder="我对…还有疑问…"></textarea>
-                <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('press')">提交追问</button>
+              <!-- 写理解 + 提追问 并排 -->
+              <div v-if="canEdit && !shouldWriteFirst && currentSession.material" class="deepen-grid">
+                <div>
+                  <div class="ps-label" v-html="icons.edit + ' 写理解'"></div>
+                  <p class="ps-hint">用自己的话说说你对 AI 回答的理解。</p>
+                  <textarea v-model="takeInput" rows="4" placeholder="用自己的话解释…"></textarea>
+                  <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('take')">提交理解</button>
+                </div>
+                <div>
+                  <div class="ps-label" v-html="icons.search + ' 提追问'"></div>
+                  <p class="ps-hint">追问细节、反例、边界条件。</p>
+                  <textarea v-model="questionInput" rows="4" placeholder="我对…还有疑问…"></textarea>
+                  <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('press')">提交追问</button>
+                </div>
               </div>
 
               <!-- History rounds -->
@@ -410,7 +410,7 @@ export default defineComponent({
             <div v-if="accordion.feynman" class="accordion-body">
 
               <!-- Active feynman -->
-              <div v-if="feynmanGroup.length && currentSession.status === 'feynman'" class="panel-section">
+              <div v-if="feynmanGroup.length && currentSession.status === 'feynman'">
                 <div style="display:flex;align-items:center;gap:8px">
                   <div class="ps-label" style="margin-bottom:0" v-html="icons.flask + ' 费曼检验'\"></div>
                   <button class="btn btn-sm btn-text" :disabled="submitting" @click="regenerateFeynman" style="padding:2px 8px;font-size:12px">🔄 重新出题</button>
@@ -424,7 +424,7 @@ export default defineComponent({
               </div>
 
               <!-- Start feynman -->
-              <div v-else-if="canEdit && !feynmanGroup.length" class="panel-section">
+              <div v-else-if="canEdit && !feynmanGroup.length">
                 <button class="btn btn-primary btn-block" :disabled="submitting" @click="startFeynman">开始费曼检验</button>
               </div>
 
@@ -544,7 +544,7 @@ export default defineComponent({
             <button class="btn btn-end-session-bottom" :disabled="completingSession" @click="completeSession">
               <span v-html="icons.check"></span> {{ completingSession ? '…' : '结束学习' }}
             </button>
-            <p class="muted" style="text-align:center;font-size:12px;margin-top:4px">随时可以结束，不需要走完所有阶段</p>
+            <p class="muted" style="text-align:center;font-size:12px;margin-top:10px">随时可以结束，不需要走完所有阶段</p>
           </div>
 
         </div>
