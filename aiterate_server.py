@@ -1428,6 +1428,21 @@ async def reopen_session(session_id: int):
     return {"ok": True}
 
 
+@app.post("/api/sessions/{session_id}/advance-to-deepen", dependencies=[Depends(_require_admin)])
+async def advance_to_deepen(session_id: int):
+    """从学习阶段手动进入深化阶段（不提交内容，仅切换状态）"""
+    session = db.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    st = session.get("status", "")
+    if st not in ("learning",):
+        raise HTTPException(409, f"Cannot advance from status '{st}'. Must be in learning phase.")
+
+    db.update_session(session_id, status="deepening")
+    return {"ok": True}
+
+
 # ── Regenerate APIs ──────────────────────────────────────────
 
 class RegeneratePressRequest(BaseModel):

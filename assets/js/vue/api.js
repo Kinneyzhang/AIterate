@@ -196,6 +196,11 @@ export const api = {
     invalidateDerived();
     return request(`/api/sessions/${id}/deepen`, { method: 'POST', body: JSON.stringify({ action_type, content }) });
   },
+  advanceToDeepen: async (id) => {
+    invalidateWorkspace(id);
+    invalidateDerived();
+    return request(`/api/sessions/${id}/advance-to-deepen`, { method: 'POST' });
+  },
   startFeynman: async (id) => {
     invalidateWorkspace(id);
     invalidateDerived();

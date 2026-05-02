@@ -79,7 +79,10 @@ export default defineComponent({
     });
 
     const hasUserTake = computed(() => currentRounds.value.some(r => r.type === 'take'));
-    const showDeepen = computed(() => !shouldWriteFirst.value && currentSession.value?.material);
+    const showDeepen = computed(() => {
+      const s = currentSession.value?.status;
+      return s && ['deepening', 'revising', 'feynman', 'completed'].includes(s);
+    });
     const showFeynman = computed(() => canFeynman.value && hasUserTake.value);
     const doneFeynmanGroups = computed(() => {
       const done = currentRounds.value.filter(r => r.type === 'feynman' && r.status === 'completed');
@@ -114,6 +117,19 @@ export default defineComponent({
         emit('refresh');
         setNotice('已重新打开。');
       } catch (err) { setNotice(`重新打开失败：${err.message}`, 'error'); }
+    }
+
+    async function advanceToDeepen() {
+      const sid = store.selectedSessionId;
+      if (!sid || submitting.value) return;
+      submitting.value = true;
+      try {
+        await api.advanceToDeepen(sid);
+        emit('refresh');
+        setNotice('已进入深化阶段。');
+      } catch (err) {
+        setNotice(`操作失败：${err.message}`, 'error');
+      } finally { submitting.value = false; }
     }
 
     // ── Submit take / press ──────────────────────────────────────────
@@ -262,7 +278,7 @@ export default defineComponent({
       shouldWriteFirst, skipWriteFirst, hasUserTake, showDeepen, showFeynman,
       canEdit, canFeynman, accordion, toggleAccordion,
       takeInput, questionInput, feynmanAnswers, submitting, completingSession,
-      submitDeepAction, completeSession, reopenSession,
+      submitDeepAction, completeSession, reopenSession, advanceToDeepen,
       startFeynman, submitFeynman,
       regenerateAnswer, regeneratePress, regenerateFeynman,
       reviewSchedule, reviewContents, reviewSubmitting, reviewResults,
@@ -336,6 +352,14 @@ export default defineComponent({
                   <button class="btn btn-sm btn-text" :disabled="submitting" @click="regenerateAnswer">🔄 重新回答</button>
                 </div>
                 <div class="ps-body md-body" v-html="renderMarkdown(currentSession.material)"></div>
+              </div>
+
+              <!-- Advance to deepen -->
+              <div v-if="currentSession.status === 'learning' && !shouldWriteFirst && currentSession.material" class="advance-section">
+                <button class="btn btn-primary btn-block" :disabled="submitting" @click="advanceToDeepen">
+                  完成学习，进入深化 →
+                </button>
+                <p class="ps-hint" style="text-align:center;margin-top:8px;font-size:12px">阅读完 AI 回答后，点击进入下一阶段</p>
               </div>
 
             </div>
