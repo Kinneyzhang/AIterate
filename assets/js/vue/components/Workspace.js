@@ -197,44 +197,6 @@ export default defineComponent({
       finally { submitting.value = false; }
     }
 
-    // ── Review ───────────────────────────────────────────────────────
-    const reviewSchedule = ref([]);
-    const reviewContents = ref({});
-    const reviewSubmitting = ref({});
-    const reviewResults = ref({});
-    watch(() => store.workspace, (ws) => {
-      const s = ws?.review_schedule || [];
-      reviewSchedule.value = s.sort((a, b) => {
-        const pa = !a.review_date ? 0 : a.review_date;
-        const pb = !b.review_date ? 0 : b.review_date;
-        if (pa < pb) return -1; if (pa > pb) return 1;
-        const sa = a.status === 'pending' ? 0 : 1;
-        const sb = b.status === 'pending' ? 0 : 1;
-        return sa - sb;
-      });
-    }, { immediate: true, deep: true });
-
-    async function submitReviewReExplain(reviewId) {
-      if (!reviewId || reviewSubmitting.value[reviewId]) return;
-      reviewSubmitting.value[reviewId] = true;
-      try {
-        const data = await api.submitReviewReExplain(reviewId, reviewContents.value[reviewId] || '');
-        reviewResults.value[reviewId] = data;
-        delete reviewContents.value[reviewId];
-        emit('refresh');
-      } catch (err) { setNotice(`提交失败：${err.message}`, 'error'); }
-      finally { delete reviewSubmitting.value[reviewId]; }
-    }
-    async function completeReviewDirect(reviewId, btn) {
-      if (!reviewId) return;
-      if (btn) btn.disabled = true;
-      try {
-        await api.completeReviewDirect(reviewId);
-        emit('refresh');
-        setNotice('已标记完成。');
-      } catch (err) { setNotice(`操作失败：${err.message}`, 'error'); }
-      finally { if (btn) btn.disabled = false; }
-    }
 
     // ── Write-first ──────────────────────────────────────────────────
     function _skipKey(sid) { return 'aiterate_skip_write_' + sid; }
@@ -278,8 +240,6 @@ export default defineComponent({
       submitDeepAction, completeSession, reopenSession, advanceToDeepen,
       startFeynman, submitFeynman,
       regenerateAnswer, regeneratePress, regenerateFeynman,
-      reviewSchedule, reviewContents, reviewSubmitting, reviewResults,
-      submitReviewReExplain, completeReviewDirect,
       getStageMeta, escapeHtml, renderMarkdown, formatDate, icons,
     };
   },
@@ -508,7 +468,7 @@ export default defineComponent({
               <span class="final-score-num muted" v-else>未评分</span>
               <span class="stage-badge stage-completed">已完成</span>
             </div>
-            <div v-if="!reviewSchedule.length && !doneFeynmanGroups.length" class="muted small" style="text-align:center;padding:16px 0">
+            <div v-if="!doneFeynmanGroups.length" class="muted small" style="text-align:center;padding:16px 0">
               本次未进行费曼检验
             </div>
             <div v-if="reviewReport" class="review-report">
@@ -521,43 +481,6 @@ export default defineComponent({
               <div v-if="reviewReport.weak_points?.length" class="report-section">
                 <div class="report-label" v-html="icons.edit + ' 还需加强'\"></div>
                 <ul class="report-list weak"><li v-for="p in reviewReport.weak_points">{{ p }}</li></ul>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Review schedule ─────────────────────────────────────── -->
-          <div v-if="reviewSchedule.length" class="review-schedule-section">
-            <div class="ps-label" v-html="icons.refresh + ' 复习排期'\"></div>
-            <div class="rs-list">
-              <div v-for="rs in reviewSchedule" :key="rs.id"
-                   :class="['rs-item', rs.status === 'completed' ? 'rs-done' : 'rs-pending']">
-                <span class="rs-date">{{ rs.review_date }}</span>
-                <template v-if="rs.status === 'pending' && !reviewResults[rs.id]">
-                  <textarea class="review-re-explain" rows="3"
-                            :placeholder="'用自己的话重新解释这个概念…'"
-                            :value="reviewContents[rs.id] || ''"
-                            @input="e => reviewContents[rs.id] = e.target.value"></textarea>
-                  <div class="rs-actions">
-                    <button class="btn btn-primary btn-sm" :disabled="reviewSubmitting[rs.id]"
-                            @click="submitReviewReExplain(rs.id)">{{ reviewSubmitting[rs.id] ? '…' : '提交解释' }}</button>
-                    <button class="btn btn-sm" @click="completeReviewDirect(rs.id, $event.target)">稍后提醒</button>
-                  </div>
-                </template>
-                <div v-else-if="reviewResults[rs.id]" class="rs-feedback">
-                  <span :class="['rs-score', reviewResults[rs.id].passed ? 'pass' : 'fail']">{{ reviewResults[rs.id].score }}/100</span>
-                  <div class="rs-feedback-text md-body" v-html="renderMarkdown(reviewResults[rs.id].feedback)"></div>
-                </div>
-                <template v-else-if="rs.status === 'completed'">
-                  <span class="rs-status">
-                    <span v-if="rs.review_score != null" :class="['rs-score-badge', rs.review_score >= 60 ? 'pass' : 'fail']">{{ rs.review_score }}/100</span>
-                    <span v-else>✓</span>
-                  </span>
-                  <div v-if="rs.user_content" class="rs-user-content">
-                    <div class="rs-label-small">你的重新解释</div>
-                    <div class="rs-content-text">{{ rs.user_content }}</div>
-                  </div>
-                  <div v-if="rs.ai_feedback" class="rs-feedback-text md-body" v-html="renderMarkdown(rs.ai_feedback)"></div>
-                </template>
               </div>
             </div>
           </div>
