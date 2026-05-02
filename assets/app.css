@@ -257,11 +257,6 @@ svg[width="1em"] { vertical-align: -0.125em; flex-shrink: 0; }
   line-height: 1.85;
 }
 
-.deepen-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
 .deepen-col { display: flex; flex-direction: column; }
 .col-label { margin-bottom: 6px; }
 
@@ -694,18 +689,75 @@ select {
 .accordion-body .panel-section { padding: 0 0 16px 0; }
 .accordion-body .panel-section:last-child { padding-bottom: 8px; }
 
-/* ── Deepen grid (写理解 + 提追问 side-by-side) ────────────────────── */
-.deepen-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 8px;
+/* ── Deepen actions row (写理解 + 提追问 buttons) ────────────────── */
+.deepen-actions-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
 }
-.deepen-grid textarea {
-  margin-bottom: 10px;
+.deepen-actions-row .btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 16px;
+  font-size: 15px;
 }
-.deepen-grid .ps-hint {
-  margin-bottom: 10px;
+
+/* ── Deepen Modal ──────────────────────────────────────────────────── */
+.deepen-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.deepen-modal {
+  background: var(--bg, #fff);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  width: min(560px, 92vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.deepen-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 0;
+}
+.deepen-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.deepen-modal-close {
+  font-size: 20px;
+  padding: 4px 8px;
+  line-height: 1;
+}
+.deepen-modal-body {
+  padding: 12px 20px;
+  flex: 1;
+  overflow-y: auto;
+}
+.deepen-modal-body textarea {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+}
+.deepen-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 20px 16px;
 }
 
 /* ── History Section ─────────────────────────────────────────────────── */
@@ -747,7 +799,7 @@ select {
   .accordion-header { padding: 12px 16px; }
   .accordion-body { padding: 16px 16px 4px; }
   .history-section { padding: 0 16px; }
-  .deepen-grid { grid-template-columns: 1fr; gap: 16px; }
+  .deepen-actions-row { flex-direction: column; }
   .bottom-actions { padding: 16px 16px 24px; }
 }
 
@@ -886,15 +938,6 @@ select {
 .ps-label { font-family: var(--font-sans, system-ui, -apple-system, sans-serif); font-size: 12px; font-weight: 700; letter-spacing: .06em; opacity: 0.5; text-transform: uppercase; margin-bottom: 4px; }
 .ps-body  { font-size: 15px; line-height: 1.85; }
 .ps-hint  { font-size: 13px; }
-
-/* ── deepen inputs ──────────────────────────────────────────────────────────── */
-.deepen-inputs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-.deepen-col { display: flex; flex-direction: column; gap: 6px; }
-.deepen-col textarea { min-height: 160px; resize: vertical; }
 
 /* ── review result banner ────────────────────────────────────────────────────── */
 .review-result-banner {
@@ -1075,8 +1118,6 @@ select {
 @media (max-width: 620px) {
   /* ── 移动端基础字号，整体放大 ── */
   html { font-size: 18px; }
-
-  .deepen-inputs { grid-template-columns: 1fr; }
 
   /* topbar */
   .topbar { padding: 12px 16px; }

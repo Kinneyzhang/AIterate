@@ -22,6 +22,7 @@ export const store = reactive({
   // UI
   theme: localStorage.getItem('aiterate-theme') || 'night',
   notice: { text: '', type: 'info' },
+  deepAutoAction: null,  // 'take' | 'press' — set by ContextRail to auto-open deepen modal
   appDialog: {
     visible: false,
     title: '',

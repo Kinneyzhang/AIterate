@@ -139,6 +139,39 @@ export default defineComponent({
     }
 
     // ── Submit take / press ──────────────────────────────────────────
+    const deepenModal = ref({ open: false, type: 'take', input: '' });
+
+    function openDeepenModal(type) {
+      deepenModal.value = { open: true, type, input: '' };
+    }
+    function closeDeepenModal() {
+      deepenModal.value = { open: false, type: 'take', input: '' };
+    }
+    async function submitDeepenModal() {
+      const { type, input } = deepenModal.value;
+      if (!input.trim()) { setNotice('请输入内容。', 'error'); return; }
+      if (submitting.value) return;
+      const sid = store.selectedSessionId;
+      if (!sid) return;
+      submitting.value = true;
+      try {
+        await api.submitDeepAction(sid, type, input.trim());
+        deepenModal.value = { open: false, type: 'take', input: '' };
+        emit('refresh');
+        setNotice(type === 'take' ? '理解已提交。' : '追问已提交。');
+      } catch (err) {
+        setNotice(`提交失败：${err.message}`, 'error');
+      } finally { submitting.value = false; }
+    }
+
+    // Auto-open from ContextRail trigger
+    watch(() => store.deepAutoAction, (action) => {
+      if (!action) return;
+      if (!accordion.value.deep) toggleAccordion('deepen');
+      openDeepenModal(action);
+      store.deepAutoAction = null;
+    });
+
     async function submitDeepAction(actionType) {
       const sid = store.selectedSessionId;
       if (!sid || submitting.value) return;
@@ -246,6 +279,7 @@ export default defineComponent({
       shouldWriteFirst, skipWriteFirst, hasUserTake, showDeepen, showFeynman,
       canEdit, accordion, toggleAccordion,
       takeInput, questionInput, feynmanAnswers, submitting, completingSession,
+      deepenModal, openDeepenModal, closeDeepenModal, submitDeepenModal,
       submitDeepAction, completeSession, reopenSession, advanceToDeepen,
       startFeynman, submitFeynman,
       regenerateAnswer, regeneratePress, regenerateFeynman,
@@ -347,20 +381,14 @@ export default defineComponent({
             </button>
             <div v-if="accordion.deepen" class="accordion-body">
 
-              <!-- 写理解 + 提追问 并排 -->
-              <div class="deepen-grid">
-                <div class="panel-section">
-                  <div class="ps-label" v-html="icons.edit + ' 写理解'"></div>
-                  <p class="ps-hint">用自己的话说说你对 AI 回答的理解。</p>
-                  <textarea v-model="takeInput" rows="5" placeholder="用自己的话解释…"></textarea>
-                  <button class="btn btn-primary btn-block" :disabled="submitting" @click="submitDeepAction('take')">提交理解</button>
-                </div>
-                <div class="panel-section">
-                  <div class="ps-label" v-html="icons.search + ' 提追问'"></div>
-                  <p class="ps-hint">追问细节、反例、边界条件。</p>
-                  <textarea v-model="questionInput" rows="5" placeholder="我对…还有疑问…"></textarea>
-                  <button class="btn btn-primary btn-block" :disabled="submitting" @click="submitDeepAction('press')">提交追问</button>
-                </div>
+              <!-- Deepen actions -->
+              <div class="deepen-actions-row">
+                <button class="btn btn-primary" @click="openDeepenModal('take')">
+                  <span v-html="icons.edit"></span> 写理解
+                </button>
+                <button class="btn btn-primary" @click="openDeepenModal('press')">
+                  <span v-html="icons.search"></span> 提追问
+                </button>
               </div>
 
               <!-- History rounds -->
@@ -504,6 +532,37 @@ export default defineComponent({
 
         </div>
       </template>
+
+      <!-- ══════════════════════════════════════════════════════════
+           Deepen Modal (写理解 / 提追问 弹出框)
+           ══════════════════════════════════════════════════════════ -->
+      <div v-if="deepenModal.open" class="deepen-modal-overlay" @click.self="closeDeepenModal">
+        <div class="deepen-modal">
+          <div class="deepen-modal-header">
+            <span class="deepen-modal-title">
+              <span v-html="deepenModal.type === 'take' ? icons.edit : icons.search"></span>
+              {{ deepenModal.type === 'take' ? '写理解' : '提追问' }}
+            </span>
+            <button class="btn btn-text deepen-modal-close" @click="closeDeepenModal">&times;</button>
+          </div>
+          <div class="deepen-modal-body">
+            <p class="ps-hint" v-if="deepenModal.type === 'take'">用自己的话说说你对 AI 回答的理解。</p>
+            <p class="ps-hint" v-else>追问细节、反例、边界条件。</p>
+            <textarea
+              v-model="deepenModal.input"
+              rows="8"
+              :placeholder="deepenModal.type === 'take' ? '用自己的话解释…' : '我对…还有疑问…'"
+              autofocus
+            ></textarea>
+          </div>
+          <div class="deepen-modal-footer">
+            <button class="btn btn-text" @click="closeDeepenModal">取消</button>
+            <button class="btn btn-primary" :disabled="submitting" @click="submitDeepenModal">
+              {{ submitting ? '提交中…' : '提交' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
 });

@@ -59,6 +59,11 @@ export default defineComponent({
       switchTab('deepen');
     }
 
+    function autoOpenTake() {
+      store.deepAutoAction = 'take';
+      switchTab('deepen');
+    }
+
     async function startFeynman() {
       const sid = store.selectedSessionId;
       if (!sid) return;
@@ -95,7 +100,7 @@ export default defineComponent({
       currentSession, currentRounds, unresolvedGaps,
       hasTakeRound, canEditDeepen, canDeepen, canReview,
       contextScore, contextRoundCount, canCompleteEarly,
-      switchTab, startFeynman, completeEarly, getStageMeta, icons,
+      switchTab, startFeynman, completeEarly, autoOpenTake, getStageMeta, icons,
       fillGapAsQuestion,
       route,
     };
@@ -132,7 +137,7 @@ export default defineComponent({
         <div class="context-card-title" v-html="icons.bulb + ' 建议动作'"></div>
         <div class="context-action-list">
           <button v-if="unresolvedGaps.length" type="button" class="btn btn-primary btn-block btn-sm" @click="switchTab('deepen')">追问薄弱点</button>
-          <button v-if="canEditDeepen" type="button" class="btn btn-primary btn-block btn-sm" @click="switchTab('deepen')">写一轮理解</button>
+          <button v-if="canEditDeepen" type="button" class="btn btn-primary btn-block btn-sm" @click="autoOpenTake">写一轮理解</button>
           <button v-if="canEditDeepen && hasTakeRound" type="button" class="btn btn-success btn-block btn-sm" @click="startFeynman">开始费曼检验</button>
           <button v-if="currentSession.status === 'feynman'" type="button" class="btn btn-primary btn-block btn-sm" @click="switchTab('review')">回答费曼题</button>
           <button v-if="canCompleteEarly" type="button" class="btn btn-sm btn-block" @click="completeEarly">提前结束</button>
