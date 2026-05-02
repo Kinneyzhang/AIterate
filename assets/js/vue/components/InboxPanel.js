@@ -512,11 +512,13 @@ export default defineComponent({
               <button v-if="selectedIds.size" type="button" class="btn btn-sm" style="color:#e55;border-color:#e55" @click="deleteSelected">删除选中 ({{ selectedIds.size }})</button>
             </div>
             <article v-for="x in pendingItems" :key="'pending-'+x.id" class="inbox-material-card">
-              <input type="checkbox" :checked="selectedIds.has(x.id)" @change="toggleSelect(x.id)" style="margin-right:10px;flex-shrink:0">
-              <div class="inbox-material-main">
-                <div class="inbox-material-line">
-                  <button type="button" class="inbox-material-title inbox-material-title-button" @click.stop="openItem(x)">{{ displayInboxTitle(x) }}</button>
-                  <span :class="['inbox-list-status', 'is-' + x.status]">{{ statusLabel(x.status) }} · {{ x.question_count || 0 }} 个问题</span>
+              <div class="inbox-material-main" style="display:flex;align-items:flex-start;gap:8px">
+                <input type="checkbox" :checked="selectedIds.has(x.id)" @change="toggleSelect(x.id)" style="margin-top:3px;flex-shrink:0">
+                <div style="flex:1;min-width:0">
+                  <div class="inbox-material-line">
+                    <button type="button" class="inbox-material-title inbox-material-title-button" @click.stop="openItem(x)">{{ displayInboxTitle(x) }}</button>
+                    <span :class="['inbox-list-status', 'is-' + x.status]">{{ statusLabel(x.status) }} · {{ x.question_count || 0 }} 个问题</span>
+                  </div>
                 </div>
               </div>
               <div class="inbox-material-actions">
