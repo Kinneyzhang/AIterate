@@ -79,6 +79,8 @@ export default defineComponent({
     });
 
     const hasUserTake = computed(() => currentRounds.value.some(r => r.type === 'take'));
+    const showDeepen = computed(() => !shouldWriteFirst.value && currentSession.value?.material);
+    const showFeynman = computed(() => canFeynman.value && hasUserTake.value);
     const doneFeynmanGroups = computed(() => {
       const done = currentRounds.value.filter(r => r.type === 'feynman' && r.status === 'completed');
       const byGroup = {};
@@ -257,7 +259,7 @@ export default defineComponent({
     return {
       currentSession, currentRounds, feynmanGroup, unresolvedGaps, reviewReport, knowledgeNode,
       doneFeynmanGroups, takeEvals, correctionPlan,
-      shouldWriteFirst, skipWriteFirst, hasUserTake, roundCount,
+      shouldWriteFirst, skipWriteFirst, hasUserTake, showDeepen, showFeynman,
       canEdit, canFeynman, accordion, toggleAccordion,
       takeInput, questionInput, feynmanAnswers, submitting, completingSession,
       submitDeepAction, completeSession, reopenSession,
@@ -342,27 +344,27 @@ export default defineComponent({
           <!-- ══════════════════════════════════════════════════════════
                Section 2: 深化
                ══════════════════════════════════════════════════════════ -->
-          <div class="accordion-section" :class="{ open: accordion.deepen }">
+          <div v-if="showDeepen" class="accordion-section" :class="{ open: accordion.deepen }">
             <button class="accordion-header" @click="toggleAccordion('deepen')">
               <span class="accordion-chevron" :class="{ open: accordion.deepen }" v-html="icons.chevron"></span>
-              <span class="accordion-title" v-html="icons.edit + ' 深化'\"></span>
-              <span class="accordion-summary" v-if="!accordion.deepen">{{ roundCount ? roundCount + ' 轮' : '写理解 / 追问' }}</span>
+              <span class="accordion-title" v-html="icons.edit + ' 深化'"></span>
+              <span class="accordion-summary" v-if="!accordion.deepen">{{ roundCount ? roundCount + ' 轮' : '写理解 / 提追问' }}</span>
             </button>
             <div v-if="accordion.deepen" class="accordion-body">
 
               <!-- 写理解 + 提追问 并排 -->
-              <div v-if="canEdit && !shouldWriteFirst && currentSession.material" class="deepen-grid">
-                <div>
+              <div class="deepen-grid">
+                <div class="panel-section">
                   <div class="ps-label" v-html="icons.edit + ' 写理解'"></div>
                   <p class="ps-hint">用自己的话说说你对 AI 回答的理解。</p>
-                  <textarea v-model="takeInput" rows="4" placeholder="用自己的话解释…"></textarea>
-                  <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('take')">提交理解</button>
+                  <textarea v-model="takeInput" rows="5" placeholder="用自己的话解释…"></textarea>
+                  <button class="btn btn-primary btn-block" :disabled="submitting" @click="submitDeepAction('take')">提交理解</button>
                 </div>
-                <div>
+                <div class="panel-section">
                   <div class="ps-label" v-html="icons.search + ' 提追问'"></div>
                   <p class="ps-hint">追问细节、反例、边界条件。</p>
-                  <textarea v-model="questionInput" rows="4" placeholder="我对…还有疑问…"></textarea>
-                  <button class="btn btn-primary" :disabled="submitting" @click="submitDeepAction('press')">提交追问</button>
+                  <textarea v-model="questionInput" rows="5" placeholder="我对…还有疑问…"></textarea>
+                  <button class="btn btn-primary btn-block" :disabled="submitting" @click="submitDeepAction('press')">提交追问</button>
                 </div>
               </div>
 
@@ -401,7 +403,7 @@ export default defineComponent({
           <!-- ══════════════════════════════════════════════════════════
                Section 3: 费曼检验
                ══════════════════════════════════════════════════════════ -->
-          <div v-if="canFeynman" class="accordion-section" :class="{ open: accordion.feynman }">
+          <div v-if="showFeynman" class="accordion-section" :class="{ open: accordion.feynman }">
             <button class="accordion-header" @click="toggleAccordion('feynman')">
               <span class="accordion-chevron" :class="{ open: accordion.feynman }" v-html="icons.chevron"></span>
               <span class="accordion-title" v-html="icons.flask + ' 费曼检验'\"></span>
